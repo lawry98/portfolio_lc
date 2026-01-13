@@ -1,35 +1,37 @@
-import { FadeIn } from "@/components/animations/fade-in";
+import { Navbar } from "@/components/sections/navbar";
+import { Hero } from "@/components/sections/hero";
+import { About } from "@/components/sections/about";
 
 export default function Home() {
   return (
-    <main className="min-h-screen">
-      {/* Hero Section Placeholder */}
-      <section className="h-screen flex items-center justify-center">
-        <FadeIn>
-          <div className="text-center">
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-              Lawry
-            </h1>
-            <p className="mt-4 text-xl text-muted-foreground">
-              Software Developer
-            </p>
+    <>
+      <Navbar />
+      <main>
+        <Hero />
+        <About />
+        
+        {/* Placeholder sections - we'll build these next */}
+        <section id="projects" className="min-h-screen py-24 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-8">Projects</h2>
+            <p className="text-muted-foreground">Coming in Day 5-7...</p>
           </div>
-        </FadeIn>
-      </section>
+        </section>
 
-      {/* Projects Section Placeholder */}
-      <section className="min-h-screen py-24 px-6">
-        <FadeIn>
-          <h2 className="text-3xl font-bold text-center mb-12">Projects</h2>
-        </FadeIn>
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <FadeIn key={i} delay={i * 0.1}>
-              <div className="h-64 rounded-xl bg-muted animate-pulse" />
-            </FadeIn>
-          ))}
-        </div>
-      </section>
-    </main>
+        <section id="skills" className="min-h-screen py-24 px-6 bg-muted/30">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-8">Skills</h2>
+            <p className="text-muted-foreground">Coming in Week 2...</p>
+          </div>
+        </section>
+
+        <section id="contact" className="py-24 px-6">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-8">Contact</h2>
+            <p className="text-muted-foreground">Coming in Week 2...</p>
+          </div>
+        </section>
+      </main>
+    </>
   );
 }
