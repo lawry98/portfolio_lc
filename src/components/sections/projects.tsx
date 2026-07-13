@@ -45,8 +45,9 @@ export function Projects() {
 
         <FadeIn delay={0.2}>
           <p className="text-muted-foreground max-w-2xl mb-16">
-            A collection of projects spanning machine learning, computer vision,
-            and data visualization. Each represents a unique challenge and learning experience.
+            A closer look at my latest build — an AI agent that orchestrates
+            real-time data and Claude into expert-level analysis, wrapped in
+            an interactive 3D interface.
           </p>
         </FadeIn>
 
