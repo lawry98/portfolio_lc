@@ -43,3 +43,7 @@ next-env.d.ts
 # Local orchestration scratch (git worktrees, subagent progress ledger)
 /.worktrees/
 /.superpowers/
+
+# Local AI tooling config — not tracked upstream (this repo is public)
+/.claude/
+/.mcp.json
