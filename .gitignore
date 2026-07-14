@@ -44,5 +44,7 @@ next-env.d.ts
 /.worktrees/
 /.superpowers/
 
+# Local AI tooling config — not tracked upstream (this repo is public)
+/.claude/
 # Local MCP server config (not shared upstream)
 /.mcp.json
