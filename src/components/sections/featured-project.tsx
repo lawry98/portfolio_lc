@@ -12,20 +12,20 @@ interface FeaturedProjectProps {
 }
 
 export function FeaturedProject({ project, reverse = false }: FeaturedProjectProps) {
+  const mediaOrderClass = reverse ? "lg:order-2" : "";
+  const contentAlignClass = reverse ? "lg:order-1 lg:text-right" : "";
+  const contentJustifyClass = reverse ? "lg:justify-end" : "";
+  const mediaFadeDirection = reverse ? "right" : "left";
+  const contentFadeDirection = reverse ? "left" : "right";
+
   return (
-    <div
-      className={`grid lg:grid-cols-2 gap-8 lg:gap-12 items-center ${
-        reverse ? "lg:direction-rtl" : ""
-      }`}
-    >
+    <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
       {/* Image */}
-      <FadeIn direction={reverse ? "right" : "left"}>
+      <FadeIn direction={mediaFadeDirection}>
         <motion.div
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
-          className={`relative aspect-video rounded-2xl overflow-hidden bg-muted ${
-            reverse ? "lg:order-2" : ""
-          }`}
+          className={`relative aspect-video rounded-2xl overflow-hidden bg-muted ${mediaOrderClass}`}
         >
           {project.image ? (
             <img
@@ -47,23 +47,23 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
       </FadeIn>
 
       {/* Content */}
-      <div className={`space-y-4 ${reverse ? "lg:order-1 lg:text-right" : ""}`}>
-        <FadeIn direction={reverse ? "left" : "right"} delay={0.1}>
+      <div className={`space-y-4 ${contentAlignClass}`}>
+        <FadeIn direction={contentFadeDirection} delay={0.1}>
           <p className="text-sm text-primary font-medium">Featured Project</p>
         </FadeIn>
 
-        <FadeIn direction={reverse ? "left" : "right"} delay={0.2}>
+        <FadeIn direction={contentFadeDirection} delay={0.2}>
           <h3 className="text-2xl sm:text-3xl font-bold">{project.title}</h3>
         </FadeIn>
 
-        <FadeIn direction={reverse ? "left" : "right"} delay={0.3}>
+        <FadeIn direction={contentFadeDirection} delay={0.3}>
           <p className="text-muted-foreground leading-relaxed">
             {project.description}
           </p>
         </FadeIn>
 
-        <FadeIn direction={reverse ? "left" : "right"} delay={0.4}>
-          <div className={`flex flex-wrap gap-2 ${reverse ? "lg:justify-end" : ""}`}>
+        <FadeIn direction={contentFadeDirection} delay={0.4}>
+          <div className={`flex flex-wrap gap-2 ${contentJustifyClass}`}>
             {project.tags.map((tag) => (
               <Badge key={tag} variant="secondary">
                 {tag}
@@ -72,8 +72,8 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
           </div>
         </FadeIn>
 
-        <FadeIn direction={reverse ? "left" : "right"} delay={0.5}>
-          <div className={`flex items-center gap-4 pt-2 ${reverse ? "lg:justify-end" : ""}`}>
+        <FadeIn direction={contentFadeDirection} delay={0.5}>
+          <div className={`flex items-center gap-4 pt-2 ${contentJustifyClass}`}>
             {project.github && (
               <a
                 href={project.github}

@@ -44,7 +44,12 @@ export function LetterAnimation({ text, className, delay = 0 }: LetterAnimationP
       aria-label={text}
     >
       {letters.map((letter, index) => (
-        <motion.span key={index} variants={child} className="inline-block">
+        <motion.span
+          key={index}
+          variants={child}
+          className="inline-block"
+          aria-hidden="true"
+        >
           {letter === " " ? "\u00A0" : letter}
         </motion.span>
       ))}
