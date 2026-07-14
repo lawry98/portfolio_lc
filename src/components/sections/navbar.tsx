@@ -53,6 +53,8 @@ export function Navbar() {
           className="md:hidden p-2"
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle menu"
+          aria-expanded={isOpen}
+          aria-controls="mobile-nav"
         >
           {isOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -62,6 +64,7 @@ export function Navbar() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            id="mobile-nav"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
