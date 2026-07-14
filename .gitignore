@@ -43,3 +43,6 @@ next-env.d.ts
 # Local orchestration scratch (git worktrees, subagent progress ledger)
 /.worktrees/
 /.superpowers/
+
+# Local MCP server config (not shared upstream)
+/.mcp.json
