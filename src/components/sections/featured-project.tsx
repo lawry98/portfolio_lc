@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Github, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/fade-in";
+import { ProjectMedia } from "@/components/sections/project-media";
 import type { Project } from "@/data/projects";
 
 interface FeaturedProjectProps {
@@ -19,30 +20,18 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
   const contentFadeDirection = reverse ? "left" : "right";
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+    <article className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
       {/* Image */}
       <FadeIn direction={mediaFadeDirection}>
         <motion.div
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 300 }}
-          className={`relative aspect-video rounded-2xl overflow-hidden bg-muted ${mediaOrderClass}`}
+          className={`relative aspect-video rounded-2xl overflow-hidden border border-border/50 bg-muted ${mediaOrderClass}`}
         >
-          {project.image ? (
-            <img
-              src={project.image}
-              alt={project.title}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
-              <span className="text-6xl font-bold text-primary/20">
-                {project.title.charAt(0)}
-              </span>
-            </div>
-          )}
-          
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/20 to-transparent" />
+          <ProjectMedia
+            project={project}
+            sizes="(min-width: 1024px) 50vw, 100vw"
+          />
         </motion.div>
       </FadeIn>
 
@@ -79,10 +68,11 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
                 href={project.github}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-2 rounded-full text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <Github size={20} />
+                <Github size={20} aria-hidden="true" />
                 <span>View Code</span>
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             )}
             {project.live && (
@@ -90,18 +80,20 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
                 href={project.live}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-foreground font-medium group"
+                className="flex items-center gap-2 rounded-full text-foreground font-medium group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span>Live Demo</span>
                 <ArrowRight
                   size={16}
+                  aria-hidden="true"
                   className="group-hover:translate-x-1 transition-transform"
                 />
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             )}
           </div>
         </FadeIn>
       </div>
-    </div>
+    </article>
   );
 }
