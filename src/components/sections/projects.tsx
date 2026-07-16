@@ -20,15 +20,14 @@ export function Projects() {
 
         <FadeIn delay={0.1}>
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            Things I&apos;ve built
+            Full-stack and AI projects
           </h2>
         </FadeIn>
 
         <FadeIn delay={0.2}>
-          <p className="text-muted-foreground max-w-2xl mb-16">
-            A closer look at my latest build — an AI agent powered by
-            LangGraph and Claude, wrapped in a Three.js-driven 3D interface
-            built to show off front-end craft as much as backend smarts.
+          <p className="text-lg text-muted-foreground max-w-2xl mb-16 leading-relaxed">
+            Products exploring AI agents, real-time collaboration, developer
+            tooling, and interactive web experiences.
           </p>
         </FadeIn>
 

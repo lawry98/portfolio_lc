@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { ExternalLink, Github } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ProjectMedia } from "@/components/sections/project-media";
 import type { Project } from "@/data/projects";
 
 interface ProjectCardProps {
@@ -25,22 +26,13 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
       >
         {/* Image Container */}
         <div className="relative h-48 overflow-hidden bg-muted">
-          {project.image ? (
-            <motion.img
-              src={project.image}
-              alt={project.title}
-              className="w-full h-full object-cover"
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.4 }}
+          <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-[1.02]">
+            <ProjectMedia
+              project={project}
+              sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-muted to-muted/50">
-              <span className="text-4xl font-bold text-muted-foreground/20">
-                {project.title.charAt(0)}
-              </span>
-            </div>
-          )}
-          
+          </div>
+
           {/* Overlay on hover */}
           <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-300" />
         </div>
@@ -71,10 +63,11 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
                 href={project.github}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <Github size={16} />
+                <Github size={16} aria-hidden="true" />
                 <span>Code</span>
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             )}
             {project.live && (
@@ -82,10 +75,11 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
                 href={project.live}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 rounded-full text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <ExternalLink size={16} />
+                <ExternalLink size={16} aria-hidden="true" />
                 <span>Live Demo</span>
+                <span className="sr-only"> (opens in a new tab)</span>
               </a>
             )}
           </div>

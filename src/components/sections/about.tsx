@@ -8,20 +8,20 @@ const highlights = [
   {
     icon: GraduationCap,
     label: "Education",
-    value: "MS in Computer Science",
-    detail: "Northeastern University",
+    value: "M.S. Computer Science",
+    detail: "Northeastern University · 4.0 GPA",
   },
   {
     icon: MapPin,
     label: "Location",
-    value: "Boston, MA",
+    value: "Greater Boston, MA",
     detail: "Open to relocation",
   },
   {
     icon: Briefcase,
     label: "Focus",
-    value: "Full-Stack & ML",
-    detail: "Building intelligent apps",
+    value: "Full-stack web applications & AI",
+    detail: "Product engineering · intelligent workflows",
   },
 ];
 
@@ -37,25 +37,26 @@ export function About() {
 
         <FadeIn delay={0.1}>
           <h2 className="text-3xl sm:text-4xl font-bold mb-8">
-            Turning ideas into reality through code
+            I build products end to end.
           </h2>
         </FadeIn>
 
         <div className="space-y-6 text-muted-foreground">
           <FadeIn delay={0.2}>
             <p className="text-lg leading-relaxed">
-              I&apos;m a software developer with a passion for building applications 
-              that sit at the intersection of great design and intelligent systems. 
-              Currently pursuing my Master&apos;s in Computer Science at Northeastern, 
-              I focus on machine learning, computer vision, and data visualization.
+              I&apos;m a full-stack software engineer focused on building reliable,
+              intuitive web applications and AI-powered product experiences. I work
+              across responsive interfaces, backend APIs, databases, authentication,
+              payments, cloud services, and production delivery.
             </p>
           </FadeIn>
 
           <FadeIn delay={0.3}>
             <p className="text-lg leading-relaxed">
-              When I&apos;m not coding, you&apos;ll find me following Formula 1 
-              or exploring new technologies. I believe in writing clean, 
-              maintainable code and creating experiences that users love.
+              Most recently, I helped build Quill &amp; Pigeon&apos;s multi-tenant
+              commerce platform and developed AI-assisted product experiences using
+              the OpenAI API, Claude API, MCP, Langfuse, and workflow automation
+              tools.
             </p>
           </FadeIn>
         </div>
@@ -67,7 +68,7 @@ export function About() {
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ type: "spring", stiffness: 300 }}
-                className="p-6 rounded-2xl bg-muted/50 border border-border/50"
+                className="p-6 rounded-2xl bg-muted/50 border border-border/50 h-full"
               >
                 <item.icon className="text-foreground mb-3" size={24} />
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">

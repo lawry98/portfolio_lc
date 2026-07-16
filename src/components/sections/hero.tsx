@@ -42,11 +42,14 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.8 }}
         >
-          <p className="text-xl sm:text-2xl text-muted-foreground mb-2">
-            Software Developer
+          <p className="text-xl sm:text-2xl md:text-3xl font-medium text-foreground mb-4">
+            Full-Stack Software Engineer
           </p>
-          <p className="text-sm sm:text-base text-muted-foreground/70 max-w-md mx-auto">
-            CS Master&apos;s Student at Northeastern University
+          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            M.S. in Computer Science from Northeastern University. I build
+            production-ready web applications and AI-powered experiences across
+            frontend interfaces, backend services, databases, payments, and cloud
+            platforms.
           </p>
         </motion.div>
 
@@ -58,16 +61,16 @@ export function Hero() {
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <a
-            href="#projects"
-            className="px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity"
+            href="#experience"
+            className="px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            View Projects
+            View my work
           </a>
           <a
             href="#contact"
-            className="px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors"
+            className="px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            Get in Touch
+            Get in touch
           </a>
         </motion.div>
       </div>
