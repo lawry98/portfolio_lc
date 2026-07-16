@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Providers } from "@/components/providers";
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Lawry | Software Developer",
-  description: "Master's student in Computer Science at Northeastern University. Full-stack developer passionate about ML, computer vision, and data visualization.",
-  keywords: ["software developer", "machine learning", "computer vision", "full-stack"],
+  title: "Lawrence Crasto | Full-Stack Software Engineer",
+  description:
+    "Full-stack software engineer building production web applications and AI-powered products across frontend interfaces, backend services, databases, payments, and cloud platforms.",
+  keywords: [
+    "full-stack software engineer",
+    "web applications",
+    "AI-powered products",
+    "Next.js",
+    "TypeScript",
+    "product engineering",
+  ],
 };
 
 export default function RootLayout({
@@ -28,7 +37,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
