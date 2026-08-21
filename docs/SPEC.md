@@ -141,7 +141,7 @@ A query-param-gated control panel to preview & lock variants live in the real pa
 ---
 
 ## 9. Sound design
-WebAudio synth module (no Howler, no assets). Gated behind first click (Léo pattern), then ON. Sounds: type tick, two alternating eat blips, spawn pop, theme whoosh, wake boing, Byte's occasional soft chirp. All subtle, mixed low. EQ (3-bar) toggle in nav mutes/unmutes.
+A thin, **swappable `SoundEngine` interface** with two implementations: **WebAudio synth now** (code-generated, zero assets) and **Howler + recorded audio files later** (drop-in swap; see [`AUDIO_SPEC.md`](AUDIO_SPEC.md)). The gate/unlock, master mix, EQ mute, and per-event trigger API all live in the interface, so switching engines touches **no call sites**. Gated behind first click (Léo pattern), then ON. Sounds: type tick, two alternating eat blips, spawn pop, theme whoosh, wake boing, Byte's occasional soft chirp. All subtle, mixed low. EQ (3-bar) toggle in nav mutes/unmutes.
 
 ---
 
@@ -177,7 +177,7 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 - **Vite + vanilla TypeScript** (strict). ESLint + Prettier. **Vitest** (FSM + retype queue).
 - **three** (^latest): core + `GLTFLoader`, `DRACOLoader`, `RoundedBoxGeometry` (placeholder).
 - **GSAP 3.13+**: core, CustomEase, ScrollTrigger, SplitText (all free on npm).
-- **lenis** smooth scroll. **WebAudio** synth (no Howler).
+- **lenis** smooth scroll. **Sound:** WebAudio synth now behind a `SoundEngine` interface; **Howler** (+ recorded files) is the planned swap-in (see `AUDIO_SPEC.md`).
 - **gsap-skills** installed (`~/.claude/skills/gsap-*`): use for all GSAP work; fold its `CLAUDE.md` conventions into the project at scaffold.
 - No other runtime deps without approval (record in `DECISIONS.md`).
 
@@ -195,6 +195,7 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 - **T3** adds: `GLTFLoader` + `DRACOLoader` path alongside the two-renderer sandwich.
 - **T4**: build the **procedural placeholder bot** + `PetRig` adapter (clip-name interface) + FSM; unit tests.
 - **New "GLB swap-in" ticket:** integrate the real model when Lawrence delivers it (map materials/nodes/clips; dispose placeholder; re-verify budget/60fps).
+- **New "audio swap-in" ticket:** add Howler + recorded files behind the existing `SoundEngine` when audio assets are delivered (see `AUDIO_SPEC.md`).
 - **Style-Lab** work folds into T1/T2 and grows per axis; body-preset axis removed.
 - **T6** stop point (owner play-test) unchanged. **T10** = production build + `vite preview` + GIF (no deploy).
 
@@ -205,6 +206,7 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 - **Byte's rigged `.glb`** per `ASSET_SPEC.md` — due at the GLB swap-in ticket (late). ⚠️ "Baked clips" implies Blender rigging/animation; fallback to static/segmented + procedural animation if needed.
 - **Quick check-ins:** approve `SPEC.md` + `TICKETS.md`; pick palette (T1); lock Style-Lab choices; play-test at T6; `/clear` between tickets; OK downloads/installs when asked.
 - **Optional/later:** real email + social URLs (+ resume); any copy tweaks.
+- **Audio files (optional, later):** recorded sounds per `AUDIO_SPEC.md` to swap synth → Howler.
 - **Environment:** keep SD500 mounted; ensure Node is available for Vite (mise has no global default).
 
 ---
