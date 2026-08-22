@@ -1,0 +1,125 @@
+/* ==========================================================================
+   Fonts — self-hosted, Latin-subset woff2 (see ./fonts/README.md for the
+   family/weight → filename + source/license manifest). @font-face must stay
+   at the top of this file (R5).
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./fonts/space-grotesk-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./fonts/space-grotesk-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/jetbrains-mono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/jetbrains-mono-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Clash Display';
+  src: url('./fonts/clash-display-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Clash Display';
+  src: url('./fonts/clash-display-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ==========================================================================
+   Theme axis — [data-theme="light" | "dark"] (SPEC §11).
+   Warm paper + near-black ink (light); near-black paper + soft-white ink
+   (dark). `:root` alone mirrors "light" so an un-themed root (e.g. the
+   no-flash script didn't run) still gets a sane, non-blank paint.
+   ========================================================================== */
+
+:root,
+:root[data-theme='light'] {
+  --paper: #f4f1ea;
+  --paper-2: #eae5da;
+  --ink: #16151a;
+  --ink-2: #43414c;
+  --muted: #7b7887;
+  --line: #dcd6ca;
+  --accent: #c1502c;
+}
+
+:root[data-theme='dark'] {
+  --paper: #0e0d12;
+  --paper-2: #17161d;
+  --ink: #f2f0f5;
+  --ink-2: #b7b4c2;
+  --muted: #6f6c7d;
+  --line: #26242e;
+  --accent: #ff8a5c;
+}
+
+/* ==========================================================================
+   Type axis — [data-type="grotesk" | "mono" | "clash"] (Style Lab, SPEC §7).
+   `:root` alone mirrors "grotesk", the no-flash script's default.
+   ========================================================================== */
+
+:root,
+:root[data-type='grotesk'] {
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+:root[data-type='mono'] {
+  --font-display: 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+:root[data-type='clash'] {
+  --font-display: 'Clash Display', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+/* ==========================================================================
+   Glow axis — [data-glow="mint" | "amber" | "white" | "cyan"] (Style Lab,
+   SPEC §7). Drives Byte's emissive + halo accent, independent of theme.
+   `:root` alone mirrors "mint", the no-flash script's default.
+   ========================================================================== */
+
+:root,
+:root[data-glow='mint'] {
+  --glow: #38e8a8;
+}
+
+:root[data-glow='amber'] {
+  --glow: #ffb454;
+}
+
+:root[data-glow='white'] {
+  --glow: #f5f5f5;
+}
+
+:root[data-glow='cyan'] {
+  --glow: #49d6ff;
+}

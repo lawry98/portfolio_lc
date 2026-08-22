@@ -2,6 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      No-flash theme bootstrap. Runs synchronously, before any stylesheet
+      that could paint the wrong theme: resolves data-theme from a saved
+      choice (falling back to the OS preference), and seeds the data-type /
+      data-glow lab axes so every token axis has a value from first paint.
+      Kept tiny and dependency-free; src/lib/theme.ts re-derives the same
+      result once the app module loads (see main.ts).
+    -->
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        try {
+          stored = localStorage.getItem('byte-theme');
+        } catch {
+          stored = null;
+        }
+        var prefersDark =
+          window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.dataset.theme =
+          stored === 'light' || stored === 'dark' ? stored : prefersDark ? 'dark' : 'light';
+        root.dataset.type = 'grotesk';
+        root.dataset.glow = 'mint';
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Byte</title>
   </head>
