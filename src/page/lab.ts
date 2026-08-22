@@ -83,7 +83,6 @@ function buildPanel(active: TypePreset): HTMLElement {
     input.checked = preset.value === active;
 
     const text = document.createElement('span');
-    text.className = 'lab__option-label';
     text.textContent = preset.label;
 
     label.append(input, text);

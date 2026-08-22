@@ -1,5 +1,5 @@
 /**
- * Manifesto section — scroll reveals + parallax micro-labels (SPEC §8.3).
+ * Manifesto section — scroll reveals + parallax micro-labels (SPEC §8.4).
  *
  * Three independent behaviours, all scoped to `#manifesto`:
  *  - the 3 display lines (`.manifesto__line[data-reveal="lines"]`) each get

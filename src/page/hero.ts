@@ -17,7 +17,13 @@
  */
 
 import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
 import { revealLines } from './reveals';
+
+// Registered defensively (idempotent — see reveals.ts) since this module
+// calls `ScrollTrigger.refresh()` directly below, rather than only going
+// through the already-registered `revealLines`.
+gsap.registerPlugin(ScrollTrigger);
 
 /**
  * Real webfont loads on this project's self-hosted, subsetted woff2s settle
@@ -31,6 +37,13 @@ const FONTS_TIMEOUT_MS = 1500;
 
 /** Parallax budget — "a few px", never more than this on either axis. */
 const PARALLAX_MAX_PX = 8;
+/**
+ * `handlePointerMove` below normalizes the pointer position to `nx`/`ny` in
+ * roughly -0.5..0.5 across the hero's box, so doubling the ±px budget here
+ * compensates for that ±0.5 range: `nx * PARALLAX_RANGE_PX` (and its `ny`/
+ * label counterparts) then spans the full ±`PARALLAX_MAX_PX`.
+ */
+const PARALLAX_RANGE_PX = PARALLAX_MAX_PX * 2;
 const PARALLAX_VARS = { duration: 0.6, ease: 'power3' };
 
 /**
@@ -95,12 +108,12 @@ function initParallax(hero: HTMLElement, headline: HTMLElement, labels: HTMLElem
       const nx = (event.clientX - rect.left) / rect.width - 0.5;
       const ny = (event.clientY - rect.top) / rect.height - 0.5;
 
-      headlineX(nx * PARALLAX_MAX_PX * 2);
-      headlineY(ny * PARALLAX_MAX_PX * 2);
+      headlineX(nx * PARALLAX_RANGE_PX);
+      headlineY(ny * PARALLAX_RANGE_PX);
 
       labelSetters.forEach(({ x, y, speed }) => {
-        x(-nx * PARALLAX_MAX_PX * 2 * speed);
-        y(-ny * PARALLAX_MAX_PX * 2 * speed);
+        x(-nx * PARALLAX_RANGE_PX * speed);
+        y(-ny * PARALLAX_RANGE_PX * speed);
       });
     };
 
@@ -133,6 +146,22 @@ export function initHero(root: ParentNode = document): void {
   // `scrollTrigger` — this is a load reveal, not a scroll one.
   void whenFontsSettled().then(() => {
     revealLines(headline);
+
+    // The reveal ScrollTriggers (this section's own, plus manifesto/work/
+    // footer's — all booted synchronously earlier in the same `bootstrap()`
+    // call, see main.ts) were created before webfonts swapped in; the
+    // `font-display: swap` metric shift can leave their cached start
+    // positions slightly stale. A single refresh here, once fonts have
+    // settled, recomputes every trigger's start/end against the now-final
+    // layout. Not a recurring call — ScrollTrigger already auto-refreshes on
+    // load/resize on its own — and guarded so this best-effort recompute can
+    // never throw its way into breaking the load reveal above it.
+    try {
+      ScrollTrigger.refresh();
+    } catch {
+      // Defensive only (mirrors theme.ts's storage guards) — a failed
+      // recompute here is a missed nice-to-have, not a broken page.
+    }
   });
 
   const labels = Array.from(hero.querySelectorAll<HTMLElement>('[data-parallax]'));

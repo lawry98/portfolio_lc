@@ -1,5 +1,5 @@
 /**
- * Footer section — scroll reveal for the closing CTA (SPEC §8.5).
+ * Footer section — scroll reveal for the closing CTA (SPEC §8.6).
  *
  * Mirrors the hero's load reveal, gated on scroll instead of load: the
  * two-line `.footer__headline` ("LET'S" / "BUILD", each its own block

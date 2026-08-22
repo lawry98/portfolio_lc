@@ -1,5 +1,5 @@
 /**
- * Selected-work section — scroll reveal for the row list (SPEC §8.4).
+ * Selected-work section — scroll reveal for the row list (SPEC §8.5).
  *
  * Each `.work__row` fades/rises in independently as it scrolls into view —
  * one `revealFade()` call per row, so each gets its own `ScrollTrigger` and

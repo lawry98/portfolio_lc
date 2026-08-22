@@ -60,9 +60,12 @@ function noop(): void {
  * Masked line reveal: splits `el` into lines (SplitText `type: 'lines'`,
  * `mask: 'lines'`) and animates each line up out of its clip-mask.
  * `autoSplit: true` means fonts finishing loading or a resize re-splits and
- * re-runs `onSplit` automatically (3.13+); returning the tween from
- * `onSplit` lets SplitText sync/replace it across re-splits instead of
- * restarting the reveal from scratch.
+ * re-runs `onSplit` automatically (3.13+). The reveal is one-shot, though:
+ * `onSplit` only returns (and so only creates) the `gsap.from()` tween the
+ * first time it runs — letting SplitText track/revert it across re-splits —
+ * and on every later re-split instead just snaps the freshly-measured lines
+ * to their final visible state, so a resize/rotation/font-swap re-measures
+ * without replaying the mask-rise.
  *
  * A single `white-space: nowrap` line (e.g. the hero's `.hero__line` spans)
  * still yields exactly one "line" to SplitText — that's expected, and still
@@ -77,6 +80,15 @@ export function revealLines(el: HTMLElement, opts: RevealOptions = {}): () => vo
   }
 
   let split: SplitText | undefined;
+  // Sticks at `true` once the reveal tween has been created. `autoSplit`
+  // re-splits (and re-invokes `onSplit`) on any width/orientation/font-size
+  // change — the hero headline's `clamp()` font-size means a desktop
+  // width-drag or a phone rotation both qualify — and without this guard
+  // every re-split would return a brand-new `gsap.from()` (complete with its
+  // own fresh `ScrollTrigger` for scroll reveals), replaying the mask-rise
+  // or re-flashing a reveal that already fired. The reveal is one-shot: only
+  // the first `onSplit` animates, later re-splits just re-measure.
+  let revealed = false;
   const mm = gsap.matchMedia();
 
   mm.add('(prefers-reduced-motion: no-preference)', () => {
@@ -86,6 +98,15 @@ export function revealLines(el: HTMLElement, opts: RevealOptions = {}): () => vo
       linesClass: 'reveal-line',
       autoSplit: true,
       onSplit(self) {
+        if (revealed) {
+          // Re-split from a resize/orientation/font-swap, not the first
+          // run — land the freshly-measured lines at the reveal's final
+          // visible state instead of replaying it.
+          gsap.set(self.lines, { yPercent: 0, autoAlpha: 1 });
+          return undefined;
+        }
+
+        revealed = true;
         return gsap.from(self.lines, {
           yPercent: 100,
           autoAlpha: 0,
