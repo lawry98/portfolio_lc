@@ -250,11 +250,21 @@ function bootstrap(): void {
   ticker = startTicker((dt) => scene?.render(dt));
   // Gives the module-scope `ticker` a genuine (if rarely exercised) reason to
   // exist beyond just being reachable: stop the render callback + its
-  // `visibilitychange` listener on an actual page unload, rather than
-  // leaving them attached to `gsap.ticker` for the browser to discard along
-  // with everything else. The single-page demo never navigates away
-  // internally, so this never fires mid-session.
-  window.addEventListener('pagehide', () => ticker?.stop());
+  // `visibilitychange` listener on a *real* page unload. `pagehide` also
+  // fires when the page is frozen into the back/forward cache instead of
+  // destroyed (`event.persisted === true`) — `ticker.stop()` there would
+  // remove the same `visibilitychange` listener `motion.ts` needs to re-add
+  // the render callback, so a later `pageshow` restore would leave the
+  // scene frozen with no handler left to un-freeze it. Only a non-persisted
+  // `pagehide` (an actual unload) calls `stop()`; a bfcache round-trip is
+  // left entirely to `startTicker`'s own `visibilitychange` pause/resume.
+  // The single-page demo never navigates away internally, so this rarely
+  // fires either way.
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) {
+      ticker?.stop();
+    }
+  });
 
   initGLCubeRig(scene, headlineEl, theme.current(), reducedMotion);
 }
