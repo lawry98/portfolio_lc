@@ -4,6 +4,7 @@ import './styles/grain.css';
 import { initTheme, type ThemeController } from './lib/theme';
 import { initGrain } from './lib/grain';
 import { initLenis } from './lib/lenisScroll';
+import { initHero } from './page/hero';
 
 /**
  * Byte demo entry point.
@@ -58,6 +59,11 @@ function bootstrap(): void {
   }
 
   bindThemeToggle(root, theme);
+
+  // Hero load reveal + mouse-parallax (T2 Task 4). Later tasks append their
+  // own section inits here too (manifesto/work/footer scroll reveals, the
+  // lab), each guarding its own lookups the same way `initHero()` does.
+  initHero();
 }
 
 bootstrap();
