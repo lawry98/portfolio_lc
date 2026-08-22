@@ -8,6 +8,7 @@ import { initHero } from './page/hero';
 import { initManifesto } from './page/manifesto';
 import { initWork } from './page/work';
 import { initFooter } from './page/footer';
+import { initLab } from './page/lab';
 
 /**
  * Byte demo entry point.
@@ -63,14 +64,16 @@ function bootstrap(): void {
 
   bindThemeToggle(root, theme);
 
-  // Hero load reveal + mouse-parallax (T2 Task 4), then the remaining
-  // sections' scroll reveals + parallax (T2 Task 5), each guarding its own
-  // lookups the same way `initHero()` does. Task 6 appends `initLab()`
-  // after this.
+  // Hero load reveal + mouse-parallax (T2 Task 4), the remaining sections'
+  // scroll reveals + parallax (T2 Task 5), each guarding its own lookups
+  // the same way `initHero()` does. `initLab()` (T2 Task 6) goes last: the
+  // Style Lab typography control, which itself no-ops entirely unless
+  // `?lab` is present (see `page/lab.ts`).
   initHero();
   initManifesto();
   initWork();
   initFooter();
+  initLab();
 }
 
 bootstrap();
