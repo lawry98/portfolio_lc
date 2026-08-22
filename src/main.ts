@@ -3,6 +3,7 @@ import './styles/global.css';
 import './styles/grain.css';
 import { initTheme, type ThemeController } from './lib/theme';
 import { initGrain } from './lib/grain';
+import { initLenis } from './lib/lenisScroll';
 
 /**
  * Byte demo entry point.
@@ -44,6 +45,12 @@ function bindThemeToggle(root: HTMLElement, theme: ThemeController): void {
 function bootstrap(): void {
   const theme = initTheme();
   initGrain();
+  // Registers ScrollTrigger and boots smooth scroll before the reveal/section
+  // inits (later tasks) run, so their triggers attach to a live scroller. No
+  // teardown path exists yet in this single-page bootstrap, so the returned
+  // handle is intentionally not stored (see `lenisScroll.ts` for the handle
+  // callers would use once one does).
+  initLenis();
 
   const root = document.querySelector<HTMLDivElement>('#app');
   if (!root) {

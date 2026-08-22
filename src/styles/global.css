@@ -17,9 +17,36 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* Smooth-ish base scroll; Lenis (T2) takes over the actual scroll physics
-     and will disable this in favour of its own rAF loop. */
+  /* Smooth-ish base scroll for the no-Lenis path (reduced-motion, or
+     `matchMedia` unavailable — see `lib/lenisScroll.ts`). When Lenis is
+     active it adds `.lenis` to this element and the rule below sets this
+     back to `auto`, since Lenis is the one doing the smoothing then. */
   scroll-behavior: smooth;
+}
+
+/* ==========================================================================
+   Lenis smooth scroll — minimal ruleset from the package's own stylesheet,
+   inlined instead of imported so this file stays the single source of truth
+   for global CSS. Only applied while Lenis has added its classes to <html>
+   (see `lib/lenisScroll.ts`); the reduced-motion/no-Lenis path never gets
+   these classes and keeps the plain `scroll-behavior: smooth` above.
+   ========================================================================== */
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: clip;
 }
 
 /* Native form controls / scrollbars should track whichever theme is active
