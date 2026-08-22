@@ -1,0 +1,254 @@
+/* ==========================================================================
+   Modern reset — the minimal subset this project needs (Comeau/Bell-style
+   baseline), not a full normalize. Imported after tokens.css so every rule
+   below can read --paper/--ink/--font-display/etc.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Smooth-ish base scroll; Lenis (T2) takes over the actual scroll physics
+     and will disable this in favour of its own rAF loop. */
+  scroll-behavior: smooth;
+}
+
+/* Native form controls / scrollbars should track whichever theme is active
+   (manual toggle can disagree with the OS preference), not just [data-theme]
+   defined once in tokens.css — this keeps browser chrome in sync with it. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-display);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+img,
+picture,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+  padding: 0;
+}
+
+/* ==========================================================================
+   Base type scale — headline sizing lives with the hero shell below since
+   its height must be reserved; this covers the generic heading/body rhythm
+   the rest of the page inherits.
+   ========================================================================== */
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+h2 {
+  font-size: clamp(1.75rem, 1.25rem + 2vw, 3rem);
+}
+
+h3 {
+  font-size: clamp(1.25rem, 1.1rem + 1vw, 1.75rem);
+}
+
+p {
+  max-width: 60ch;
+}
+
+small,
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   Selection — accent fill + glow ink. --accent's light-mode contrast
+   (~4.18:1 on --paper) is fine here: this is a large-area fill with --glow
+   text on top, not small body copy on bare paper.
+   ========================================================================== */
+
+::selection {
+  background-color: var(--accent);
+  color: var(--glow);
+}
+
+/* ==========================================================================
+   Layout helpers
+   ========================================================================== */
+
+.container {
+  width: min(100% - 3rem, 76rem);
+  margin-inline: auto;
+}
+
+.section {
+  padding-block: clamp(4rem, 8vw, 8rem);
+  border-top: 1px solid var(--line);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Section shells (T1 skeleton — content/animation land per-ticket in T2+).
+   ========================================================================== */
+
+.nav {
+  padding-block: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Skeleton bar standing in for the real nav identity text (name + role,
+   SPEC §10) that a later ticket fills in. */
+.nav__identity {
+  display: inline-block;
+  inline-size: 8rem;
+  block-size: 0.85em;
+  border-radius: 999px;
+  background-color: var(--line);
+}
+
+.nav__theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav__theme-toggle:hover {
+  border-color: var(--accent);
+}
+
+.nav__theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nav__theme-toggle:active {
+  transform: scale(0.94);
+}
+
+.hero {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * CLS-0 contract: min-height is 2 lines of this element's own line-height,
+ * in em, so it scales with the fluid clamp() font-size at every breakpoint.
+ * A later ticket's phrase rotation/retype (deletes + retypes these two
+ * spans' text) can never grow or shrink this box, so it never shifts layout.
+ */
+.hero__headline {
+  font-size: clamp(3rem, 2rem + 5vw, 8rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  min-height: calc(1.05em * 2);
+}
+
+.hero__line {
+  display: block;
+}
+
+/* ==========================================================================
+   Reduced motion — base-level safety net for plain-CSS animation/transition
+   (the grain flicker, hover/focus transitions above, scroll-behavior). GSAP
+   work (T2+) additionally branches on this via gsap.matchMedia() per
+   CLAUDE.md; this rule does not depend on that JS running.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -31,7 +31,51 @@
     <title>Byte</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <header class="nav">
+        <div class="container nav__inner">
+          <!-- Identity placeholder — real nav copy (name/role, SPEC §10) lands in T2. -->
+          <span class="nav__identity"></span>
+          <button type="button" id="theme-toggle" class="nav__theme-toggle" aria-pressed="false">
+            <span class="visually-hidden">Toggle color theme</span>
+            <span aria-hidden="true" data-theme-toggle-icon>&#9728;</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="main">
+        <!--
+          Hero — 2-line headline. `.hero__headline` reserves exactly two
+          lines of height (min-height: 2 * line-height, in em, see
+          global.css) so a later ticket's phrase rotation/retype animation
+          can never shift layout (CLS 0). Phrase #1 (SPEC §10 Identity line
+          1) is static markup, so the page reads correctly with JS disabled.
+        -->
+        <section id="hero" class="hero">
+          <div class="container">
+            <h1 class="hero__headline" id="hero-headline">
+              <span class="hero__line">FULL-STACK</span>
+              <span class="hero__line">+AI</span>
+            </h1>
+          </div>
+        </section>
+
+        <!-- Manifesto — placeholder shell; copy + SplitText reveals land in T2. -->
+        <section id="manifesto" class="section manifesto">
+          <div class="container"></div>
+        </section>
+
+        <!-- Selected work — placeholder shell; work rows land in T2. -->
+        <section id="selected-work" class="section selected-work">
+          <div class="container"></div>
+        </section>
+      </main>
+
+      <!-- Footer CTA — placeholder shell; copy + fed-glyph counter land later. -->
+      <footer id="footer" class="section footer">
+        <div class="container"></div>
+      </footer>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,71 @@
+/* ==========================================================================
+   Film grain overlay — SPEC §8.7 "global garnish". Fixed, full-viewport,
+   pointer-events:none layer painted above all page content. The tile image
+   itself is a random-noise PNG data-URL generated once at runtime by
+   `src/lib/grain.ts` (kept out of this file — grain.css only owns
+   positioning/opacity/animation, never the pixels).
+   ========================================================================== */
+
+.grain {
+  position: fixed;
+  inset: 0;
+  /* Intentionally above every other layer defined so far (nav/hero/sections
+     all sit in the default stacking context). A future full-screen overlay
+     (e.g. the preloader) that needs to sit above the grain texture too
+     should use a higher value; grain is not interactive (pointer-events:
+     none) so stacking above it never blocks anything. */
+  z-index: 9999;
+  pointer-events: none;
+  background-repeat: repeat;
+  background-size: 128px 128px;
+  opacity: 0.06;
+  animation: grain-flicker 1s steps(8) infinite;
+}
+
+/* Opacity ceilings from the brief: <=.06 light, <=.08 dark. Scoped here
+   (not tokens.css) since this is the overlay's own presentation, not a
+   shared design token. */
+[data-theme='dark'] .grain {
+  opacity: 0.08;
+}
+
+/*
+ * Stepped flicker: nudges the *tiled background pattern* (not the element's
+ * own box), so — combined with background-repeat — there is never an edge
+ * gap to reveal, regardless of viewport size.
+ */
+@keyframes grain-flicker {
+  0% {
+    background-position: 0 0;
+  }
+  12.5% {
+    background-position: -14px 6px;
+  }
+  25% {
+    background-position: 9px -18px;
+  }
+  37.5% {
+    background-position: -22px -9px;
+  }
+  50% {
+    background-position: 16px 13px;
+  }
+  62.5% {
+    background-position: -8px 20px;
+  }
+  75% {
+    background-position: 20px -6px;
+  }
+  87.5% {
+    background-position: -12px -20px;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grain {
+    animation: none;
+  }
+}
