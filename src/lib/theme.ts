@@ -25,8 +25,31 @@ function prefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+/**
+ * `localStorage` access can throw (privacy mode, "block all site data",
+ * storage-quota-0 webviews). `initTheme()` is the first call in `bootstrap()`
+ * (see `main.ts`), so an unguarded throw here would abort the whole
+ * bootstrap — grain + the theme toggle would never init. Mirrors the
+ * try/catch in the no-flash inline script in `index.html`.
+ */
+function safeGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Silent no-op — persistence is a nice-to-have, not a requirement.
+  }
+}
+
 function resolveInitialTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = safeGet(STORAGE_KEY);
   if (isTheme(stored)) {
     return stored;
   }
@@ -38,7 +61,7 @@ function applyTheme(theme: Theme): void {
 }
 
 function persistTheme(theme: Theme): void {
-  localStorage.setItem(STORAGE_KEY, theme);
+  safeSet(STORAGE_KEY, theme);
 }
 
 export function initTheme(): ThemeController {

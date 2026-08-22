@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { initTheme } from './theme';
 
 const STORAGE_KEY = 'byte-theme';
@@ -68,5 +68,31 @@ describe('initTheme', () => {
     expect(theme.current()).toBe('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(localStorage.getItem(STORAGE_KEY)).toBe('dark');
+  });
+
+  it('falls back to the system preference when localStorage.getItem throws (privacy mode / blocked storage)', () => {
+    mockMatchMedia(true); // system says dark
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError: storage disabled');
+    });
+
+    expect(() => initTheme()).not.toThrow();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    getItemSpy.mockRestore();
+  });
+
+  it('toggle() still applies data-theme when localStorage.setItem throws (silent no-op persistence)', () => {
+    mockMatchMedia(false); // starts light
+    const theme = initTheme();
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError: storage disabled');
+    });
+
+    expect(() => theme.toggle()).not.toThrow();
+    expect(theme.current()).toBe('dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    setItemSpy.mockRestore();
   });
 });

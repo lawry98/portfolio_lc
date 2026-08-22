@@ -25,7 +25,7 @@
 /* Opacity ceilings from the brief: <=.06 light, <=.08 dark. Scoped here
    (not tokens.css) since this is the overlay's own presentation, not a
    shared design token. */
-[data-theme='dark'] .grain {
+:root[data-theme='dark'] .grain {
   opacity: 0.08;
 }
 

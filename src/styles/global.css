@@ -121,14 +121,15 @@ small,
 }
 
 /* ==========================================================================
-   Selection — accent fill + glow ink. --accent's light-mode contrast
-   (~4.18:1 on --paper) is fine here: this is a large-area fill with --glow
-   text on top, not small body copy on bare paper.
+   Selection — accent fill + paper ink. --paper-on-accent clears WCAG AA
+   (~4.5:1) in both themes because paper/accent have opposite lightness per
+   theme (light: dark accent under light paper text; dark: light accent
+   under near-black paper text).
    ========================================================================== */
 
 ::selection {
-  background-color: var(--accent);
-  color: var(--glow);
+  background: var(--accent);
+  color: var(--paper);
 }
 
 /* ==========================================================================
@@ -233,6 +234,8 @@ small,
 
 .hero__line {
   display: block;
+  white-space: nowrap;
+  hyphens: none;
 }
 
 /* ==========================================================================
