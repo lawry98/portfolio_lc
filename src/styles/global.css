@@ -174,14 +174,21 @@ small,
   gap: 1rem;
 }
 
-/* Skeleton bar standing in for the real nav identity text (name + role,
-   SPEC §10) that a later ticket fills in. */
+/* Nav identity — name + role (SPEC §10). `.nav__role` is styled entirely by
+   the shared `.eyebrow` rule above (mono/uppercase/muted); no override
+   needed here. */
 .nav__identity {
-  display: inline-block;
-  inline-size: 8rem;
-  block-size: 0.85em;
-  border-radius: 999px;
-  background-color: var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.nav__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .nav__theme-toggle {
@@ -216,6 +223,10 @@ small,
   min-height: 100svh;
   display: flex;
   align-items: center;
+  /* Positioning context for the absolutely-placed micro-label/scroll-cue
+     below — they live inside `.container` in the DOM (per spec) but anchor
+     to the full-bleed hero section, not the container's own (shorter) box. */
+  position: relative;
 }
 
 /*
@@ -236,6 +247,257 @@ small,
   display: block;
   white-space: nowrap;
   hyphens: none;
+}
+
+/* Drifting micro-label — parallax speed hook consumed by a later ticket;
+   right-anchored to the hero section so it never competes with the
+   centered headline. Kept well inside the container's own gutter
+   (1.5rem, matching `.container`'s implicit inset) so it cannot cause
+   horizontal overflow at narrow widths (R-T2-8). */
+.hero__micro-label {
+  position: absolute;
+  top: clamp(1.5rem, 4vw, 3rem);
+  right: 1.5rem;
+}
+
+/* Scroll cue — SVG chevron (not a subsetted-font glyph, R-T2-8), sitting in
+   the lower part of the hero section. Anchored with a percentage `top`
+   (not `bottom`) because `.hero` sits *after* the in-flow nav in normal
+   flow: its own box is `100svh` tall starting below the nav, so its
+   bottom edge lands a nav's-height past the first viewport fold. A
+   `bottom`-based offset would inherit that gap and render off-screen on a
+   same-height viewport; a percentage of the hero's own (viewport-derived)
+   height keeps the cue safely inside the fold at realistic viewport
+   heights without coupling to the nav's exact pixel height. */
+.hero__scroll {
+  position: absolute;
+  left: 50%;
+  top: 80%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hero__scroll-chevron {
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   Manifesto — three big display lines (each its own block element, so a
+   later ticket can mask/reveal them independently), a supporting paragraph,
+   and two parallax micro-labels at different speeds.
+   ========================================================================== */
+
+.manifesto__inner {
+  /* Positioning context for `.manifesto__label--index` below. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.manifesto__label--index {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.manifesto__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+}
+
+.manifesto__line {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.3rem + 4.5vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.manifesto__paragraph {
+  color: var(--ink-2);
+  font-size: clamp(1rem, 0.9rem + 0.4vw, 1.25rem);
+}
+
+/* ==========================================================================
+   Selected work — heading + a 3-row semantic list. Rows use only
+   transform/opacity/color transitions (compositor-friendly) and mirror the
+   hover state on :focus-visible for keyboard parity. The name/tag columns
+   use `minmax(0, 1fr)` so long tag text wraps instead of overflowing; a
+   narrow-viewport breakpoint reflows the row into two lines so nothing
+   overflows horizontally at 390px (R-T2-8).
+   ========================================================================== */
+
+.selected-work__heading {
+  margin-bottom: 2rem;
+}
+
+.work__list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.work__row {
+  display: grid;
+  grid-template-columns: 2.5rem 6.5rem minmax(0, 1fr) 3.25rem 1.5rem;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1.5rem;
+  border-bottom: 1px solid var(--line);
+  transition: transform 0.25s ease;
+}
+
+.work__number {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.work__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.25rem, 1.1rem + 1vw, 2rem);
+  transition: color 0.25s ease;
+}
+
+.work__tag {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.work__year {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.work__arrow {
+  color: var(--ink-2);
+  transition:
+    transform 0.25s ease,
+    color 0.25s ease;
+}
+
+.work__row:hover,
+.work__row:focus-visible {
+  transform: translateX(0.5rem);
+}
+
+.work__row:hover .work__name,
+.work__row:focus-visible .work__name {
+  color: var(--accent);
+}
+
+.work__row:hover .work__arrow,
+.work__row:focus-visible .work__arrow {
+  transform: translateX(0.35rem);
+  color: var(--accent);
+}
+
+.work__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+@media (max-width: 30rem) {
+  .work__row {
+    grid-template-columns: 2.25rem 1fr 1.25rem;
+    grid-template-areas:
+      'number name  arrow'
+      'number tag   arrow'
+      'number year  arrow';
+    column-gap: 0.75rem;
+    row-gap: 0.35rem;
+    align-items: start;
+  }
+
+  .work__number {
+    grid-area: number;
+  }
+
+  .work__name {
+    grid-area: name;
+  }
+
+  .work__tag {
+    grid-area: tag;
+  }
+
+  .work__year {
+    grid-area: year;
+  }
+
+  .work__arrow {
+    grid-area: arrow;
+    align-self: center;
+  }
+}
+
+/* ==========================================================================
+   Footer CTA — 2-line phrase mirroring the hero headline structure (same
+   CLS-0 contract: min-height reserves 2 lines so a later ticket's phrase
+   rotation can never shift layout), contact email, fed-glyph counter, and
+   the copyright line.
+   ========================================================================== */
+
+.footer__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.footer__headline {
+  font-size: clamp(2.5rem, 1.75rem + 6vw, 7rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  min-height: calc(1.05em * 2);
+}
+
+.footer__line {
+  display: block;
+  white-space: nowrap;
+  hyphens: none;
+}
+
+.footer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.footer__email {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 1rem + 0.5vw, 1.5rem);
+  border-bottom: 1px solid var(--line);
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.footer__email:hover,
+.footer__email:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.footer__email:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.footer__copyright {
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 /* ==========================================================================

@@ -34,8 +34,10 @@
     <div id="app">
       <header class="nav">
         <div class="container nav__inner">
-          <!-- Identity placeholder — real nav copy (name/role, SPEC §10) lands in T2. -->
-          <span class="nav__identity"></span>
+          <div class="nav__identity">
+            <span class="nav__name">Lawrence Crasto</span>
+            <span class="nav__role eyebrow">Full-stack + AI Product Engineer</span>
+          </div>
           <button type="button" id="theme-toggle" class="nav__theme-toggle" aria-pressed="false">
             <span class="visually-hidden">Toggle color theme</span>
             <span aria-hidden="true" data-theme-toggle-icon>&#9728;</span>
@@ -57,23 +59,160 @@
               <span class="hero__line">FULL-STACK</span>
               <span class="hero__line">+AI</span>
             </h1>
+            <p class="hero__micro-label eyebrow" data-parallax data-parallax-speed="0.25">
+              PORTFOLIO — 2026
+            </p>
+            <!-- Decorative scroll cue: SVG chevron, never the subsetted woff2's glyphs. -->
+            <div class="hero__scroll">
+              <span class="hero__scroll-label eyebrow">SCROLL</span>
+              <svg
+                class="hero__scroll-chevron"
+                width="14"
+                height="8"
+                viewBox="0 0 14 8"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M1 1L7 7L13 1"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
           </div>
         </section>
 
-        <!-- Manifesto — placeholder shell; copy + SplitText reveals land in T2. -->
+        <!-- Manifesto — static copy below; masked-line/fade reveals wire up in T4. -->
         <section id="manifesto" class="section manifesto">
-          <div class="container"></div>
+          <div class="container manifesto__inner">
+            <p
+              class="manifesto__label manifesto__label--kicker eyebrow"
+              data-parallax
+              data-parallax-speed="0.2"
+            >
+              APPROACH
+            </p>
+            <h2 class="manifesto__lines">
+              <span class="manifesto__line" data-reveal="lines">I BUILD PRODUCTS</span>
+              <span class="manifesto__line" data-reveal="lines">END TO END —</span>
+              <span class="manifesto__line" data-reveal="lines">IDEA TO SHIPPED.</span>
+            </h2>
+            <p class="manifesto__paragraph" data-reveal="fade">
+              From data models and APIs to the last pixel of the interface, I design and ship
+              full-stack products — with AI woven through the core, not bolted on the side.
+            </p>
+            <p
+              class="manifesto__label manifesto__label--index eyebrow"
+              data-parallax
+              data-parallax-speed="-0.15"
+            >
+              — 01
+            </p>
+          </div>
         </section>
 
-        <!-- Selected work — placeholder shell; work rows land in T2. -->
+        <!-- Selected work — static fake rows below; hover/focus CSS states already live. -->
         <section id="selected-work" class="section selected-work">
-          <div class="container"></div>
+          <div class="container">
+            <h2 class="selected-work__heading eyebrow">SELECTED WORK</h2>
+            <ul class="work__list">
+              <li class="work__item">
+                <a href="#" class="work__row" data-reveal="fade">
+                  <span class="work__number">01</span>
+                  <span class="work__name">SIGNAL</span>
+                  <span class="work__tag">Realtime analytics</span>
+                  <span class="work__year">2025</span>
+                  <svg
+                    class="work__arrow"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </a>
+              </li>
+              <li class="work__item">
+                <a href="#" class="work__row" data-reveal="fade">
+                  <span class="work__number">02</span>
+                  <span class="work__name">QUILL</span>
+                  <span class="work__tag">AI writing studio</span>
+                  <span class="work__year">2024</span>
+                  <svg
+                    class="work__arrow"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </a>
+              </li>
+              <li class="work__item">
+                <a href="#" class="work__row" data-reveal="fade">
+                  <span class="work__number">03</span>
+                  <span class="work__name">ATLAS</span>
+                  <span class="work__tag">Internal dev platform</span>
+                  <span class="work__year">2024</span>
+                  <svg
+                    class="work__arrow"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </a>
+              </li>
+            </ul>
+          </div>
         </section>
       </main>
 
-      <!-- Footer CTA — placeholder shell; copy + fed-glyph counter land later. -->
+      <!-- Footer CTA — static copy below; fed-glyph counter wiring lands in T5/T6. -->
       <footer id="footer" class="section footer">
-        <div class="container"></div>
+        <div class="container footer__inner">
+          <h2 class="footer__headline">
+            <span class="footer__line">LET'S</span>
+            <span class="footer__line">BUILD</span>
+          </h2>
+          <div class="footer__meta">
+            <a href="mailto:hello@lawrence.dev" class="footer__email">hello@lawrence.dev</a>
+            <p class="footer__counter eyebrow" data-fed-counter>FED 0 GLYPHS</p>
+          </div>
+          <p class="footer__copyright">© 2026 Lawrence Crasto</p>
+        </div>
       </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
