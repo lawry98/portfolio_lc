@@ -96,6 +96,8 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ## T2 — Typography, sections, scroll & reveals
 
+> **DONE (2026-08-22, commits `90b3320..e831f0b`).** `phrases.ts` (SPEC §10 sets) + pure `fitsLineBudget` (unit-tested); first runtime deps **gsap 3.15** (+ ScrollTrigger, free SplitText) + **lenis 1.3** (DECISIONS **D-09**). All section copy static in `index.html` (nav/hero/manifesto/work/footer) — **CLS-0 + JS-off headline #1 preserved**; CSS work-row hovers. **Lenis** smooth scroll + **ScrollTrigger** on one `gsap.ticker` clock (reduced-motion → native scroll). **SplitText** masked line reveals (hero on load; manifesto/work/footer on scroll) + hero mouse-parallax + scrubbed manifesto micro-label parallax; the three invariants — never-hidden, reduced-motion-instant, full cleanup — hold page-wide (verified vs gsap 3.15 source). `?lab` **typography axis** (grotesk/mono/clash). Build/lint/format/test green; **budgets** JS 54.8KB gz / CSS 2.6KB gz (≪ 280 / 20). QA both themes × 1440/768/390 (+ landscape), zero console errors. Via subagent-driven-development: 6 tasks + per-task reviews + Opus whole-branch review (ready: yes) + 1 fix wave + scoped re-review — all clean; 1 minor parked (reveal-timing nuance). Full audit trail: `.superpowers/sdd/t2-plan/progress.md`.
+
 **Goal:** All page copy in the DOM with SplitText masked reveals, Lenis smooth scroll + ScrollTrigger parallax, work-row hovers, and a first Style-Lab axis (typography) — reduced-motion aware.
 
 **Depends on:** T1.
