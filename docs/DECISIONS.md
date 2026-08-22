@@ -4,6 +4,10 @@ Running log (append per ticket). Newest first. See [`SPEC.md`](SPEC.md) for the 
 
 ---
 
+## D-08 · T1 scaffold, tokens & fonts — 2026-08-22
+**Choices:** (1) Removed the inherited Next.js portfolio; the worktree root is the Vite + vanilla-TS app (SPEC §3/§14). (2) Tokens as CSS custom properties, combined `:root, :root[data-theme='light']` (etc.) selectors; axes `data-theme` (light/dark), `data-type` (grotesk/mono/clash), `data-glow` (mint/amber/white/cyan). **Palette locked (owner):** light paper `#f4f1ea`/ink `#16151a`; dark paper `#0e0d12`/ink `#f2f0f5`; accent `#a8451f` light (AA-clean) / `#ff8a5c` dark; glow default `mint #38e8a8`. (3) Fonts self-hosted Latin-subset woff2 — Space Grotesk + JetBrains Mono (Fontsource), Clash Display (Fontshare); `@font-face` at top of `tokens.css`; ~99KB, per-glyph subsetting deferred to T10. (4) `initTheme()`: system pref default, `localStorage['byte-theme']` override, no-flash inline script sets all 3 axes pre-paint; storage access guarded (degrades to system pref, never throws). (5) Node via mise + `.tool-versions` (node 22); T1 installs tooling deps only (three/gsap/lenis deferred to the tickets that first use them).
+**Why:** Matches SPEC's Vite/token/lab architecture; keeps T1 unblocked and in-budget; guarded storage + no-flash + CLS-0 groundwork protect the graceful-degradation constraints from the start.
+
 ## D-07 · Sound: `SoundEngine` interface, synth now + Howler/files later — 2026-08-21
 **Choice:** WebAudio synth behind a thin swappable `SoundEngine` interface; Howler + recorded audio files are a later drop-in swap (see `AUDIO_SPEC.md`).
 **Why:** Howler only earns its keep with recorded audio *files*; synth needs no library. The interface means adding Howler is never wasted and switching touches no call sites — mirrors the placeholder→GLB pattern. Unblocked now (zero downloads), asset-rich later. Brief §5 explicitly sanctioned Howler "if we choose assets."

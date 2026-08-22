@@ -69,7 +69,9 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ---
 
-## T1 — Scaffold, tooling & design tokens
+## T1 — Scaffold, tooling & design tokens ✅ DONE
+
+> **DONE (2026-08-22, commits `166413c..ca29d48`).** Vite+TS scaffold (Next.js removed), tokens (theme/type/glow axes), 3 self-hosted fonts, no-flash `initTheme()` + tests, CLS-0 shells, runtime grain, theme toggle. Palette locked by owner (accent `#a8451f`/`#ff8a5c`, glow `mint` default). Build/lint/format/test green; QA both themes × 3 viewports; budgets well under. Via subagent-driven-development.
 
 **Goal:** A running Vite+TS app with lint/format/test wired, the themeable + lab-swappable token system, fonts, base layout skeleton, and film grain — zero console errors, CLS 0, both themes.
 
