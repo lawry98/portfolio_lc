@@ -673,6 +673,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- FSM → choreography dispatch (brief 4d, "the idle brain") -------------------
   function dispatch(state: PetState): void {
+    // A prior onEnter listener may have caused a NESTED transition mid-loop (e.g. the
+    // feeder re-chaining idle→FEED→dashing for the next queued glyph). When that
+    // happens this callback still fires for the now-superseded state, so bail if the
+    // dispatched state is no longer the live one — otherwise we'd drive choreography
+    // for a state Byte already left (replaying Idle over a fresh Dash, etc.).
+    if (fsm.state() !== state) {
+      return;
+    }
+
     // Defensive per-state resets (brief 4d): every non-peeking state ensures
     // the occlusion flip is off, regardless of how it was reached.
     if (state !== 'peeking') {
