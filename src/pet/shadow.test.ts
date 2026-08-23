@@ -22,7 +22,11 @@ describe('shadowScaleForHeight', () => {
   });
 
   it('increases monotonically as height grows', () => {
-    const heights = [0, 20, 40, 60, 80, 100, 120, 140];
+    // R-T4-10: MAX_HOVER_HEIGHT dropped to 64 (from 140) once the
+    // placeholder's real Hop apex existed to calibrate against — every
+    // sample here must stay <= the new max, or two clamped points would tie
+    // and break the strict monotonicity assertion below.
+    const heights = [0, 8, 16, 24, 32, 40, 48, 56];
     const scales = heights.map(shadowScaleForHeight);
 
     for (let i = 1; i < scales.length; i++) {
@@ -55,7 +59,11 @@ describe('shadowOpacityForHeight', () => {
   });
 
   it('decreases monotonically as height grows', () => {
-    const heights = [0, 20, 40, 60, 80, 100, 120, 140];
+    // R-T4-10: MAX_HOVER_HEIGHT dropped to 64 (from 140) once the
+    // placeholder's real Hop apex existed to calibrate against — every
+    // sample here must stay <= the new max, or two clamped points would tie
+    // and break the strict monotonicity assertion below.
+    const heights = [0, 8, 16, 24, 32, 40, 48, 56];
     const opacities = heights.map(shadowOpacityForHeight);
 
     for (let i = 1; i < opacities.length; i++) {

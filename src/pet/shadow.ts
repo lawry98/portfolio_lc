@@ -58,11 +58,20 @@ export const MIN_SHADOW_OPACITY = 0;
 
 /**
  * Hover height (world px == CSS px) at which the scale/opacity ramps fully
- * saturate. Chosen to comfortably cover Byte's hop apex (T4) so the shadow
- * never looks odd mid-flight; free to retune visually once the real rig
- * exists, same as `scene.ts`'s hand-picked theme values.
+ * saturate. R-T4-10: retuned against the placeholder's actual `Hop` apex
+ * now that it exists (`rig.ts`'s `HOP_APEX_FRACTION = 0.5`, i.e. half the
+ * bot's own body height) at a representative large-desktop headline size —
+ * `.hero__headline`'s `font-size: clamp(3rem, 2rem + 5vw, 8rem)`
+ * (`styles/global.css`) ceiling, `8rem` = 128px — so `0.5 * 128 ≈ 64`. At
+ * smaller headline sizes (the clamp's floor is 3rem/48px) the actual apex is
+ * proportionally smaller, so the shadow only partially fades mid-hop there
+ * instead of hitting the faintest/widest end of the ramp — reads fine
+ * (graceful undershoot) rather than odd, same as this constant's previous,
+ * larger placeholder value did before hops existed to calibrate against.
+ * Free to retune visually; same hand-picked-not-derived spirit as
+ * `scene.ts`'s theme values.
  */
-export const MAX_HOVER_HEIGHT = 140;
+export const MAX_HOVER_HEIGHT = 64;
 
 /** Clamps `t` to `[0, 1]`. Shared by both height maps below. */
 function clamp01(t: number): number {
