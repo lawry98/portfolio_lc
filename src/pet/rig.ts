@@ -42,8 +42,10 @@ const LOOK_QUICK_TO_VARS = { duration: 0.3, ease: 'power3' };
 const GLOW_ON_INTENSITY = 0.6;
 
 // ---------------------------------------------------------------------------
-// Clip-motion tuning — every value is a fraction of the bot's own body
-// height (or a radian angle, or a duration in seconds), since these animate
+// Clip-motion tuning — every value is a fraction of the bot's own TOTAL
+// height (feet to antenna tip, ~1 normalized unit — `placeholderBot.ts`'s
+// "Total height sanity check" — NOT the smaller `BODY_HEIGHT` sub-const
+// there) (or a radian angle, or a duration in seconds), since these animate
 // the `pose` group nested inside a root already scaled by `unitPx`
 // (`placeholderBot.ts`) — one set of fractions reads correctly at any
 // headline size. Hand-picked; free to retune visually (placeholder only).
@@ -53,7 +55,9 @@ const IDLE_BOB_AMPLITUDE = 0.035;
 const IDLE_BOB_DURATION = 1.6;
 
 /**
- * Hop's apex height, as a fraction of the bot's own body height — also the
+ * Hop's apex height, as a fraction of the bot's own TOTAL height (feet to
+ * antenna tip, ~1 normalized unit — see the "Clip-motion tuning" note above;
+ * NOT the smaller `BODY_HEIGHT` sub-const in `placeholderBot.ts`) — also the
  * R-T4-10 shadow-retune reference (see `shadow.ts`'s `MAX_HOVER_HEIGHT`
  * comment, calibrated against this same fraction at a representative
  * headline `unitPx`). Reused by `Wake`'s jump too (both are "jump" beats).
@@ -373,6 +377,25 @@ export function createPetRig(source: RigSource): PetRig {
   function play(clip: ClipName, opts: ClipPlayOptions = {}): void {
     currentTimeline?.kill();
 
+    // Every clip builder above hand-authors its tweens assuming `pose`
+    // starts at identity, and most only touch a subset of its channels
+    // (e.g. Idle/Sleep touch only `position.y`/`scale.y`; Peek resets
+    // `rotation.x` but not `.z`; Hop never touches `rotation` at all). A
+    // *killed* timeline freezes `pose` wherever it was, so without this
+    // reset a channel a previous clip left non-identity (e.g. Dash's
+    // `rotation.z`/`scale`) would silently persist through every later clip
+    // that never happens to touch that same channel — found via review: the
+    // FSM's idle→dashing→idle feed path left Byte permanently leaning +
+    // squashed after the very first feed. `gsap.set()` is an instant,
+    // zero-duration snap (acceptable for a placeholder clip cut) and only
+    // ever targets `pose`'s own position/rotation/scale — never `source.eye`
+    // (a separate node `pose` merely parents; its own local rotation/scale,
+    // driven by `setLook`/Task 4's future blink, is untouched by resetting
+    // its parent's transform).
+    gsap.set(pose.position, { x: 0, y: 0, z: 0 });
+    gsap.set(pose.rotation, { x: 0, y: 0, z: 0 });
+    gsap.set(pose.scale, { x: 1, y: 1, z: 1 });
+
     const timeline = CLIP_BUILDERS[clip]();
     if (opts.loop) {
       // Generic override for any clip, one-shot or not: an already-infinite
@@ -407,6 +430,16 @@ export function createPetRig(source: RigSource): PetRig {
    * reference, so yaw/pitch ramp up smoothly with the cursor offset and
    * clamp only once it's roughly a bot-height or more away — proportional
    * at any headline size, since it scales with that same `unitPx`.
+   *
+   * Yaw and pitch use opposite-signed deltas on purpose: for an object whose
+   * local forward is `(0,0,1)`, three.js's right-handed rotation convention
+   * means a *positive* `rotation.y` swings that forward vector toward world
+   * `+x` (screen-right — matches `+dx` directly), but a *positive*
+   * `rotation.x` swings it toward world `-y` (screen-*down*) — the opposite
+   * sign from `+dy` (cursor above the bot). Negating `dy` for the pitch
+   * `atan2` (only) corrects for that, so a cursor below the bot (`dy < 0`)
+   * yields a positive pitch that tilts the eye down toward it, and a cursor
+   * above yields a negative pitch that tilts it up.
    */
   function setLook(x: number, y: number): void {
     if (!source.eye || !setYaw || !setPitch) {
@@ -426,7 +459,7 @@ export function createPetRig(source: RigSource): PetRig {
     const pitch = gsap.utils.clamp(
       -EYE_PITCH_CLAMP_RAD,
       EYE_PITCH_CLAMP_RAD,
-      Math.atan2(dy, referenceDepth),
+      Math.atan2(-dy, referenceDepth),
     );
 
     setYaw(yaw);
