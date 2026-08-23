@@ -33,7 +33,7 @@ import { createFSM } from './fsm';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
-import type { BytePetHandle, PetOptions, PetState } from './types';
+import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
@@ -52,11 +52,13 @@ const HINT_GAP_PX = 14;
 const HINT_FADE_S = 0.35;
 
 /**
- * Mirrors `fsm.ts`'s own `DEFAULTS.peekMs` (1200ms). `createFSM()` below is
- * called with no config, so this is the FSM's real, effective value — but
- * `PetFSM` exposes no getter for it, so this constant documents the coupling
- * rather than reading it back at runtime. Used to time this module's own
- * `setBehind()` flip against the FSM's own peekMs-driven auto-exit.
+ * `createBytePet` is the single source of truth for `peekMs` — passed
+ * straight into `createFSM({ peekMs: PEEK_MS })` below, rather than relying
+ * on this constant merely matching `fsm.ts`'s own default by convention (a
+ * real, if previously harmless, coupling: `PetFSM` exposes no getter, so a
+ * silent drift would have been possible had anyone ever changed one without
+ * the other). Also used to time this module's own `setBehind()` flip
+ * against the FSM's own peekMs-driven auto-exit.
  */
 const PEEK_MS = 1200;
 /** When (seconds into the peek) the bot flips behind the letterform — roughly the rise's apex. */
@@ -151,7 +153,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const shadow = createBlobShadow();
   scene.addToFront(shadow.mesh);
 
-  const fsm = createFSM();
+  const fsm = createFSM({ peekMs: PEEK_MS });
 
   // The placeholder's internal clip-motion node (`placeholderBot.ts`'s "root
   // vs pose split") — read-only here, purely to sample the bot's CURRENT
@@ -210,10 +212,31 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   // --- Tween bookkeeping -----------------------------------------------------
+  // `track()` self-prunes on natural completion (composed with whatever
+  // onComplete the caller already passed — `gsap.delayedCall`'s own
+  // callback in particular, which would otherwise be silently replaced) so
+  // `liveTweens` doesn't grow unboundedly over a long session; `.kill()`
+  // never fires `onComplete`, so anything killed early (a superseded
+  // peek/glance/micro-timer/blink — see `killTracked()`) needs its own
+  // explicit removal instead.
   const liveTweens = new Set<Trackable>();
   function track<T extends Trackable>(tween: T): T {
     liveTweens.add(tween);
+    const existing = tween.eventCallback('onComplete');
+    tween.eventCallback('onComplete', () => {
+      liveTweens.delete(tween);
+      existing?.();
+    });
     return tween;
+  }
+
+  /** Kills a tracked, possibly-null tween/timeline (if any) and removes it from `liveTweens`, returning `null` for reassignment. */
+  function killTracked<T extends Trackable>(tween: T | null): null {
+    if (tween) {
+      liveTweens.delete(tween);
+      tween.kill();
+    }
+    return null;
   }
 
   const mm = gsap.matchMedia();
@@ -240,10 +263,18 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // far-off-screen `cursorScreen` sentinel, which would otherwise pin the
   // eye to its yaw/pitch clamp before the user ever moves the mouse.
   let hasPointerInput = false;
-  const drift = { x: 0, y: 0 };
+  // Idle baseline-slide offset (world px), added on top of the anchor each
+  // tick. Single-axis: the reduced-motion peek's own small rise lives on
+  // `pose.position.y` instead (see `runPeekReduced`), not here.
+  const drift = { x: 0 };
   let glanceOverride: { x: number; y: number } | null = null;
   // Edge-triggered proximity (brief 4c): POINTER_NEAR/FAR are sent only on
   // an actual crossing, not every tick — see `onTick`'s doc comment for why.
+  // Re-armed to `false` on every idle (re-)entry (`enterIdleBehaviour`) so a
+  // cursor that became near while Byte was peeking/dashing/waking/sleeping
+  // (none of which consume POINTER_NEAR into a transition) is re-detected
+  // as a fresh crossing once idle resumes, rather than being silently
+  // stranded as "already near, no new edge" forever (I-1 fix).
   let wasNear = false;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
@@ -292,8 +323,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     blinkTimeline = buildBlink();
     currentPeekRunner = runPeekFull;
     return () => {
-      blinkTimeline?.kill();
-      blinkTimeline = null;
+      blinkTimeline = killTracked(blinkTimeline);
     };
   }
 
@@ -302,8 +332,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     blinkTimeline = buildBlink();
     currentPeekRunner = runPeekReduced;
     return () => {
-      blinkTimeline?.kill();
-      blinkTimeline = null;
+      blinkTimeline = killTracked(blinkTimeline);
     };
   }
 
@@ -381,7 +410,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Peek (brief 4d "peeking") -------------------------------------------------
   function runPeekFull(): void {
-    peekTimeline?.kill();
+    peekTimeline = killTracked(peekTimeline);
     rig.play('Peek');
     const tl = track(gsap.timeline());
     tl.call(() => scene.setBehind(true), undefined, PEEK_BEHIND_ON_S);
@@ -391,26 +420,47 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   /** Reduced-motion: "fade up/behind instead of a hop" — still `setBehind` (occlusion is a layer swap). */
   function runPeekReduced(): void {
-    peekTimeline?.kill();
+    peekTimeline = killTracked(peekTimeline);
     themedMaterials().forEach((m) => {
       m.transparent = true;
     });
 
+    // The small "rise" drives `pose.position.y` — the SAME hover channel
+    // the shadow's height/opacity reads every tick (`onTick`, `hoverPx`) and
+    // the full-motion path's `rig.play('Peek')` uses internally — NOT
+    // `drift` (a ROOT-level offset the shadow's own POSITION also follows).
+    // Driving the rise through `drift` moved the shadow along with the bot
+    // without correspondingly fading/growing it (the shadow read `hoverPx`
+    // from `pose`, which `drift` never touches), so the ground-contact blob
+    // floated up fully dark instead of scaling/fading like the full-motion
+    // peek's does. Reaching into `pose` directly here (unlike everywhere
+    // else in this module) is safe specifically because `playUnlessReduced`
+    // guarantees `rig.play()` is never called while `reducedActive` is true
+    // — nothing else can be fighting over this node's transform in this
+    // mode. `riseFraction` converts the original world-px rise target into
+    // `pose`'s normalized (fraction-of-bot-height) units, so the visible
+    // rise stays ~`PEEK_REDUCED_RISE_PX` regardless of `unitPx`.
+    const riseFraction = PEEK_REDUCED_RISE_PX / unitPx;
+
     const holdEnd = PEEK_MS / 1000 - PEEK_REDUCED_PHASE_S * 2 - 0.15;
     const tl = track(gsap.timeline());
     tl.call(() => scene.setBehind(true), undefined, 0);
-    tl.to(
-      drift,
-      { y: PEEK_REDUCED_RISE_PX, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
-      0,
-    );
+    if (pose) {
+      tl.to(
+        pose.position,
+        { y: riseFraction, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
+        0,
+      );
+    }
     tl.to(
       themedMaterials(),
       { opacity: PEEK_REDUCED_FADE_OPACITY, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
       0,
     );
     tl.call(() => scene.setBehind(false), undefined, holdEnd);
-    tl.to(drift, { y: 0, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' }, holdEnd);
+    if (pose) {
+      tl.to(pose.position, { y: 0, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' }, holdEnd);
+    }
     tl.to(
       themedMaterials(),
       { opacity: 1, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' },
@@ -472,7 +522,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       x: botPos.x + Math.cos(angle) * GLANCE_OFFSET_PX,
       y: botPos.y + Math.sin(angle) * GLANCE_OFFSET_PX,
     };
-    glanceTimer?.kill();
+    glanceTimer = killTracked(glanceTimer);
     glanceTimer = track(
       gsap.delayedCall(GLANCE_HOLD_S, () => {
         glanceOverride = null;
@@ -513,25 +563,63 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   function scheduleNextMicroBehaviour(): void {
-    microTimer?.kill();
+    microTimer = killTracked(microTimer);
     microTimer = track(
       gsap.delayedCall(gsap.utils.random(MICRO_MIN_S, MICRO_MAX_S), rollMicroBehaviour),
     );
   }
 
   function pauseMicroScheduler(): void {
-    microTimer?.kill();
-    microTimer = null;
+    microTimer = killTracked(microTimer);
   }
 
   function enterIdleBehaviour(): void {
-    rig.play('Idle');
+    playUnlessReduced('Idle');
     resumeBlink();
+    // Re-arm edge-triggered proximity (I-1 fix): without this, a cursor that
+    // moved near Byte WHILE it was peeking/dashing/waking/sleeping (none of
+    // which consume POINTER_NEAR into a real transition) left `wasNear`
+    // already `true` by the time idle was (re-)entered, so the NEXT tick's
+    // still-near cursor read as "no new edge" and never sent POINTER_NEAR —
+    // Byte would sit idle right next to the cursor indefinitely, with no
+    // curious/invited, until the cursor actually left and came back.
+    // Resetting `wasNear` here means the very next tick treats a
+    // currently-near cursor as a fresh crossing and (correctly) fires
+    // POINTER_NEAR once; a currently-far cursor still fires nothing.
+    wasNear = false;
     // Deliberately does NOT reset `earlyPeekDelivered` — see
     // `pickMicroBehaviour()`'s doc comment. Every idle (re-)entry just
     // restarts the 4–8s scheduler; only the bot's very first-ever roll is
     // forced.
     scheduleNextMicroBehaviour();
+  }
+
+  /**
+   * Plays a named clip UNLESS reduced motion is active, in which case the
+   * call is skipped outright (I-2 fix) — R-T4-7 plus the project's global
+   * "no continuous motion a reduced-motion user can't stop" constraint.
+   * `Idle`/`Sleep` are `repeat:-1, yoyo:true` loops (a perpetual bob/breath)
+   * and `Dash`/`Wake` are large jump/shake beats; none of the four get a
+   * reduced ALTERNATIVE the way `Peek` does (`runPeekReduced`) — they're
+   * simply skipped, leaving `pose` at whatever it currently is.
+   *
+   * This is safe (not "leaves a stale non-identity pose lying around")
+   * specifically because, under `reducedActive`, NOTHING ELSE ever calls
+   * `rig.play()` either: `Hop` is excluded from the reduced micro-behaviour
+   * pool (`idleMicroPool()`), `Peek`'s reduced branch (`runPeekReduced`)
+   * never calls `rig.play('Peek')`, and this function itself gates the
+   * remaining four. `play()` is the ONLY thing that ever writes to `pose`
+   * (see the module doc comment on `pose`), so with every call site gated
+   * or excluded, `pose` reliably stays at its construction-time identity —
+   * a static Byte — for the entire reduced-motion lifetime. Sleep's dim
+   * (`setDimmed`, unconditional) and Peek's own reduced fade/rise (which
+   * animates `pose.position.y` directly, not through `play()`) are
+   * unaffected by this guard.
+   */
+  function playUnlessReduced(clip: ClipName): void {
+    if (!reducedActive) {
+      rig.play(clip);
+    }
   }
 
   // --- FSM → choreography dispatch (brief 4d, "the idle brain") -------------------
@@ -551,7 +639,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
     if (state !== 'idle') {
       pauseMicroScheduler();
-      glanceTimer?.kill();
+      glanceTimer = killTracked(glanceTimer);
       glanceOverride = null;
     }
     if (state !== 'invited') {
@@ -577,14 +665,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         currentPeekRunner();
         break;
       case 'sleeping':
-        rig.play('Sleep');
+        playUnlessReduced('Sleep');
         break;
       case 'waking':
-        rig.play('Wake');
+        playUnlessReduced('Wake');
         break;
       case 'dashing':
         // Minimal in T4 (R-T4-9) — the real dash-to-food + eat is T5.
-        rig.play('Dash');
+        playUnlessReduced('Dash');
         break;
       default:
         // 'eating' | 'retyping' | 'traveling' | 'hidden' | 'entering' are not
@@ -635,7 +723,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // sleep" guarantee (and flapped curious↔idle for a cursor sitting on
     // the 150px boundary). Distance is still recomputed fresh every tick
     // (so a scroll that moves the headline under a stationary cursor is
-    // still caught), but the FSM is only told about an actual crossing.
+    // still caught), but the FSM is only told about an actual crossing —
+    // `enterIdleBehaviour()` re-arms `wasNear = false` on every idle entry
+    // so a cursor that was already near throughout a peeking/dashing/
+    // waking/sleeping span (none of which consume POINTER_NEAR) is still
+    // re-detected as a fresh crossing once idle resumes (I-1 fix), rather
+    // than staying silently "already near, no new edge" forever.
     const dist = Math.hypot(cursorScreen.x - anchorX, cursorScreen.y - anchorY);
     const isNear = dist <= PROXIMITY_PX;
     if (isNear && !wasNear) {
@@ -658,7 +751,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // headline anchor (the placeholder's origin is at its feet, not its
     // center — see placeholderBot.ts) plus any idle-drift offset.
     const rootX = anchorWorld.x + drift.x;
-    const rootY = anchorWorld.y - unitPx / 2 + drift.y;
+    const rootY = anchorWorld.y - unitPx / 2;
     rig.object3d.position.set(rootX, rootY, 0);
 
     // Shadow stays pinned to the ground (the root's own resting position) —
@@ -704,15 +797,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     window.removeEventListener('pointermove', onPointerMove);
     feedZone.removeEventListener('pointerdown', onPointerDown);
 
+    // Every named ref (blink/micro/glance/peek) is already inside
+    // `liveTweens` (each was created via `track()`), so this bulk kill+clear
+    // already covers them — the explicit nulls below are just hygiene, not
+    // a second kill.
     liveTweens.forEach((tween) => tween.kill());
     liveTweens.clear();
-    blinkTimeline?.kill();
     blinkTimeline = null;
-    microTimer?.kill();
     microTimer = null;
-    glanceTimer?.kill();
     glanceTimer = null;
-    peekTimeline?.kill();
     peekTimeline = null;
 
     mm.revert();
