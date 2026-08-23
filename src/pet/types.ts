@@ -101,9 +101,19 @@ export type PetState =
   | 'peeking';
 
 /** External inputs to the FSM. Interaction events come from createBytePet's pointer
- *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3).
- *  Time-based transitions are NOT events — they happen inside tickTimers(). */
-export type PetEvent = 'POINTER_NEAR' | 'POINTER_FAR' | 'POINTER_DOWN' | 'FEED' | 'PEEK';
+ *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3);
+ *  REACHED/ATE come from the feeder (T5) marking dash-arrival and eat-animation-
+ *  complete respectively — the FSM only reacts to them, it never times a real
+ *  dash/eat itself. Time-based transitions are NOT events — they happen inside
+ *  tickTimers(). */
+export type PetEvent =
+  | 'POINTER_NEAR'
+  | 'POINTER_FAR'
+  | 'POINTER_DOWN'
+  | 'FEED'
+  | 'PEEK'
+  | 'REACHED' // feeder: Byte arrived at the food (dashing -> eating)
+  | 'ATE'; // feeder: the eat animation finished (eating -> idle)
 
 /** Timer durations (ms). All optional; createFSM applies the defaults below. */
 export interface PetFSMConfig {
@@ -111,7 +121,8 @@ export interface PetFSMConfig {
   idleToSleepMs?: number; // default 30000 (SPEC "30s idle")
   peekMs?: number; // default 1200  (SPEC "peek over for ~1.2s")
   wakeMs?: number; // default 600   (startled jump/shake, then counts as feed)
-  dashMs?: number; // default 500   (T4 minimal non-dead-end exit; T5 tunes by distance)
+  dashMs?: number; // default 1200 — SAFETY cap only; dashing normally exits on REACHED. Feeder dash is 380-600ms by distance; this must stay > that so it never pre-empts a real dash.
+  eatMs?: number; // default 1500 — SAFETY cap only; eating normally exits on ATE.
 }
 
 /** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */

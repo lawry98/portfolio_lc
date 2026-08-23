@@ -1,8 +1,9 @@
 /**
  * Byte's brain — a pure, deterministic finite-state machine deciding Byte's
- * state from interaction events + timers. This is the idle-brain subset of
- * T4 (SPEC §6); later tickets drive dashing/eating/retyping/traveling
- * behaviour on top of the same shape (R-T4-9).
+ * state from interaction events + timers. T4 built the idle-brain subset
+ * (SPEC §6); T5 adds the feeding beats (dashing -> eating -> idle, driven by
+ * the feeder's REACHED/ATE events) on the same shape — retyping/traveling
+ * remain for later tickets (R-T4-9).
  *
  * Purity is the whole point (and the ticket's central requirement): this
  * file imports neither `gsap` nor `three`, and never reads the wall clock
@@ -40,13 +41,30 @@ const DEFAULTS: Required<PetFSMConfig> = {
   idleToSleepMs: 30000,
   peekMs: 1200,
   wakeMs: 600,
-  dashMs: 500,
+  dashMs: 1200,
+  eatMs: 1500,
 };
 
-/** States the "30s no interaction -> sleeping" overlay can fire from: every
- *  awake state except `sleeping` itself and the transient `waking` hand-off. */
+/**
+ * States the "30s no interaction -> sleeping" overlay can fire from — an
+ * explicit allowlist of the awake, resting states (R-T5-3; this used to be a
+ * denylist of `sleeping`/`waking` only, which wrongly let the overlay fire
+ * mid-dash or mid-eat):
+ *  - `idle`/`curious`/`invited`: the states a user can just walk away from.
+ *  - `peeking`: stays eligible even though PEEK itself deliberately does NOT
+ *    reset the sleep accumulator (see module doc comment) — if peeking were
+ *    excluded too, a peek firing late in the idle countdown could strand the
+ *    accumulator past threshold with no state left willing to discharge it.
+ *  - `dashing`/`eating` are excluded: Byte always finishes a feed (dash then
+ *    eat) before it's allowed to drift to sleep — those two states only ever
+ *    exit via the feeder's REACHED/ATE (or their generous safety-cap timers),
+ *    never via this overlay.
+ *  - `sleeping`/`waking` are excluded (already asleep / already waking up);
+ *  `hidden`/`entering`/`retyping`/`traveling` aren't reachable by any current
+ *  transition yet but are excluded on principle — none is a "resting" state.
+ */
 function isSleepEligible(state: PetState): boolean {
-  return state !== 'sleeping' && state !== 'waking';
+  return state === 'idle' || state === 'curious' || state === 'invited' || state === 'peeking';
 }
 
 /**
@@ -67,7 +85,12 @@ function specificTimerTarget(
     case 'peeking':
       return stateTimerMs >= cfg.peekMs ? 'idle' : null;
     case 'dashing':
+      // Safety cap only — the feeder's REACHED normally fires well before
+      // this (real dash is 380-600ms; dashMs defaults to 1200).
       return stateTimerMs >= cfg.dashMs ? 'idle' : null;
+    case 'eating':
+      // Safety cap only — the feeder's ATE normally fires well before this.
+      return stateTimerMs >= cfg.eatMs ? 'idle' : null;
     case 'waking':
       // Because pendingFeed — the wake→feed payoff (T5 renders it).
       return pendingFeed && stateTimerMs >= cfg.wakeMs ? 'dashing' : null;
@@ -150,6 +173,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             // Stay curious: no re-enter, no onEnter — reset sleep accum only.
             resetSleepAccum();
             return;
+          case 'POINTER_DOWN':
+            // Stay curious: matches idle's POINTER_DOWN — reset sleep accum
+            // only (real feeding-click routing is T5).
+            resetSleepAccum();
+            return;
           default:
             return;
         }
@@ -166,6 +194,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             return;
           case 'POINTER_NEAR':
             // Stay invited: reset sleep accum only.
+            resetSleepAccum();
+            return;
+          case 'POINTER_DOWN':
+            // Stay invited: matches idle/curious's POINTER_DOWN — reset
+            // sleep accum only.
             resetSleepAccum();
             return;
           default:
@@ -194,8 +227,32 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         }
         return;
 
-      // `dashing` and `waking` ignore every event — both run to completion
-      // solely via their own state timer (see `specificTimerTarget`).
+      case 'dashing':
+        // Only REACHED (the feeder marking dash-arrival) is legal; every
+        // other event is ignored — otherwise dashing runs to completion
+        // solely via its own safety-cap timer (see `specificTimerTarget`).
+        // Does NOT reset the sleep accumulator: like PEEK, this is Byte's
+        // own scheduled behaviour, not user interaction — moot anyway since
+        // dashing isn't sleep-eligible (see `isSleepEligible`).
+        if (event === 'REACHED') {
+          enter('eating');
+        }
+        return;
+
+      case 'eating':
+        // Only ATE (the feeder marking eat-animation-complete) is legal;
+        // eating is NOT sleep-eligible (see `isSleepEligible`), so — unlike
+        // every other real transition above — there's no sleep accumulator
+        // that needs protecting by a reset here.
+        if (event === 'ATE') {
+          enter('idle');
+        }
+        return;
+
+      // `waking` ignores every event — it runs to completion solely via its
+      // own state timer (see `specificTimerTarget`). (`hidden`/`entering`/
+      // `retyping`/`traveling` fall through here too; none is reachable by
+      // any transition yet.)
       default:
         return;
     }

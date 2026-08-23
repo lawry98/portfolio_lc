@@ -45,6 +45,26 @@ describe('createFSM: idle', () => {
     expect(fsm.state()).toBe('sleeping');
   });
 
+  it('idle + POINTER_DOWN resets the sleep accumulator (previously untested)', () => {
+    const fsm = createFSM();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.tickTimers(29000); // idle, sleep accum = 29000 (< 30000)
+    expect(fsm.state()).toBe('idle');
+
+    fsm.send('POINTER_DOWN'); // resets sleep accum to 0; stays idle, no onEnter
+    expect(fsm.state()).toBe('idle');
+    expect(onEnter).not.toHaveBeenCalled();
+
+    fsm.tickTimers(29000); // without the reset this would be 58000 (>= 30000)
+    expect(fsm.state()).toBe('idle');
+
+    fsm.tickTimers(1000); // sleep accum since the POINTER_DOWN reset = 30000
+    expect(fsm.state()).toBe('sleeping');
+    expect(onEnter).toHaveBeenCalledExactlyOnceWith('sleeping', 'idle');
+  });
+
   it('ignores POINTER_FAR in idle (no change, no onEnter)', () => {
     const fsm = createFSM();
     const onEnter = vi.fn();
@@ -114,6 +134,28 @@ describe('createFSM: curious', () => {
     fsm.tickTimers(1); // cumulative state timer = 2500
     expect(fsm.state()).toBe('invited');
   });
+
+  it('curious + POINTER_DOWN resets the sleep accumulator (stay curious, no onEnter)', () => {
+    // A large curiousToInvitedMs keeps this test in `curious` for the whole
+    // run instead of auto-promoting to `invited` partway through.
+    const fsm = createFSM({ curiousToInvitedMs: 999999 });
+    fsm.send('POINTER_NEAR'); // idle -> curious; sleep accum + state timer reset to 0
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.tickTimers(29000); // sleep accum 29000 (< 30000): still curious
+    expect(fsm.state()).toBe('curious');
+
+    fsm.send('POINTER_DOWN'); // resets sleep accum to 0; stays curious, no onEnter
+    expect(fsm.state()).toBe('curious');
+    expect(onEnter).not.toHaveBeenCalled();
+
+    fsm.tickTimers(29000); // without the reset this would be 58000 (>= 30000)
+    expect(fsm.state()).toBe('curious');
+
+    fsm.tickTimers(1000); // sleep accum since the POINTER_DOWN reset = 30000
+    expect(fsm.state()).toBe('sleeping');
+  });
 });
 
 describe('createFSM: invited', () => {
@@ -149,6 +191,25 @@ describe('createFSM: invited', () => {
 
     expect(fsm.state()).toBe('invited');
     expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('invited + POINTER_DOWN resets the sleep accumulator (stay invited, no onEnter)', () => {
+    const fsm = enterInvited(); // sleep accum = 2500 (from the curiousToInvitedMs tick)
+
+    fsm.tickTimers(27499); // sleep accum 29999 (< 30000): still invited
+    expect(fsm.state()).toBe('invited');
+
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+    fsm.send('POINTER_DOWN'); // resets sleep accum to 0; stays invited, no onEnter
+    expect(fsm.state()).toBe('invited');
+    expect(onEnter).not.toHaveBeenCalled();
+
+    fsm.tickTimers(29999); // without the reset this would be far past 30000
+    expect(fsm.state()).toBe('invited');
+
+    fsm.tickTimers(1); // sleep accum since the POINTER_DOWN reset = 30000
+    expect(fsm.state()).toBe('sleeping');
   });
 });
 
@@ -198,19 +259,32 @@ describe('createFSM: peeking', () => {
 });
 
 describe('createFSM: dashing', () => {
-  it('dashing -> idle after tickTimers(500) (no dead-end)', () => {
+  it('dashing -> eating on REACHED (the feeder marking dash-arrival)', () => {
     const fsm = createFSM();
     fsm.send('FEED');
     expect(fsm.state()).toBe('dashing');
 
-    fsm.tickTimers(499);
-    expect(fsm.state()).toBe('dashing');
-
-    fsm.tickTimers(1);
-    expect(fsm.state()).toBe('idle');
+    fsm.send('REACHED');
+    expect(fsm.state()).toBe('eating');
   });
 
-  it('ignores every event while dashing (runs to completion via its own timer)', () => {
+  it(
+    'dashing -> idle after tickTimers(dashMs) with no REACHED ' +
+      '(safety cap only — the feeder normally fires REACHED long before this)',
+    () => {
+      const fsm = createFSM({ dashMs: 100 });
+      fsm.send('FEED');
+      expect(fsm.state()).toBe('dashing');
+
+      fsm.tickTimers(99);
+      expect(fsm.state()).toBe('dashing');
+
+      fsm.tickTimers(1);
+      expect(fsm.state()).toBe('idle');
+    },
+  );
+
+  it('ignores POINTER_*/FEED/PEEK/ATE while dashing (only REACHED ends it)', () => {
     const fsm = createFSM();
     fsm.send('FEED');
     const onEnter = vi.fn();
@@ -221,8 +295,59 @@ describe('createFSM: dashing', () => {
     fsm.send('POINTER_DOWN');
     fsm.send('FEED');
     fsm.send('PEEK');
+    fsm.send('ATE');
 
     expect(fsm.state()).toBe('dashing');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+});
+
+describe('createFSM: eating', () => {
+  function enterEating() {
+    const fsm = createFSM();
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    return fsm;
+  }
+
+  it('eating -> idle on ATE (the feeder marking eat-animation-complete)', () => {
+    const fsm = enterEating();
+    expect(fsm.state()).toBe('eating');
+
+    fsm.send('ATE');
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it(
+    'eating -> idle after tickTimers(eatMs) with no ATE ' +
+      '(safety cap only — the feeder normally fires ATE long before this)',
+    () => {
+      const fsm = createFSM({ eatMs: 100 });
+      fsm.send('FEED');
+      fsm.send('REACHED');
+      expect(fsm.state()).toBe('eating');
+
+      fsm.tickTimers(99);
+      expect(fsm.state()).toBe('eating');
+
+      fsm.tickTimers(1);
+      expect(fsm.state()).toBe('idle');
+    },
+  );
+
+  it('ignores POINTER_*/FEED/PEEK/REACHED while eating (only ATE ends it)', () => {
+    const fsm = enterEating();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.send('POINTER_NEAR');
+    fsm.send('POINTER_FAR');
+    fsm.send('POINTER_DOWN');
+    fsm.send('FEED');
+    fsm.send('PEEK');
+    fsm.send('REACHED');
+
+    expect(fsm.state()).toBe('eating');
     expect(onEnter).not.toHaveBeenCalled();
   });
 });
@@ -380,6 +505,46 @@ describe('createFSM: the 30s sleep overlay from every awake state', () => {
       expect(fsm.state()).toBe('invited');
     },
   );
+
+  it('dashing is NOT sleep-eligible: ticking past idleToSleepMs stays dashing', () => {
+    // dashMs set high enough that the dash safety cap can't pre-empt this.
+    const fsm = createFSM({ dashMs: 60000 });
+    fsm.send('FEED'); // idle -> dashing; sleep accum reset to 0
+    expect(fsm.state()).toBe('dashing');
+
+    // Exceeds idleToSleepMs (30000); if dashing were still sleep-eligible
+    // (the old denylist bug) this would fall asleep mid-dash.
+    fsm.tickTimers(30000);
+    expect(fsm.state()).toBe('dashing');
+  });
+
+  it('eating is NOT sleep-eligible: ticking past idleToSleepMs stays eating', () => {
+    // eatMs set high enough that the eat safety cap can't pre-empt this.
+    const fsm = createFSM({ eatMs: 60000 });
+    fsm.send('FEED');
+    fsm.send('REACHED'); // dashing -> eating
+    expect(fsm.state()).toBe('eating');
+
+    // Exceeds idleToSleepMs (30000); if eating were still sleep-eligible
+    // (the old denylist bug) Byte would fall asleep mid-eat.
+    fsm.tickTimers(30000);
+    expect(fsm.state()).toBe('eating');
+  });
+
+  it('peeking still allows the sleep overlay to fire directly from peeking', () => {
+    const fsm = createFSM();
+
+    fsm.tickTimers(29999); // idle, sleep accum = 29999 (< 30000): no transition
+    fsm.send('PEEK'); // idle -> peeking; sleep accum NOT reset, still 29999
+    expect(fsm.state()).toBe('peeking');
+
+    // peeking's own exit needs peekMs (1200) on the state timer — nowhere
+    // close yet — but the sleep accumulator (29999 + 1) now crosses
+    // idleToSleepMs, and peeking IS sleep-eligible, so the overlay fires
+    // straight from peeking (proving a late peek doesn't strand sleep).
+    fsm.tickTimers(1);
+    expect(fsm.state()).toBe('sleeping');
+  });
 });
 
 describe('createFSM: onEnter', () => {
@@ -432,12 +597,14 @@ describe('createFSM: onEnter', () => {
 
     fsm.send('POINTER_NEAR'); // idle -> curious
     fsm.send('FEED'); // curious -> dashing
-    fsm.tickTimers(500); // dashing -> idle
+    fsm.send('REACHED'); // dashing -> eating
+    fsm.send('ATE'); // eating -> idle
 
     expect(seen).toEqual([
       ['curious', 'idle'],
       ['dashing', 'curious'],
-      ['idle', 'dashing'],
+      ['eating', 'dashing'],
+      ['idle', 'eating'],
     ]);
   });
 });
