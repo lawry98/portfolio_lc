@@ -88,11 +88,11 @@ const GL_FRONT_CANVAS_ID = 'gl-front';
 /**
  * Occlusion render layers (R-T3-2). `frontLayer`'s contents live on
  * `FRONT_RENDER_LAYER` permanently; `petLayer`'s contents move between the
- * two as `setBehind()` toggles. Exported so any ticket that adds a mesh
- * directly to `frontLayer` (e.g. the T3 Task 3 blob shadow, or the T3 Task 5
- * `?glcube` rig) can call `mesh.layers.set(FRONT_RENDER_LAYER)` on it —
- * three.js layers are per-object and do not cascade from a parent `Group`
- * to its children, so each mesh must set its own.
+ * two as `setBehind()` toggles. `SceneHandle.addToPet`/`addToFront` apply
+ * these automatically for the common case (R-T4-6); exported directly too,
+ * since three.js layers are per-object and do not cascade from a parent
+ * `Group` to its children, so any mesh added straight to `frontLayer`
+ * (bypassing `addToFront`) must still set its own layer.
  */
 export const FRONT_RENDER_LAYER = 1;
 export const BACK_RENDER_LAYER = 2;
@@ -146,13 +146,14 @@ const THEME_PRESETS: Record<Theme, ThemePreset> = {
 /**
  * Themed `MeshStandardMaterial` factory (R-T3-7) — the shared "soft-clay"
  * look (matte, non-metallic, `roughness` ≈ 0.35) for any mesh the pet
- * module or a QA rig adds to the scene. Pure/stateless by design: rather
- * than requiring callers to separately "register" materials they build
- * with it, `createScene()`'s `setTheme` re-themes every
- * `MeshStandardMaterial` it finds already living in the scene graph (see
- * below) — build with this, add the mesh to `petLayer`/`frontLayer`, and
- * theme toggles apply automatically. This is the "seam for T4/T8" the T3
- * plan describes, first exercised by the T3 Task 5 `?glcube` dev rig.
+ * module adds to the scene. Pure/stateless: build one per theme with this
+ * and hand it to whatever owns re-theming it later — `createScene()`'s
+ * `setTheme` only re-lerps the hemisphere/key lights (R-T4-5), it does NOT
+ * repaint materials, so the caller (the rig, via `setBodyColor`/`setGlow`;
+ * see `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT` below) is responsible for
+ * re-theming anything built with this on a theme change. Momentarily
+ * unused after the T3 QA `?glcube` rig was removed; next consumed by
+ * Task 3's placeholder Body material.
  */
 export function createThemedMaterial(theme: Theme): THREE.MeshStandardMaterial {
   const preset = THEME_PRESETS[theme];
@@ -164,6 +165,18 @@ export function createThemedMaterial(theme: Theme): THREE.MeshStandardMaterial {
     emissiveIntensity: preset.emissiveIntensity,
   });
 }
+
+/** The themed Body base colour (from THEME_PRESETS). createBytePet passes this to
+ *  rig.setBodyColor on theme change (R-T4-5) — kept here so callers don't duplicate
+ *  the palette hexes. */
+export function bodyColorForTheme(theme: Theme): number {
+  return THEME_PRESETS[theme].materialColor;
+}
+
+/** Default dark-mode Glow emissive accent — matches the T3 dark preset's emissive
+ *  color. `createBytePet`/the rig use this for `rig.setGlow(true, DEFAULT_GLOW_ACCENT)`
+ *  on entering dark theme; the lab glow-axis wiring (a user-tunable accent) is T8. */
+export const DEFAULT_GLOW_ACCENT = 0x38e8a8;
 
 function isDisposable(value: unknown): value is { dispose(): void } {
   return (
@@ -339,9 +352,10 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // `applyPetLayerState()` reads from (rather than acting on its parameter
   // directly), so the current flag is always available to re-apply —
   // needed because three.js layers are per-object and don't cascade from a
-  // parent `Group` to children added later. Callers that add new content to
-  // `petLayer` after the fact must call `setBehind()` again (with either
-  // value) so the new content picks up the active layer too.
+  // parent `Group` to children added later. Use `addToPet()` below to add
+  // content to `petLayer` — it re-applies this automatically. Adding
+  // directly via `scene.petLayer.add(...)` bypasses that and strands the
+  // new content on layer 0 until a manual `setBehind()` call fixes it up.
   let behind = false;
 
   function applyPetLayerState(): void {
@@ -358,6 +372,31 @@ export function createScene(opts: SceneOptions): SceneHandle {
 
   applyPetLayerState(); // establish the initial (in-front) layer state.
 
+  /**
+   * Adds `obj` to `petLayer` and immediately re-applies the current
+   * behind/front layer to every `petLayer` descendant by reusing
+   * `applyPetLayerState()`'s traversal — so `obj` (and its descendants) are
+   * never stranded on layer 0 (rendered on neither canvas). This makes a
+   * follow-up `setBehind()` call unnecessary just to pick up a freshly-added
+   * object; `setBehind()` remains how callers flip Byte behind/in front
+   * afterwards (R-T4-6).
+   */
+  function addToPet(obj: THREE.Object3D): void {
+    petLayer.add(obj);
+    applyPetLayerState();
+  }
+
+  /**
+   * Adds `obj` to `frontLayer` (food/shadow/particles — always in front) and
+   * sets `FRONT_RENDER_LAYER` on it + every descendant directly, since
+   * three.js layers are per-object and don't cascade from the `frontLayer`
+   * `Group` to children added to it later (R-T4-6).
+   */
+  function addToFront(obj: THREE.Object3D): void {
+    frontLayer.add(obj);
+    obj.traverse((o) => o.layers.set(FRONT_RENDER_LAYER));
+  }
+
   // --- Lights (R-T3-7) ---------------------------------------------------
   // `renderFront()`/`renderBack()` pin `camera.layers` to a single layer per
   // pass; `WebGLRenderer` only collects a light if its own layers intersect
@@ -373,6 +412,11 @@ export function createScene(opts: SceneOptions): SceneHandle {
   keyLight.layers.enableAll();
   scene.add(keyLight);
 
+  // Re-lerps only the hemisphere/key lights (instant set is acceptable — the
+  // 400ms choreography lands in T8). Byte's own Body/Glow materials are
+  // deliberately NOT repainted here: the rig owns them via
+  // `setBodyColor`/`setGlow` (`createBytePet` calls these on theme change
+  // using `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT` above) — R-T4-5.
   function setTheme(theme: Theme): void {
     const preset = THEME_PRESETS[theme];
     hemisphereLight.color.set(preset.hemisphereSky);
@@ -380,19 +424,6 @@ export function createScene(opts: SceneOptions): SceneHandle {
     hemisphereLight.intensity = preset.hemisphereIntensity;
     keyLight.color.set(preset.keyColor);
     keyLight.intensity = preset.keyIntensity;
-
-    // Instant set is acceptable in T3 — the 400ms choreography lands in T8.
-    scene.traverse((child) => {
-      const material = (child as Partial<THREE.Mesh>).material;
-      const materials = Array.isArray(material) ? material : material ? [material] : [];
-      for (const mat of materials) {
-        if (mat instanceof THREE.MeshStandardMaterial) {
-          mat.color.set(preset.materialColor);
-          mat.emissive.set(preset.emissive);
-          mat.emissiveIntensity = preset.emissiveIntensity;
-        }
-      }
-    });
   }
 
   setTheme(opts.theme);
@@ -464,6 +495,8 @@ export function createScene(opts: SceneOptions): SceneHandle {
     render,
     onTick,
     setBehind,
+    addToPet,
+    addToFront,
     setTheme,
     worldFromScreen: worldFromScreenAtViewport,
     screenFromRect,

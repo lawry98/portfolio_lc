@@ -41,7 +41,16 @@ export interface SceneHandle {
   onTick(cb: (dt: number) => void): void;
   /** Flip whether Byte draws behind or in front of the DOM headline. */
   setBehind(b: boolean): void;
-  /** Re-lerp scene materials/lights/glow color for a theme change. */
+  /** Add an object to the pet layer (Byte) and immediately (re)apply the current behind/front
+   *  render layer to it + its descendants — so it is never stranded on layer 0 (rendered on neither
+   *  canvas). Use this instead of scene.petLayer.add(...) + a manual setBehind(...). */
+  addToPet(object: THREE.Object3D): void;
+  /** Add an object to the front layer (food/shadow/particles — always in front) and set
+   *  FRONT_RENDER_LAYER on it + its descendants (three.js layers don't cascade from the Group). */
+  addToFront(object: THREE.Object3D): void;
+  /** Re-lerp the scene's hemisphere/key lights for a theme change. Byte's own Body/Glow
+   *  materials are themed by the rig instead (see `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT`
+   *  in `scene.ts`, consumed by `createBytePet` via `rig.setBodyColor`/`rig.setGlow`). */
   setTheme(t: 'light' | 'dark'): void;
   /** Pixel-space screen coords → world coords at z=0 (wraps `scene.ts`'s pure fn). */
   worldFromScreen(x: number, y: number): { x: number; y: number };
