@@ -17,12 +17,13 @@
  * draws — itself driven by `startTicker()` off the one shared `gsap.ticker`.
  * No second `requestAnimationFrame` loop exists anywhere in this module.
  *
- * **Cleanup model:** most tweens/timers this module creates are kept as
- * explicit references (mirroring `rig.ts`'s own "keep references, not just
- * a context" choice) in the `liveTweens` registry below, killed exhaustively
- * in `destroy()`; a `gsap.context()` and a `gsap.matchMedia()` additionally
- * scope the reduced-motion branches per R-T4-7 and are reverted there too —
- * belt and suspenders, per the ticket brief's explicit destroy checklist.
+ * **Cleanup model:** every tween/timer this module creates is kept as an
+ * explicit reference (mirroring `rig.ts`'s own "keep references, not just
+ * a context" choice — most of these are created inside async callbacks a
+ * single `gsap.context()` call wouldn't auto-capture anyway) in the
+ * `liveTweens` registry below, killed exhaustively in `destroy()`; a
+ * `gsap.matchMedia()` additionally scopes the reduced-motion branches per
+ * R-T4-7 and is reverted there too.
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
@@ -215,29 +216,35 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     return tween;
   }
 
-  // `gsap.context(func, scope)` only builds a real, revertable `Context` when
-  // called WITH a function (`func ? new Context(func, scope) : _context` —
-  // gsap-core.js); called with zero arguments it just returns the current
-  // *ambient* context (`undefined` here, outside any other context's own
-  // callback), which has no `.revert()` at all. The empty callback below
-  // exists purely so `ctx` is a genuine Context object for `destroy()` to
-  // revert — confirmed by testing `destroy()` directly (see task-4 report).
-  const ctx = gsap.context(() => {});
   const mm = gsap.matchMedia();
 
   let blinkTimeline: ReturnType<typeof gsap.timeline> | null = null;
   let microTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let glanceTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let peekTimeline: ReturnType<typeof gsap.timeline> | null = null;
-  let firstIdleRoll = true;
+  // Whether the guaranteed-early peek (SPEC §6 "must happen within the first
+  // ~10 idle seconds") has ever fired. Set once, on the FIRST successful
+  // micro-behaviour roll of the bot's life, and never reset afterward — see
+  // `pickMicroBehaviour()`'s doc comment for why this must NOT be re-armed
+  // on every idle re-entry (that was a real, shipped bug — see the task-4
+  // report's Fix Report section).
+  let earlyPeekDelivered = false;
   let reducedActive = false;
   let currentPeekRunner: () => void = () => {};
 
   // --- Cursor / anchor / idle-drift state ------------------------------------
   const cursorScreen = { x: -9999, y: -9999 };
   let cursorWorld = { x: 0, y: 0 };
+  // Whether a real pointer event has ever arrived — until then, `setLook`
+  // targets the bot's own anchor (≈ "look straight ahead") instead of the
+  // far-off-screen `cursorScreen` sentinel, which would otherwise pin the
+  // eye to its yaw/pitch clamp before the user ever moves the mouse.
+  let hasPointerInput = false;
   const drift = { x: 0, y: 0 };
   let glanceOverride: { x: number; y: number } | null = null;
+  // Edge-triggered proximity (brief 4c): POINTER_NEAR/FAR are sent only on
+  // an actual crossing, not every tick — see `onTick`'s doc comment for why.
+  let wasNear = false;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
   // Hard-step squash of `source.eye.scale.y` — an infinite-repeat timeline
@@ -421,11 +428,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Micro-behaviour scheduler (brief 4d) ---------------------------------------
   // Lives here, not in the FSM (R-T4-3) — randomness + cadence are this
-  // module's job. Paused whenever the FSM leaves 'idle'; the first roll of
-  // every idle period is forced to 'peek' so one always lands within the
-  // first ~10 idle seconds (SPEC §6), satisfied by the 4–8s roll cadence
-  // itself. Hop/slide (position/clip motion — the brief's "wander" category)
-  // are excluded from the reduced pool: Hop is rig.ts's own clip, with no
+  // module's job. Paused whenever the FSM leaves 'idle'. Hop/slide
+  // (position/clip motion — the brief's "wander" category) are excluded
+  // from the reduced pool: Hop is rig.ts's own clip, with no
   // duration/amplitude knob this module can turn down; Slide is this
   // module's own tween and COULD be shortened, but a near-instant position
   // jump would read as a glitch rather than a fade, so it's dropped instead
@@ -438,9 +443,22 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     return reducedActive ? ['glance', 'peek'] : ['glance', 'hop', 'slide', 'peek'];
   }
 
+  /**
+   * `earlyPeekDelivered` gates the SPEC §6 guarantee ("must happen within
+   * the first ~10 idle seconds") as a ONE-TIME event, not a per-idle-entry
+   * one. It must NOT be reset every time `idle` is (re-)entered: a peek
+   * itself routes through `idle → peeking → (peekMs) → idle`, and re-arming
+   * the force on that return trip made every idle span's first (and only,
+   * since a peek ends the span) roll a forced peek forever — `glance`/`hop`/
+   * `slide` were dead code, and since a peek every ~6s kept resetting the
+   * FSM's sleep accumulator too (see `onTick`'s edge-triggered proximity
+   * fix), `sleeping`/`waking` were unreachable. Confirmed as a real,
+   * shipped bug via code review, then reproduced and fixed here — see the
+   * task-4 report's Fix Report section.
+   */
   function pickMicroBehaviour(): MicroBehaviour {
-    if (firstIdleRoll) {
-      firstIdleRoll = false;
+    if (!earlyPeekDelivered) {
+      earlyPeekDelivered = true;
       return 'peek';
     }
     const pool = idleMicroPool();
@@ -509,7 +527,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   function enterIdleBehaviour(): void {
     rig.play('Idle');
     resumeBlink();
-    firstIdleRoll = true;
+    // Deliberately does NOT reset `earlyPeekDelivered` — see
+    // `pickMicroBehaviour()`'s doc comment. Every idle (re-)entry just
+    // restarts the 4–8s scheduler; only the bot's very first-ever roll is
+    // forced.
     scheduleNextMicroBehaviour();
   }
 
@@ -582,6 +603,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Pointer wiring → FSM events (brief 4c) --------------------------------------
   function onPointerMove(e: PointerEvent): void {
+    hasPointerInput = true;
     cursorScreen.x = e.clientX;
     cursorScreen.y = e.clientY;
   }
@@ -605,12 +627,30 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const anchorWorld = scene.worldFromScreen(anchorX, anchorY);
     cursorWorld = scene.worldFromScreen(cursorScreen.x, cursorScreen.y);
 
+    // Edge-triggered (brief 4c), NOT sent unconditionally every tick: the
+    // FSM's `peeking` case resets its sleep accumulator on POINTER_NEAR/FAR
+    // (fsm.ts) — designed for occasional real pointer events, not a 60×/s
+    // dispatch. Firing every tick pinned the sleep clock near zero during
+    // every peek, defeating fsm.ts's own deliberate "PEEK doesn't delay
+    // sleep" guarantee (and flapped curious↔idle for a cursor sitting on
+    // the 150px boundary). Distance is still recomputed fresh every tick
+    // (so a scroll that moves the headline under a stationary cursor is
+    // still caught), but the FSM is only told about an actual crossing.
     const dist = Math.hypot(cursorScreen.x - anchorX, cursorScreen.y - anchorY);
-    fsm.send(dist <= PROXIMITY_PX ? 'POINTER_NEAR' : 'POINTER_FAR');
+    const isNear = dist <= PROXIMITY_PX;
+    if (isNear && !wasNear) {
+      fsm.send('POINTER_NEAR');
+    } else if (!isNear && wasNear) {
+      fsm.send('POINTER_FAR');
+    }
+    wasNear = isNear;
     fsm.tickTimers(dt * 1000);
 
     rig.update(dt);
-    const lookTarget = glanceOverride ?? cursorWorld;
+    // Before any real pointer input, look at the bot's own anchor (≈ dx=dy=0,
+    // i.e. "straight ahead") instead of the `cursorScreen` sentinel, which
+    // would otherwise pin yaw/pitch to their clamp on load.
+    const lookTarget = glanceOverride ?? (hasPointerInput ? cursorWorld : anchorWorld);
     rig.setLook(lookTarget.x, lookTarget.y);
 
     // Root placement: feet land at the anchor's own vertical center minus
@@ -676,7 +716,6 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     peekTimeline = null;
 
     mm.revert();
-    ctx.revert();
 
     hintEl.remove();
 
