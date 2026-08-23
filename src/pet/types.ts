@@ -74,3 +74,70 @@ export interface RigSource {
   mouth?: THREE.Object3D;
   clips: Partial<Record<ClipName, THREE.AnimationClip>>;
 }
+
+/** Byte's states (SPEC §6). Full union defined once here; T4 drives the idle-brain subset,
+ *  later tickets drive dashing/eating/retyping/traveling behaviour (R-T4-9). */
+export type PetState =
+  | 'hidden'
+  | 'entering'
+  | 'idle'
+  | 'curious'
+  | 'invited'
+  | 'dashing'
+  | 'eating'
+  | 'retyping'
+  | 'traveling'
+  | 'sleeping'
+  | 'waking'
+  | 'peeking';
+
+/** External inputs to the FSM. Interaction events come from createBytePet's pointer
+ *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3).
+ *  Time-based transitions are NOT events — they happen inside tickTimers(). */
+export type PetEvent = 'POINTER_NEAR' | 'POINTER_FAR' | 'POINTER_DOWN' | 'FEED' | 'PEEK';
+
+/** Timer durations (ms). All optional; createFSM applies the defaults below. */
+export interface PetFSMConfig {
+  curiousToInvitedMs?: number; // default 2500  (SPEC "~2.5s curious, no click")
+  idleToSleepMs?: number; // default 30000 (SPEC "30s idle")
+  peekMs?: number; // default 1200  (SPEC "peek over for ~1.2s")
+  wakeMs?: number; // default 600   (startled jump/shake, then counts as feed)
+  dashMs?: number; // default 500   (T4 minimal non-dead-end exit; T5 tunes by distance)
+}
+
+/** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */
+export interface PetFSM {
+  state(): PetState;
+  send(event: PetEvent): void;
+  /** Subscribe to state CHANGES. Fires (next, prev) on each transition; never for a no-op event; never for the initial state. */
+  onEnter(cb: (state: PetState, prev: PetState) => void): void;
+  /** Advance all timers by dtMs milliseconds; may cause timer-driven transitions (fires onEnter). */
+  tickTimers(dtMs: number): void;
+}
+
+/** Optional per-clip playback options for the rig (Task 3 implements; defined here so the shape is shared). */
+export interface ClipPlayOptions {
+  loop?: boolean;
+  onComplete?: () => void;
+}
+
+/** The clip-driven rig adapter (SPEC §4.2/§4.3). Two impls: placeholder (Task 3, GSAP-faked clips)
+ *  and GLB-via-AnimationMixer (T-GLB). Defined once here, consumed by createBytePet (Task 4). */
+export interface PetRig {
+  /** Byte's root node — createBytePet adds this to scene.petLayer via scene.addToPet(). */
+  readonly object3d: THREE.Object3D;
+  /** Play a named clip (placeholder fakes it with GSAP; GLB routes to the mixer). */
+  play(clip: ClipName, opts?: ClipPlayOptions): void;
+  /** Aim Byte's eye/head at a world-space point on the z=0 plane (createBytePet passes cursor world coords). */
+  setLook(x: number, y: number): void;
+  /** Recolour the Body material (per theme). */
+  setBodyColor(color: THREE.ColorRepresentation): void;
+  /** Toggle the emissive Glow (dark-mode phosphor) in the given accent colour. */
+  setGlow(on: boolean, accent: THREE.ColorRepresentation): void;
+  /** World position of the Mouth intake node (T5 glyphs converge here). */
+  mouthWorld(): { x: number; y: number; z: number };
+  /** Per-tick update (placeholder: apply damped look etc.; GLB: advance the mixer). */
+  update(dt: number): void;
+  /** Kill tweens + free anything this rig created. */
+  dispose(): void;
+}
