@@ -183,9 +183,13 @@ const PARTICLE_REDUCED_FADE_DURATION = 0.2;
 
 // ---------------------------------------------------------------------------
 // Tunables — "satisfied wiggle" (brief 3c: welcome polish, skip under
-// reduce). A ROOT-level uniform-scale pulse — `rig.object3d.scale` is
-// untouched by every other module (createBytePet.ts never writes it), so
-// this can't conflict with anything else.
+// reduce). A ROOT-level uniform-scale pulse, RELATIVE to the root's resting
+// scalar (`deps.unitPx` — `placeholderBot.ts` does `root.scale.setScalar(
+// unitPx)` once at construction, and nothing else ever writes
+// `rig.object3d.scale` afterward, so it stays exactly `unitPx` on every axis
+// until this pulse runs). `SATISFIED_WIGGLE_SCALE` is a MULTIPLIER of that
+// resting scalar, not an absolute target — `rig.object3d.scale` rests at
+// `unitPx` (typically 48-128), never at 1.
 // ---------------------------------------------------------------------------
 
 const SATISFIED_WIGGLE_SCALE = 1.08;
@@ -584,18 +588,24 @@ export function createFeeder(
       return;
     }
     const scale = rig.object3d.scale;
+    // The root's definitive resting scalar (placeholderBot.ts:
+    // `root.scale.setScalar(unitPx)`) — NOT the live `scale.x`, which could
+    // be read mid-tween. SATISFIED_WIGGLE_SCALE is a multiplier of this, so
+    // the pulse always returns to exactly `unitPx` on every axis, never 1.
+    const base = deps.unitPx;
+    const peak = base * SATISFIED_WIGGLE_SCALE;
     const tl = gsap.timeline();
     tl.to(scale, {
-      x: SATISFIED_WIGGLE_SCALE,
-      y: SATISFIED_WIGGLE_SCALE,
-      z: SATISFIED_WIGGLE_SCALE,
+      x: peak,
+      y: peak,
+      z: peak,
       duration: SATISFIED_WIGGLE_UP_DURATION,
       ease: 'power2.out',
     });
     tl.to(scale, {
-      x: 1,
-      y: 1,
-      z: 1,
+      x: base,
+      y: base,
+      z: base,
       duration: SATISFIED_WIGGLE_DOWN_DURATION,
       ease: 'power2.inOut',
     });
