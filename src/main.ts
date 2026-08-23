@@ -133,6 +133,19 @@ function bootstrap(): void {
 
   bytePet = createBytePet(document.body, { headlineEl, theme: theme.current(), reducedMotion });
 
+  // Footer FED counter (T5, SPEC §8.6) — lives in the footer (`index.html`),
+  // not the hero. Wired here rather than inside `createBytePet` (which stays
+  // page-agnostic/portable, same reasoning as `bindThemeToggle` above) via
+  // the `onEat` subscription the handle now exposes. No WebGL means this
+  // never runs, so the counter simply stays at its static markup default
+  // (`FED 0 GLYPHS`) — still correct.
+  const fedCounter = document.querySelector<HTMLElement>('[data-fed-counter]');
+  bytePet.onEat((total) => {
+    if (fedCounter) {
+      fedCounter.textContent = `FED ${total} GLYPH${total === 1 ? '' : 'S'}`;
+    }
+  });
+
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
   // to exist beyond the theme-toggle callback above: tear it down (kills
   // every tween/timer/listener + the scene's renderers/canvases) on a *real*

@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { createPetRig } from './rig';
 import { createPlaceholderBot, POSE_GROUP_NAME } from './placeholderBot';
 import { createFSM } from './fsm';
+import { createFeeder } from './feed';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
@@ -99,6 +100,27 @@ const LEAN_ROTATION_RAD = 0.06;
 const LEAN_DURATION_S = 0.4;
 
 /**
+ * T5 dash/eat root handoff (R-T5-6): while Byte is `dashing`/`eating`, the
+ * feeder (`feed.ts`) owns `rig.object3d.position` (toss-dash + eat
+ * convergence) and deliberately leaves it at the food spot on `ATE` rather
+ * than tweening home itself — this module (`onTick`, below) is the chosen
+ * "return leg" owner, since it already holds the anchor math. `HOME_STATES`
+ * are the states this module's own per-tick anchor pin applies to;
+ * `REACQUIRE_DURATION_S` is how long the no-snap glide back to the anchor
+ * takes on the first home tick after a dashing/eating span (instant
+ * instead, under `reducedActive`).
+ */
+const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
+  'idle',
+  'curious',
+  'invited',
+  'peeking',
+  'sleeping',
+  'waking',
+]);
+const REACQUIRE_DURATION_S = 0.3;
+
+/**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
  * `Range` over its last non-empty text node — deliberately NOT
  * `el.getBoundingClientRect()`. This project's `.hero__line` spans are
@@ -154,6 +176,20 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   scene.addToFront(shadow.mesh);
 
   const fsm = createFSM({ peekMs: PEEK_MS });
+
+  // --- Feeder (T5, R-T5-8) ---------------------------------------------------
+  // Owns the toss/dash/eat glyph choreography end to end: `feed(x,y)` tosses
+  // + enqueues a glyph and (via its own `maybeStartProcessing`) sends `FEED`
+  // once a target is actually queued; a separate `fsm.onEnter` subscription
+  // (registered inside `createFeeder` itself) drives the dash-to-food +
+  // eat-into-the-mouth motion and fires `REACHED`/`ATE` back into the FSM.
+  // `reducedActive` is read lazily (the closure below), so this always
+  // reflects the module's live flag even though it isn't assigned until the
+  // `gsap.matchMedia()` branches run further down.
+  const feeder = createFeeder(rig, scene, fsm, {
+    prefersReducedMotion: () => reducedActive,
+    unitPx,
+  });
 
   // The placeholder's internal clip-motion node (`placeholderBot.ts`'s "root
   // vs pose split") — read-only here, purely to sample the bot's CURRENT
@@ -245,6 +281,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let microTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let glanceTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let peekTimeline: ReturnType<typeof gsap.timeline> | null = null;
+  /** Named single slot (parked T4 minor, carry-forward #5) so a superseded hint fade self-prunes instead of leaving a dead entry in `liveTweens` — `overwrite: true` already kills the competing GSAP tween internally, but that kill never fires `onComplete`, so `track()`'s own Set-removal never ran for it without this. */
+  let hintTween: ReturnType<typeof gsap.to> | null = null;
+  /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
+  let reacquireTween: ReturnType<typeof gsap.to> | null = null;
   // Whether the guaranteed-early peek (SPEC §6 "must happen within the first
   // ~10 idle seconds") has ever fired. Set once, on the FIRST successful
   // micro-behaviour roll of the bot's life, and never reset afterward — see
@@ -276,6 +316,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // as a fresh crossing once idle resumes, rather than being silently
   // stranded as "already near, no new edge" forever (I-1 fix).
   let wasNear = false;
+  // Edge-triggered "was Byte in a HOME state last tick" (R-T5-6) — mirrors
+  // `wasNear`'s own pattern. Drives the reacquire tween off the actual
+  // transition INTO a home state (idle/curious/invited/peeking/sleeping/
+  // waking), not merely "currently home", so the glide starts exactly once
+  // per dashing/eating span. Starts `true`: `createFSM()` starts in `idle`,
+  // already home, so there is no span to reacquire from on the first tick.
+  let wasHome = true;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
   // Hard-step squash of `source.eye.scale.y` — an infinite-repeat timeline
@@ -364,7 +411,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Invited hint ------------------------------------------------------------
   function hideHint(): void {
-    track(
+    hintTween = killTracked(hintTween);
+    hintTween = track(
       gsap.to(hintEl, { opacity: 0, duration: HINT_FADE_S, ease: 'power1.out', overwrite: true }),
     );
   }
@@ -373,7 +421,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (isHintPermanentlyDismissed()) {
       return;
     }
-    track(
+    hintTween = killTracked(hintTween);
+    hintTween = track(
       gsap.to(hintEl, { opacity: 1, duration: HINT_FADE_S, ease: 'power1.out', overwrite: true }),
     );
   }
@@ -608,13 +657,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * `rig.play()` either: `Hop` is excluded from the reduced micro-behaviour
    * pool (`idleMicroPool()`), `Peek`'s reduced branch (`runPeekReduced`)
    * never calls `rig.play('Peek')`, and this function itself gates the
-   * remaining four. `play()` is the ONLY thing that ever writes to `pose`
-   * (see the module doc comment on `pose`), so with every call site gated
-   * or excluded, `pose` reliably stays at its construction-time identity —
-   * a static Byte — for the entire reduced-motion lifetime. Sleep's dim
-   * (`setDimmed`, unconditional) and Peek's own reduced fade/rise (which
-   * animates `pose.position.y` directly, not through `play()`) are
-   * unaffected by this guard.
+   * remaining four. `rig.play()` is the only thing THIS GUARD needs to
+   * worry about gating, so `pose` stays at its construction-time identity
+   * for the entire reduced-motion lifetime EXCEPT during a peek:
+   * `runPeekReduced` nudges `pose.position.y` directly (a small rise/fall,
+   * not through `play()`) for the fade's duration, settling back to
+   * identity once the peek ends. Sleep's dim (`setDimmed`, unconditional)
+   * is unaffected either way.
    */
   function playUnlessReduced(clip: ClipName): void {
     if (!reducedActive) {
@@ -645,7 +694,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (state !== 'invited') {
       hideHint();
     }
-    if (state !== 'curious') {
+    // R-T5-6 fix: do NOT clear the lean when entering dashing/eating — the
+    // feeder (`feed.ts`) drives its own bank rotation on
+    // `rig.object3d.rotation.z` during dashing, and this clear (previously
+    // unconditional for every non-curious state, including dashing/eating)
+    // was fighting it for the same property every time dashing was
+    // (re-)entered. Only clear it when actually returning to a resting home
+    // posture.
+    if (state !== 'curious' && state !== 'dashing' && state !== 'eating') {
       clearLean();
     }
 
@@ -671,13 +727,23 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         playUnlessReduced('Wake');
         break;
       case 'dashing':
-        // Minimal in T4 (R-T4-9) — the real dash-to-food + eat is T5.
-        playUnlessReduced('Dash');
+      case 'eating':
+        // T5 (R-T5-5): the feeder (`feed.ts`) now owns both the `Dash`/`Eat`
+        // clips and the root locomotion for these two states via its own
+        // `fsm.onEnter` subscription — nothing to play/pose here. The one
+        // thing this module still does on entry is defensively kill a
+        // still-in-flight `onTick` reacquire tween (R-T5-6): without this, a
+        // rapid re-feed landing while Byte is still gliding home from a
+        // previous eat would leave that tween and the feeder's own fresh
+        // dash tween both writing `rig.object3d.position` on the same
+        // frame. Safe/idempotent when there's nothing to kill (the common
+        // case) — `killTracked(null)` is a no-op.
+        reacquireTween = killTracked(reacquireTween);
         break;
       default:
-        // 'eating' | 'retyping' | 'traveling' | 'hidden' | 'entering' are not
-        // reachable via the current FSM (fsm.ts never transitions into
-        // them yet) — reserved for later tickets.
+        // 'retyping' | 'traveling' | 'hidden' | 'entering' are not reachable
+        // via the current FSM (fsm.ts never transitions into them yet) —
+        // reserved for later tickets.
         break;
     }
   }
@@ -746,18 +812,58 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const lookTarget = glanceOverride ?? (hasPointerInput ? cursorWorld : anchorWorld);
     rig.setLook(lookTarget.x, lookTarget.y);
 
-    // Root placement: feet land at the anchor's own vertical center minus
-    // half the bot's height, so the assembled bot reads centered on the
-    // headline anchor (the placeholder's origin is at its feet, not its
-    // center — see placeholderBot.ts) plus any idle-drift offset.
+    // Root placement (R-T5-6 handoff): feet land at the anchor's own
+    // vertical center minus half the bot's height, so the assembled bot
+    // reads centered on the headline anchor (the placeholder's origin is at
+    // its feet, not its center — see placeholderBot.ts) plus any idle-drift
+    // offset. Only HARD-PIN the root here while Byte is in a HOME state —
+    // while `dashing`/`eating`, the feeder (`feed.ts`) owns
+    // `rig.object3d.position` (toss-dash + eat convergence), and pinning it
+    // here too every tick would fight that tween for the same property.
     const rootX = anchorWorld.x + drift.x;
     const rootY = anchorWorld.y - unitPx / 2;
-    rig.object3d.position.set(rootX, rootY, 0);
+    const home = HOME_STATES.has(fsm.state());
 
-    // Shadow stays pinned to the ground (the root's own resting position) —
-    // hops/peeks/etc. only change its scale/opacity via the pose group's
-    // live hover height, never its own position.
-    shadow.mesh.position.set(rootX, rootY, 0);
+    if (home && !wasHome) {
+      // No-snap reacquire: the feeder deliberately leaves Byte at the food
+      // spot when it sends ATE (see feed.ts's own doc comment) rather than
+      // tweening home itself — this module is the chosen return-leg owner,
+      // since it already holds the anchor math above. Glide from wherever
+      // eating finished back to the anchor instead of hard-snapping on this
+      // first home tick; the steady-state hard-pin below resumes once it
+      // arrives. Instant under `reducedActive` — no arc a reduced-motion
+      // user can't stop.
+      reacquireTween = killTracked(reacquireTween);
+      if (reducedActive) {
+        rig.object3d.position.set(rootX, rootY, 0);
+      } else {
+        reacquireTween = track(
+          gsap.to(rig.object3d.position, {
+            x: rootX,
+            y: rootY,
+            z: 0,
+            duration: REACQUIRE_DURATION_S,
+            ease: 'power2.out',
+            onComplete: () => {
+              reacquireTween = null;
+            },
+          }),
+        );
+      }
+    } else if (home && !reacquireTween) {
+      // Steady-state home, no in-flight reacquire — hard-pin every tick
+      // exactly as before T5.
+      rig.object3d.position.set(rootX, rootY, 0);
+    }
+    wasHome = home;
+
+    // Shadow follows the root's ACTUAL current position, not the freshly
+    // recomputed anchor: during dashing/eating (feeder-owned) and during the
+    // reacquire glide just above, `rig.object3d.position` is wherever the
+    // feeder/tween left it, and the shadow must track that rather than snap
+    // ahead to where Byte is heading. Its scale/opacity still only respond
+    // to the pose group's own live hover height, never its own position.
+    shadow.mesh.position.set(rig.object3d.position.x, rig.object3d.position.y, 0);
     const hoverPx = (pose?.position.y ?? 0) * unitPx;
     shadow.setHeight(Math.max(0, hoverPx));
 
@@ -773,17 +879,19 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Public handle (brief 4a/4e) ------------------------------------------------
   function feed(x: number, y: number): void {
-    // Unused in T4 — the dash-to-food + eat glyph payload is T5 (see
-    // BytePetHandle.feed's doc comment); mirrors rig.ts's own `void dt;`
-    // idiom for an intentionally-unused, forward-compatible parameter.
-    void x;
-    void y;
-    fsm.send('FEED');
+    // T5: the feeder owns the FEED send now (via its own
+    // `maybeStartProcessing`, fired once the tossed glyph is actually
+    // queued) — sending it again here would double-send into the FSM.
+    feeder.feed(x, y);
     markHintPermanentlyDismissed();
   }
 
   function setTheme(t: Theme): void {
     applyTheme(t);
+  }
+
+  function onEat(cb: (total: number) => void): void {
+    feeder.onEat(cb);
   }
 
   let destroyed = false;
@@ -807,15 +915,18 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     microTimer = null;
     glanceTimer = null;
     peekTimeline = null;
+    hintTween = null;
+    reacquireTween = null;
 
     mm.revert();
 
     hintEl.remove();
 
+    feeder.dispose();
     rig.dispose();
     shadow.dispose();
     scene.dispose();
   }
 
-  return { feed, setTheme, destroy };
+  return { feed, setTheme, onEat, destroy };
 }

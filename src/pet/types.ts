@@ -163,10 +163,12 @@ export interface PetOptions {
  * (kills every tween/timer/listener/GL resource this module created).
  */
 export interface BytePetHandle {
-  /** Feeds Byte at screen point `(x, y)`. T4: sends `FEED` to the FSM only — the dash-to-food + eat glyph payload is T5. */
+  /** Tosses a glyph at screen point `(x, y)` (a click/tap) and feeds it into the dash-to-food + eat loop (T5). */
   feed(x: number, y: number): void;
   /** Re-themes the live scene + rig (lights, body color, glow) — call after flipping the page's own theme. */
   setTheme(t: 'light' | 'dark'): void;
+  /** Subscribe to the running eaten-glyph total (the demo wires this to the footer's FED counter). Register-many; fires on each eat. */
+  onEat(cb: (total: number) => void): void;
   /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
   destroy(): void;
 }
