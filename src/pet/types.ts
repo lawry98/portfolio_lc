@@ -130,6 +130,36 @@ export interface ClipPlayOptions {
   onComplete?: () => void;
 }
 
+/**
+ * Inputs to `createBytePet()` (Task 4, SPEC §4.4). Only the fields Task 4
+ * actually consumes — `noUnusedParameters` is on, so an option nothing reads
+ * would fail the build. Later tickets extend this (`footerEl` for T8's
+ * migration, `phrases`/`sounds` for T6/T7, `modelUrl` for T-GLB) once they
+ * have a real consumer for each; adding them now would be dead weight.
+ */
+export interface PetOptions {
+  /** The live headline element Byte anchors to and sizes itself from (`unitPx` = its computed font-size). */
+  headlineEl: HTMLElement;
+  /** Starting theme; defaults to `'light'` if omitted (the caller's own theme controller is the source of truth thereafter via `setTheme`). */
+  theme?: 'light' | 'dark';
+  /** Caller-supplied reduced-motion override. `createBytePet` also self-detects via `matchMedia` when this is absent — see its `gsap.matchMedia()` wiring. */
+  reducedMotion?: boolean;
+}
+
+/**
+ * Public surface `createBytePet()` returns (SPEC §4.4). `feed`/`setTheme`
+ * are stable across tickets; `destroy()` is the one required teardown path
+ * (kills every tween/timer/listener/GL resource this module created).
+ */
+export interface BytePetHandle {
+  /** Feeds Byte at screen point `(x, y)`. T4: sends `FEED` to the FSM only — the dash-to-food + eat glyph payload is T5. */
+  feed(x: number, y: number): void;
+  /** Re-themes the live scene + rig (lights, body color, glow) — call after flipping the page's own theme. */
+  setTheme(t: 'light' | 'dark'): void;
+  /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
+  destroy(): void;
+}
+
 /** The clip-driven rig adapter (SPEC §4.2/§4.3). Two impls: placeholder (Task 3, GSAP-faked clips)
  *  and GLB-via-AnimationMixer (T-GLB). Defined once here, consumed by createBytePet (Task 4). */
 export interface PetRig {
