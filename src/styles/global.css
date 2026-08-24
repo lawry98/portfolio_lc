@@ -647,6 +647,87 @@ small,
 }
 
 /* ==========================================================================
+   Preloader — SPEC §8.1 entrance overlay. A blinking caret beside a counting
+   `%`, painted over the whole viewport on load and lifted by `runEntrance()`
+   (page/preloader.ts) once webfonts settle + a MIN elapses (a bounded gate
+   that can never hang), or force-hidden by the inline <head> fallback if the
+   module never boots. `position: fixed` so it never joins layout (CLS 0); the
+   `%` is monospace + tabular-nums so counting 0→100 never jitters digit
+   width. z-index 9990 sits above the pet canvases (#gl-front, 40) and all
+   page content, but below the grain overlay (9999) and the Style Lab (10000).
+   ========================================================================== */
+
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Terminal hidden state — set by `runEntrance` after its GSAP opacity/
+   transform lift, and by the inline <head> fallback if the module never
+   boots. Either the [hidden] attribute or the class fully removes the
+   overlay; `!important` beats the base `display: grid` above (an author
+   `display` otherwise wins over the UA `[hidden]` rule, so the bare attribute
+   alone would not hide a `display: grid` box). */
+.preloader[hidden],
+.preloader--done {
+  display: none !important;
+}
+
+.preloader__inner {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(2.5rem, 1.75rem + 4vw, 5rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* The counting number. Mono (via `.preloader__inner`) already fixes digit
+   width; `tabular-nums` is belt-and-suspenders (keeps the fallback
+   `ui-monospace` honest too) so 88→89→90 never nudges width → CLS 0. */
+.preloader__pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.preloader__unit {
+  color: var(--muted);
+}
+
+/*
+ * Dedicated preloader caret — a blinking block after the `%`. A DEDICATED
+ * class with its OWN blink keyframe, deliberately NOT the headline's
+ * `[data-byte-caret]`: that global rule is `position: absolute; top/left: 0`,
+ * which would anchor the caret to the fixed overlay's top-left corner instead
+ * of sitting beside the number. An empty inline-block sits its bottom edge on
+ * the text baseline and rises ~cap height. Like the headline caret, its blink
+ * survives reduced motion (see the opt-back-in in the reduced-motion block
+ * below) — a native text-input caret keeps blinking (SPEC §12).
+ */
+.preloader__caret {
+  display: inline-block;
+  width: 0.08em;
+  height: 0.9em;
+  background: var(--accent);
+  animation: preloader-caret-blink 1s steps(1, end) infinite;
+}
+
+@keyframes preloader-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
    Reduced motion — base-level safety net for plain-CSS animation/transition
    (the grain flicker, hover/focus transitions above, scroll-behavior). GSAP
    work (T2+) additionally branches on this via gsap.matchMedia() per
@@ -669,6 +750,16 @@ small,
      catch `[data-byte-caret]` (it matches the `*` selector) and leave it
      frozen fully visible instead of blinking. */
   [data-byte-caret] {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  /* Same native-caret exception for the preloader caret (SPEC §12): its blink
+     stays alive under reduced motion, so the blanket freeze above (which
+     catches it via `*`) does not leave it frozen fully visible. The lift
+     itself is GSAP-driven in `runEntrance` (a quick opacity fade under reduced
+     motion), so no CSS override is needed for the overlay to still disappear. */
+  .preloader__caret {
     animation-duration: 1s !important;
     animation-iteration-count: infinite !important;
   }

@@ -29,8 +29,59 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Byte</title>
+    <!--
+      Preloader safety floor #1 — JS off. With scripts disabled the overlay
+      can never be lifted by JS, so hide it entirely: the page then reads as
+      the static headline #1 with no hang (SPEC graceful degradation). Scripts
+      on, the overlay shows and page/preloader.ts's runEntrance lifts it.
+    -->
+    <noscript
+      ><style>
+        #preloader {
+          display: none !important;
+        }
+      </style></noscript
+    >
+    <!--
+      Preloader safety floor #2 — module never boots. Even if the app module
+      fails to load or run (network error, no ES-module support, a throw
+      before runEntrance), the overlay must not hang. After this bounded
+      timeout, force-hide #preloader. The normal path (page/preloader.ts)
+      lifts it far sooner; this is only the ceiling. Kept tiny +
+      dependency-free, mirroring the no-flash theme script above.
+    -->
+    <script>
+      (function () {
+        setTimeout(function () {
+          var el = document.getElementById('preloader');
+          if (el) {
+            el.classList.add('preloader--done');
+            el.setAttribute('hidden', '');
+          }
+        }, 6000);
+      })();
+    </script>
   </head>
   <body>
+    <!--
+      Preloader overlay (SPEC §8.1). STATIC markup so it exists from first
+      paint with zero CLS (position: fixed, out of flow — see global.css) and
+      so the JS-off floor (the <noscript> above) has something to hide. On the
+      scripts-on path page/preloader.ts's runEntrance counts the % 0→100,
+      waits a bounded gate (webfonts + a MIN, never hangs), lifts this off, and
+      staggers in the page chrome. The caret is a DEDICATED `.preloader__caret`
+      (its own blink keyframe) — deliberately NOT `[data-byte-caret]`, which
+      createBytePet also uses inside #hero-headline and whose global rule is
+      absolutely positioned. aria-hidden: purely decorative loading chrome,
+      kept out of the a11y tree so SR users land straight on content.
+    -->
+    <div id="preloader" class="preloader" aria-hidden="true">
+      <div class="preloader__inner">
+        <span class="preloader__pct" data-preloader-pct>0</span
+        ><span class="preloader__unit">%</span>
+        <span class="preloader__caret" aria-hidden="true"></span>
+      </div>
+    </div>
     <div id="app">
       <header class="nav">
         <div class="container nav__inner">
