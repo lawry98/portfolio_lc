@@ -287,14 +287,19 @@ export function createRetype(cfg: RetypeConfig): {
  * headline markup. If either is missing this is a no-op — it never
  * partially renders one line while leaving the other untouched.
  *
- * Caret positioning is a layout READ (`offsetLeft`/`offsetTop`/
- * `offsetWidth`) followed by a `transform` WRITE on the already-appended
- * `caretEl` — never an in-flow insertion, so it cannot reflow
- * `headlineEl` (CLS 0). Because `headlineEl` has `position: relative`
- * (see `global.css`) and each line element stays `position: static`, both
- * the line elements' and their char spans' `offsetLeft`/`offsetTop` are
- * already relative to `headlineEl` itself (its nearest positioned
- * ancestor) — no extra coordinate math needed.
+ * Caret positioning is a layout READ (`getBoundingClientRect()` on the
+ * anchor glyph/line and on `headlineEl`) followed by a `transform` WRITE on
+ * the already-appended `caretEl` — never an in-flow insertion, so it cannot
+ * reflow `headlineEl` (CLS 0). The position is expressed as viewport-rect
+ * DELTAS relative to `headlineEl` (`rect.left - headlineRect.left`, etc.)
+ * rather than `offsetLeft`/`offsetParent`-relative offsets: the hero's
+ * SplitText line-reveal can wrap each line in a positioned `mask` element,
+ * which would otherwise become the char span's `offsetParent` and skew the
+ * math. Bounding-rect deltas are immune to any such positioned ancestor
+ * (the caret is a direct child of `headlineEl` and the deltas are always
+ * measured against `headlineEl` itself). The caller resolves the LIVE caret
+ * node each call (createBytePet's `liveCaret()`), since the same SplitText
+ * reveal + revert can replace `headlineEl`'s children with clones.
  */
 export function renderRetype(
   frame: RetypeFrame,
@@ -318,10 +323,15 @@ export function renderRetype(
   // line's own left edge (col === 0, or a defensively out-of-range col).
   const caretCharEl = col > 0 ? charEls[col - 1] : undefined;
 
-  const x = caretCharEl
-    ? caretCharEl.offsetLeft + caretCharEl.offsetWidth
-    : activeLineEl.offsetLeft;
-  const y = activeLineEl.offsetTop;
+  // Bounding-rect deltas relative to `headlineEl` (see the doc comment):
+  // immune to a positioned SplitText `mask` ancestor that `offsetParent`-
+  // relative offsets would otherwise be thrown off by. When there's a char
+  // before the caret, sit at its right edge; otherwise the active line's left.
+  const anchorEl = caretCharEl ?? activeLineEl;
+  const cRect = anchorEl.getBoundingClientRect();
+  const hRect = headlineEl.getBoundingClientRect();
+  const x = (caretCharEl ? cRect.right : cRect.left) - hRect.left;
+  const y = cRect.top - hRect.top;
 
   caretEl.style.transform = `translate(${x}px, ${y}px)`;
 }

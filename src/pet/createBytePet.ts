@@ -272,19 +272,54 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const lineEls = Array.from(opts.headlineEl.children).slice(0, 2) as HTMLElement[];
   lineEls.forEach((el, i) => el.setAttribute('data-byte-line', String(i)));
 
-  // Byte's DOM caret. Carries BOTH `class="byte-caret"` (CSS dimensions/color,
-  // global.css) AND the `data-byte-caret` attribute (the reduced-motion blink
-  // opt-back-in in global.css keys off the attribute). Appended as a DIRECT
-  // child of `headlineEl` so its offsetParent is `#hero-headline` — the
-  // coordinate frame `renderRetype`'s `offsetLeft`/`offsetTop` math assumes.
-  // Moved by `transform` WRITES only (renderRetype during a retype; the
-  // rest-position write in `onTick` otherwise), never inserted in flow, so it
-  // can never reflow the headline (CLS 0).
+  // Byte's DOM caret (the SEED node). Carries BOTH `class="byte-caret"` (CSS
+  // dimensions/color, global.css) AND the `data-byte-caret` attribute (the
+  // reduced-motion blink opt-back-in in global.css keys off the attribute, and
+  // `liveCaret()` re-finds the caret by it after any SplitText clone-swap).
+  // Appended as a DIRECT child of `headlineEl`. Moved by `transform` WRITES
+  // only (renderRetype during a retype; the rest-position write in `onTick`
+  // otherwise), never inserted in flow, so it can never reflow the headline
+  // (CLS 0).
   const caretEl = document.createElement('span');
   caretEl.className = 'byte-caret';
   caretEl.setAttribute('data-byte-caret', '');
   caretEl.setAttribute('aria-hidden', 'true');
   opts.headlineEl.appendChild(caretEl);
+
+  /** The caret's rest transform — parked at the end of the bottom line's text
+   *  in `headlineEl`-relative coords (bounding-rect deltas, immune to any
+   *  positioned ancestor). Shared by the creation seed just below and the
+   *  per-tick rest write in `onTick`, so the two can never drift. */
+  function caretRestTransform(lineRect: DOMRect): string {
+    const headlineRect = opts.headlineEl.getBoundingClientRect();
+    return `translate(${lineRect.right - headlineRect.left}px, ${
+      lineRect.top - headlineRect.top
+    }px)`;
+  }
+
+  // Seed the caret at its rest position immediately, so it never flashes at the
+  // headline's top-left for the ≤1 frame before the first `onTick` positions it
+  // (fix-wave finding 2). The headline is already laid out here (createBytePet
+  // boots after the DOM is ready); `onTick` refines it from frame 1.
+  caretEl.style.transform = caretRestTransform(lastLineTextRect(opts.headlineEl));
+
+  /**
+   * The LIVE caret node. The hero's async SplitText line-reveal (+ its
+   * R-T6a-4 revert) can REPLACE `#hero-headline`'s children with clones that
+   * keep the `data-byte-*` attributes but ORPHAN this init-captured `caretEl`
+   * reference. So resolve the caret by attribute at every runtime point of use
+   * (symmetric with how `renderRetype` re-queries `[data-byte-line]` live),
+   * re-appending our seed `caretEl` only if none is currently in the DOM —
+   * keeping the caret revert- and clone-proof.
+   */
+  function liveCaret(): HTMLElement {
+    const found = opts.headlineEl.querySelector<HTMLElement>('[data-byte-caret]');
+    if (found) {
+      return found;
+    }
+    opts.headlineEl.appendChild(caretEl);
+    return caretEl;
+  }
 
   // --- Retype reward: phrase cycle + pure engine (T6) ----------------------
   // `cycle[phraseIndex]` is the phrase CURRENTLY shown (`cycle[0]` == the
@@ -771,6 +806,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (reducedActive) {
       return;
     }
+    // Resolve the live caret once for this pulse (a spark only fires mid-edit,
+    // long after any load-time clone-swap has settled).
+    const caret = liveCaret();
     sparkTween = killTracked(sparkTween);
     sparkProxy.v = 0;
     sparkTween = track(
@@ -781,13 +819,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         yoyo: true,
         repeat: 1,
         onUpdate: () => {
-          caretEl.style.boxShadow = `0 0 ${SPARK_BLUR_PX * sparkProxy.v}px ${
+          caret.style.boxShadow = `0 0 ${SPARK_BLUR_PX * sparkProxy.v}px ${
             SPARK_SPREAD_PX * sparkProxy.v
           }px var(--accent)`;
         },
         onComplete: () => {
           sparkTween = null;
-          caretEl.style.boxShadow = '';
+          caret.style.boxShadow = '';
         },
       }),
     );
@@ -824,7 +862,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       retype.step(0);
       const finalFrame = retype.step(Number.MAX_SAFE_INTEGER);
       if (finalFrame) {
-        renderRetype(finalFrame, opts.headlineEl, caretEl);
+        renderRetype(finalFrame, opts.headlineEl, liveCaret());
       }
       fireOnNextTick(() => fsm.send('RETYPED'));
       return;
@@ -1053,10 +1091,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (fsm.state() === 'retyping' && retypeActive) {
       const frame = retype.step(retypeClockMs);
       if (frame) {
-        renderRetype(frame, opts.headlineEl, caretEl);
+        const caret = liveCaret();
+        renderRetype(frame, opts.headlineEl, caret);
         // Caret's live world position → Byte's feet (its vertical center
         // minus half the bot height, matching the home anchor's `- unitPx/2`).
-        const cr = caretEl.getBoundingClientRect();
+        const cr = caret.getBoundingClientRect();
         const cw = scene.worldFromScreen(cr.left, cr.top + cr.height / 2);
         byteToCaretX(cw.x);
         byteToCaretY(cw.y - unitPx / 2);
@@ -1090,16 +1129,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     hintEl.style.transform = `translate(${hintLeft}px, ${hintTop}px)`;
 
     // Permanent caret rest position (SPEC: "a blinking DOM caret remains in
-    // the headline"): when NOT mid-retype, park the caret at the end of the
-    // bottom line's text, in `headlineEl`-relative coords. Transform-only on
-    // the absolutely-positioned caret, so it never reflows (CLS 0); reuses the
-    // `lineRect` already read for the anchor. During a retype, `renderRetype`
-    // owns the caret transform instead (so this is gated off then).
+    // the headline"): when NOT mid-retype, park the LIVE caret at the end of
+    // the bottom line's text, in `headlineEl`-relative coords. Transform-only
+    // on the absolutely-positioned caret, so it never reflows (CLS 0); reuses
+    // the `lineRect` already read for the anchor. During a retype,
+    // `renderRetype` owns the caret transform instead (so this is gated off).
     if (fsm.state() !== 'retyping') {
-      const headlineRect = opts.headlineEl.getBoundingClientRect();
-      caretEl.style.transform = `translate(${lineRect.right - headlineRect.left}px, ${
-        lineRect.top - headlineRect.top
-      }px)`;
+      liveCaret().style.transform = caretRestTransform(lineRect);
     }
   }
 
@@ -1154,6 +1190,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     mm.revert();
 
     hintEl.remove();
+    // Remove the caret whether it's still our seed or a SplitText clone that
+    // replaced it (the live node, found by attribute), plus the seed itself in
+    // case a clone-swap orphaned it (`.remove()` on a detached node is a safe
+    // no-op).
+    opts.headlineEl.querySelector('[data-byte-caret]')?.remove();
     caretEl.remove();
 
     feeder.dispose();
