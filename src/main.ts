@@ -9,6 +9,7 @@ import { initManifesto } from './page/manifesto';
 import { initWork } from './page/work';
 import { initFooter } from './page/footer';
 import { initLab } from './page/lab';
+import { runEntrance } from './page/preloader';
 import { hasWebGL } from './pet/scene';
 import { createBytePet } from './pet/createBytePet';
 import type { BytePetHandle } from './pet/types';
@@ -33,6 +34,21 @@ import { phrases } from './phrases';
  * `BytePetHandle` (for the theme-toggle callback and the pagehide
  * teardown). T3's `?glcube` QA rig (which proved the two-canvas occlusion
  * sandwich) was removed once its job was done.
+ *
+ * Entrance (T6b, SPEC §8.1): `bootstrap()` also composes the preloader
+ * entrance via `runEntrance()` (see `page/preloader.ts`). The branch is
+ * decided once up front from `hasWebGL()` + `prefersReducedMotion()`:
+ *  - full WebGL + full motion → preloader lift → Byte drops in + live-types
+ *    phrase #1, and the hero's own masked reveal is suppressed so the two
+ *    don't drive the same headline;
+ *  - WebGL + reduced motion → Byte still participates (`entrance: webgl`)
+ *    but places instantly and keeps the static phrase #1; the hero reveal
+ *    stays on (its own instant branch);
+ *  - no WebGL → preloader lift → static headline, no Byte;
+ *  - JS off → index.html's `<noscript>` hides the overlay; this module never
+ *    runs at all.
+ * `runEntrance()` is driven un-awaited and rejection-guarded so it can never
+ * block first paint or break the page.
  */
 
 /**
@@ -104,24 +120,46 @@ function bootstrap(): void {
 
   bindThemeToggle(root, theme, () => bytePet?.setTheme(theme.current()));
 
+  // Entrance branch, decided ONCE up front (before the section inits) so the
+  // hero and Byte agree on who owns the headline:
+  //  - `reducedMotion` / `webgl` are the two environment gates;
+  //  - `willByteType` (WebGL AND full motion) is the ONLY case where Byte
+  //    live-types phrase #1 INTO the headline, so it controls exactly one
+  //    thing here: suppressing the hero's own masked-line reveal (R-T6b-6),
+  //    so the two never double-animate the same two lines. Byte still
+  //    PARTICIPATES in the entrance under reduced motion (see `entrance:
+  //    webgl` below) — it just places instantly and keeps the static phrase
+  //    #1, so the hero reveal is left ON to play its own instant branch.
+  const reducedMotion = prefersReducedMotion();
+  const webgl = hasWebGL();
+  const willByteType = webgl && !reducedMotion;
+
   // Hero load reveal + mouse-parallax (T2 Task 4), the remaining sections'
   // scroll reveals + parallax (T2 Task 5), each guarding its own lookups
   // the same way `initHero()` does. `initLab()` (T2 Task 6) goes last: the
   // Style Lab typography control, which itself no-ops entirely unless
-  // `?lab` is present (see `page/lab.ts`).
-  initHero();
+  // `?lab` is present (see `page/lab.ts`). `headlineReveal: !willByteType`
+  // hands the headline to Byte's live-type on the full path, and keeps the
+  // masked reveal on the reduced/no-WebGL floor.
+  initHero({ headlineReveal: !willByteType });
   initManifesto();
   initWork();
   initFooter();
   initLab();
 
-  // WebGL pet layer (T3 foundation, T4 real Byte) — graceful degradation per
-  // SPEC/CLAUDE.md: no WebGL means no canvases at all, so the page stays
-  // exactly as T2 left it (static headline #1, fully usable). `console.info`
-  // is fine here; an `error`/`warn` is not, since this is an expected,
-  // handled path, not a failure.
-  if (!hasWebGL()) {
+  // WebGL pet layer (T3 foundation, T4 real Byte, T6b entrance) — graceful
+  // degradation per SPEC/CLAUDE.md: no WebGL means no canvases at all, so the
+  // page stays exactly as T2 left it (static headline #1, fully usable). The
+  // preloader STILL runs on this floor and lifts to that static headline —
+  // with no `bytePet`, `runEntrance` just counts %, lifts the overlay, and
+  // staggers the page chrome in (its `enterAndType()` await is a no-op).
+  // Driven un-awaited (never blocks first paint) and rejection-guarded (can
+  // never break the page). `console.info` is fine here; an `error`/`warn` is
+  // not, since this is an expected, handled path, not a failure. JS-off is
+  // handled upstream by index.html's `<noscript>` (this module never runs).
+  if (!webgl) {
     console.info('[byte] WebGL unavailable — static headline only, pet scene skipped.');
+    void runEntrance({ reducedMotion, root }).catch(() => {});
     return;
   }
 
@@ -130,12 +168,16 @@ function bootstrap(): void {
     return;
   }
 
-  const reducedMotion = prefersReducedMotion();
-
   bytePet = createBytePet(document.body, {
     headlineEl,
     theme: theme.current(),
     reducedMotion,
+    // Byte participates in the entrance whenever WebGL exists (R-T6b-9):
+    // `entrance: webgl`, NOT `willByteType`. `enterAndType()` branches full
+    // vs reduced INTERNALLY (drop-in + live-type under full motion; instant
+    // place + static phrase #1 under reduced), and starting the FSM in
+    // `hidden` keeps the `hidden → entering → idle` beats live in both modes.
+    entrance: webgl,
     // The retype reward's phrase cycle (SPEC §6/§10). `phrases.identity[0]`
     // is the static headline #1 already in the markup, so the first eat
     // retypes into `identity[1]`, and so on, wrapping the cycle.
@@ -171,6 +213,20 @@ function bootstrap(): void {
       bytePet?.destroy();
     }
   });
+
+  // Drive the SPEC §8.1 entrance now that the Byte handle exists (order
+  // matters — `runEntrance` awaits `bytePet.enterAndType()`): preloader counts
+  // % → bounded gate → lift the overlay → await Byte's drop-in + live-type
+  // phrase #1 (full motion) or its instant place (reduced) → stagger the page
+  // chrome in. `root` (`#app`) scopes the chrome lookups
+  // (`.nav`/`.hero__micro-label`/`.hero__scroll` all live inside it); the
+  // overlay itself is a body-level sibling, which `runEntrance` resolves via
+  // its own `document` fallback. Un-awaited so bootstrap never blocks first
+  // paint, and guarded so a rejection can never break the page — index.html's
+  // own inline 6s overlay fallback is the last-resort floor if anything stalls.
+  void runEntrance({ bytePet, reducedMotion, root }).catch((err) =>
+    console.error('[byte] entrance failed', err),
+  );
 }
 
 bootstrap();

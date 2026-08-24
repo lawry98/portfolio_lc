@@ -4,12 +4,18 @@
  * Two independent behaviours, both scoped to `#hero`:
  *  - a masked line reveal of the two-line headline, fired once on load
  *    (via `revealLines()`), gated on webfonts settling with a bounded
- *    fallback so it can never wait forever;
+ *    fallback so it can never wait forever. Suppressible via
+ *    `initHero({ headlineReveal: false })` (R-T6b-6): on the full-motion
+ *    WebGL path Byte itself live-types phrase #1 INTO this headline (the
+ *    SPEC §8.1 entrance — see `main.ts`/`createBytePet`), so `main.ts` turns
+ *    the reveal OFF there to avoid two animations driving the same two lines.
+ *    The reduced-motion and no-WebGL floors keep it ON (Byte never types the
+ *    headline in those modes — it places instantly, or is absent entirely);
  *  - a small mouse-parallax garnish: the headline nudges toward the
  *    pointer, the `[data-parallax]` micro-label(s) nudge the opposite way,
  *    both driven by `gsap.quickTo()` so repeated `pointermove` events reuse
  *    the same tweens instead of creating a new one per event (CLAUDE.md
- *    "GSAP conventions").
+ *    "GSAP conventions"). Unconditional — never suppressed.
  *
  * Both respect `prefers-reduced-motion`: the load reveal defers to
  * `revealLines()`'s own instant/no-transform branch, and the parallax is
@@ -148,8 +154,18 @@ function initParallax(hero: HTMLElement, headline: HTMLElement, labels: HTMLElem
 /**
  * Boots the hero section: the load reveal + the pointer-parallax garnish.
  * Guards every lookup — no-ops safely if `#hero` or its headline is absent.
+ *
+ * `opts.root` scopes the lookups (defaults to `document` — the pre-entrance
+ * no-arg behaviour is preserved for any other caller). `opts.headlineReveal`
+ * (default `true`) gates ONLY the masked-line load reveal + its bounded
+ * revert: `main.ts` passes `false` on the full-motion WebGL path, where Byte
+ * live-types phrase #1 into the headline instead (R-T6b-6). The guarded
+ * `ScrollTrigger.refresh()` and the pointer-parallax are set up regardless.
  */
-export function initHero(root: ParentNode = document): void {
+export function initHero(opts?: { root?: ParentNode; headlineReveal?: boolean }): void {
+  const root = opts?.root ?? document;
+  const headlineReveal = opts?.headlineReveal ?? true;
+
   const hero = root.querySelector<HTMLElement>('#hero');
   const headline = hero?.querySelector<HTMLElement>('.hero__headline');
   if (!hero || !headline) {
@@ -160,22 +176,30 @@ export function initHero(root: ParentNode = document): void {
   // elapses), never gated on anything that can hang forever. No
   // `scrollTrigger` — this is a load reveal, not a scroll one.
   void whenFontsSettled().then(() => {
-    const revealCleanup = revealLines(headline);
+    // R-T6b-6: run the masked-line reveal (and its bounded revert) ONLY when
+    // `headlineReveal` is true. On the full-motion WebGL path Byte itself
+    // live-types phrase #1 into this headline (the entrance — see `main.ts`/
+    // `createBytePet`), so the caller suppresses the reveal to keep the two
+    // from driving the same two lines at once. The `ScrollTrigger.refresh()`
+    // below still runs either way.
+    if (headlineReveal) {
+      const revealCleanup = revealLines(headline);
 
-    // Revert the load-reveal SplitText once the mask-rise has played
-    // (R-T6a-4): unwraps SplitText's line/mask wrappers so the retype caret's
-    // offsetParent is `#hero-headline` itself (see REVEAL_REVERT_S). Bounded
-    // (a single `delayedCall`, not a recurring one) and guarded — a failed
-    // revert is a missed nice-to-have (the retype still finds its lines via
-    // their `data-byte-line` tags), never a broken page, mirroring the
-    // `ScrollTrigger.refresh()` guard below.
-    gsap.delayedCall(REVEAL_REVERT_S, () => {
-      try {
-        revealCleanup();
-      } catch {
-        // Defensive only — see the comment above.
-      }
-    });
+      // Revert the load-reveal SplitText once the mask-rise has played
+      // (R-T6a-4): unwraps SplitText's line/mask wrappers so the retype caret's
+      // offsetParent is `#hero-headline` itself (see REVEAL_REVERT_S). Bounded
+      // (a single `delayedCall`, not a recurring one) and guarded — a failed
+      // revert is a missed nice-to-have (the retype still finds its lines via
+      // their `data-byte-line` tags), never a broken page, mirroring the
+      // `ScrollTrigger.refresh()` guard below.
+      gsap.delayedCall(REVEAL_REVERT_S, () => {
+        try {
+          revealCleanup();
+        } catch {
+          // Defensive only — see the comment above.
+        }
+      });
+    }
 
     // The reveal ScrollTriggers (this section's own, plus manifesto/work/
     // footer's — all booted synchronously earlier in the same `bootstrap()`
