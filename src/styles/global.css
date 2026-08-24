@@ -268,12 +268,72 @@ small,
   line-height: 1.05;
   letter-spacing: -0.01em;
   min-height: calc(1.05em * 2);
+  /* Positioning context for the retype caret: `renderRetype` (pet/retype.ts)
+     moves `[data-byte-caret]` via `transform`, read relative to this
+     element (see that function's doc comment). Adding `position: relative`
+     here does not itself shift any layout — it only changes what
+     descendant `offsetLeft`/`offsetTop` are measured against. */
+  position: relative;
 }
 
 .hero__line {
   display: block;
   white-space: nowrap;
   hyphens: none;
+  /* CLS-0 companion to the headline's own 2-line min-height above: an
+     emptied line (mid-delete during a retype pass, see `retype.ts`) still
+     reserves its own row, so deleting every char on one line never
+     collapses that line's height. `1.05em` matches this element's
+     line-height. */
+  min-height: 1.05em;
+}
+
+/*
+ * Per-char spans built by `renderRetype` (pet/retype.ts) — one per
+ * character of the active headline phrase, rebuilt on every frame.
+ * `display: inline` so kerning/letter-spacing/line wrapping read exactly
+ * like normal text; `.hero__line` above stays `white-space: nowrap`.
+ */
+.byte-char {
+  display: inline;
+}
+
+/*
+ * Byte's DOM caret. `renderRetype` moves this element (found by
+ * `[data-byte-caret]` — an attribute, not a class, matching the
+ * `[data-byte-line]` convention so `pet/` stays decoupled from any
+ * page-specific class name; a later task's `createBytePet` creates and
+ * appends the real element) with a `transform` WRITE only — it is never
+ * inserted between char spans and its `display` is never toggled, so it
+ * cannot reflow `.hero__headline` (CLS 0).
+ *
+ * The blink below is CSS-only and always on: SPEC §12 explicitly keeps it
+ * running even under reduced motion (like a native text-input caret), so
+ * it is a hard-step keyframe living outside of any media query — see the
+ * explicit opt-back-in further down, since the reduced-motion block below
+ * otherwise freezes every animation on the page.
+ */
+[data-byte-caret] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0.06em;
+  height: 1.05em;
+  background: var(--accent);
+  pointer-events: none;
+  will-change: transform;
+  animation: byte-caret-blink 1s steps(1, end) infinite;
+}
+
+@keyframes byte-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 
 /* Drifting micro-label — parallax speed hook consumed by a later ticket;
@@ -601,5 +661,15 @@ small,
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Exception: the retype caret's blink (SPEC §12 "blink stays") keeps
+     running even under reduced motion, same as a native text-input
+     caret — without this override the blanket freeze above would still
+     catch `[data-byte-caret]` (it matches the `*` selector) and leave it
+     frozen fully visible instead of blinking. */
+  [data-byte-caret] {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
   }
 }

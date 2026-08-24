@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRetypeSchedule, createRetype } from './retype';
+import { buildRetypeSchedule, createRetype, renderRetype } from './retype';
 import type { RetypeFrame } from './retype';
 
 /**
@@ -305,5 +305,142 @@ describe('createRetype: 6. isBusy() / step() lifecycle', () => {
     const final = r.step(secondStart + secondTotalMs + 500); // past completion
     expect(final).toEqual({ line0: 'GO', line1: '', caretIndex: { line: 0, col: 2 } });
     expect(r.isBusy()).toBe(false);
+  });
+});
+
+/**
+ * `renderRetype` is this file's one DOM-touching function (see its doc
+ * comment) — these tests are structural, not pixel-based: jsdom has no real
+ * layout engine, so `offsetLeft`/`offsetTop`/`offsetWidth` are always 0 and
+ * `getBoundingClientRect()` always returns zeros. That's fine here — we
+ * assert span count/text and "a transform was written", never a specific
+ * pixel value.
+ *
+ * Fixture mirrors the real contract (R-T6a-3): the two line elements carry
+ * `[data-byte-line="0"|"1"]` (attributes, not a page class — see
+ * `renderRetype`'s doc comment), and the caret is a plain element already
+ * appended by the caller, exactly like `createBytePet` will do in Task 4.
+ */
+function buildHeadlineFixture(): { headlineEl: HTMLElement; caretEl: HTMLElement } {
+  const headlineEl = document.createElement('h1');
+
+  const line0El = document.createElement('span');
+  line0El.setAttribute('data-byte-line', '0');
+
+  const line1El = document.createElement('span');
+  line1El.setAttribute('data-byte-line', '1');
+
+  const caretEl = document.createElement('span');
+
+  headlineEl.append(line0El, line1El, caretEl);
+
+  return { headlineEl, caretEl };
+}
+
+describe('renderRetype: builds per-char spans', () => {
+  it('one .byte-char span per character on each line; an empty line gets none', () => {
+    const { headlineEl, caretEl } = buildHeadlineFixture();
+    const frame: RetypeFrame = { line0: 'AB', line1: '', caretIndex: { line: 0, col: 2 } };
+
+    renderRetype(frame, headlineEl, caretEl);
+
+    const line0El = headlineEl.querySelector('[data-byte-line="0"]')!;
+    const line1El = headlineEl.querySelector('[data-byte-line="1"]')!;
+
+    const line0Chars = Array.from(line0El.querySelectorAll('.byte-char'));
+    expect(line0Chars.map((el) => el.textContent)).toEqual(['A', 'B']);
+    expect(line1El.querySelectorAll('.byte-char').length).toBe(0);
+  });
+
+  it('sets a non-empty transform on the caret element', () => {
+    const { headlineEl, caretEl } = buildHeadlineFixture();
+    const frame: RetypeFrame = { line0: 'AB', line1: '', caretIndex: { line: 0, col: 2 } };
+
+    renderRetype(frame, headlineEl, caretEl);
+
+    expect(caretEl.style.transform).not.toBe('');
+  });
+});
+
+describe('renderRetype: idempotent + rebuild', () => {
+  it('rendering the same frame twice yields the same span count/text', () => {
+    const { headlineEl, caretEl } = buildHeadlineFixture();
+    const frame: RetypeFrame = { line0: 'HEY', line1: 'YOU', caretIndex: { line: 1, col: 3 } };
+
+    renderRetype(frame, headlineEl, caretEl);
+    const firstPass = Array.from(headlineEl.querySelectorAll('.byte-char')).map(
+      (el) => el.textContent,
+    );
+
+    renderRetype(frame, headlineEl, caretEl);
+    const secondPass = Array.from(headlineEl.querySelectorAll('.byte-char')).map(
+      (el) => el.textContent,
+    );
+
+    expect(secondPass).toEqual(firstPass);
+    expect(secondPass).toEqual(['H', 'E', 'Y', 'Y', 'O', 'U']);
+  });
+
+  it('a shorter frame after a longer one leaves no stale trailing chars', () => {
+    const { headlineEl, caretEl } = buildHeadlineFixture();
+
+    renderRetype(
+      { line0: 'HELLO', line1: 'WORLD', caretIndex: { line: 1, col: 5 } },
+      headlineEl,
+      caretEl,
+    );
+    renderRetype({ line0: 'HI', line1: '', caretIndex: { line: 0, col: 2 } }, headlineEl, caretEl);
+
+    const line0El = headlineEl.querySelector('[data-byte-line="0"]')!;
+    const line1El = headlineEl.querySelector('[data-byte-line="1"]')!;
+
+    expect(Array.from(line0El.querySelectorAll('.byte-char')).map((el) => el.textContent)).toEqual([
+      'H',
+      'I',
+    ]);
+    expect(line1El.querySelectorAll('.byte-char').length).toBe(0);
+  });
+});
+
+describe('renderRetype: defensive against a missing [data-byte-line] contract', () => {
+  it('does not throw when both line elements are missing', () => {
+    const headlineEl = document.createElement('h1'); // no [data-byte-line] children at all
+    const caretEl = document.createElement('span');
+    const frame: RetypeFrame = { line0: 'AB', line1: 'CD', caretIndex: { line: 0, col: 1 } };
+
+    expect(() => renderRetype(frame, headlineEl, caretEl)).not.toThrow();
+  });
+
+  it('no-ops (does not partially render) when only one line element is missing', () => {
+    const headlineEl = document.createElement('h1');
+    const line0El = document.createElement('span');
+    line0El.setAttribute('data-byte-line', '0');
+    headlineEl.append(line0El); // line1 deliberately absent
+    const caretEl = document.createElement('span');
+    const frame: RetypeFrame = { line0: 'AB', line1: 'CD', caretIndex: { line: 0, col: 1 } };
+
+    expect(() => renderRetype(frame, headlineEl, caretEl)).not.toThrow();
+    expect(line0El.querySelectorAll('.byte-char').length).toBe(0);
+  });
+});
+
+describe('renderRetype: CLS proxy — no elements added to headlineEl itself', () => {
+  it('headlineEl.children.length is unchanged across renders', () => {
+    const { headlineEl, caretEl } = buildHeadlineFixture();
+    const before = headlineEl.children.length; // line0 + line1 + caret
+
+    renderRetype(
+      { line0: 'AB', line1: 'CD', caretIndex: { line: 0, col: 1 } },
+      headlineEl,
+      caretEl,
+    );
+    renderRetype(
+      { line0: 'A', line1: 'CDEF', caretIndex: { line: 1, col: 4 } },
+      headlineEl,
+      caretEl,
+    );
+
+    expect(before).toBe(3);
+    expect(headlineEl.children.length).toBe(before);
   });
 });

@@ -269,3 +269,83 @@ export function createRetype(cfg: RetypeConfig): {
 
   return { enqueue, step, isBusy };
 }
+
+/**
+ * The DOM applier: paints one `RetypeFrame` (as produced by `createRetype`'s
+ * `step()`) — rebuilding each headline line's per-char spans and moving a
+ * caret element to match. This is the one function in this file that
+ * touches the DOM; everything above stays pure (see the module doc
+ * comment). It still imports neither `gsap` nor `three`: the caret's blink
+ * is a CSS `@keyframes` (see `global.css`), and Byte's 3D glide-to-caret is
+ * a LATER task's job, layered on top of this same frame — this function
+ * only paints the headline text + caret position.
+ *
+ * The two line elements are found via `[data-byte-line="0"]` /
+ * `[data-byte-line="1"]` inside `headlineEl` — attributes, not a page CSS
+ * class (R-T6a-3), so this stays portable and survives the hero's
+ * SplitText wrapping; a later task (`createBytePet`) sets them on the real
+ * headline markup. If either is missing this is a no-op — it never
+ * partially renders one line while leaving the other untouched.
+ *
+ * Caret positioning is a layout READ (`offsetLeft`/`offsetTop`/
+ * `offsetWidth`) followed by a `transform` WRITE on the already-appended
+ * `caretEl` — never an in-flow insertion, so it cannot reflow
+ * `headlineEl` (CLS 0). Because `headlineEl` has `position: relative`
+ * (see `global.css`) and each line element stays `position: static`, both
+ * the line elements' and their char spans' `offsetLeft`/`offsetTop` are
+ * already relative to `headlineEl` itself (its nearest positioned
+ * ancestor) — no extra coordinate math needed.
+ */
+export function renderRetype(
+  frame: RetypeFrame,
+  headlineEl: HTMLElement,
+  caretEl: HTMLElement,
+): void {
+  const line0El = headlineEl.querySelector<HTMLElement>('[data-byte-line="0"]');
+  const line1El = headlineEl.querySelector<HTMLElement>('[data-byte-line="1"]');
+
+  if (!line0El || !line1El) {
+    return;
+  }
+
+  renderLine(line0El, frame.line0);
+  renderLine(line1El, frame.line1);
+
+  const activeLineEl = frame.caretIndex.line === 0 ? line0El : line1El;
+  const col = frame.caretIndex.col;
+  const charEls = activeLineEl.querySelectorAll<HTMLElement>('.byte-char');
+  // The char just before the caret, if any — falls back to the active
+  // line's own left edge (col === 0, or a defensively out-of-range col).
+  const caretCharEl = col > 0 ? charEls[col - 1] : undefined;
+
+  const x = caretCharEl
+    ? caretCharEl.offsetLeft + caretCharEl.offsetWidth
+    : activeLineEl.offsetLeft;
+  const y = activeLineEl.offsetTop;
+
+  caretEl.style.transform = `translate(${x}px, ${y}px)`;
+}
+
+/**
+ * Rebuilds one line element's content as one `<span class="byte-char">`
+ * per character of `text`, each char set via `textContent` (never
+ * innerHTML string interpolation). Always clears first — rebuild every
+ * call, per the brief, since these strings are short — so a shrinking
+ * line (mid-backspace) never leaves stale trailing spans from a longer
+ * previous frame; an empty `text` leaves zero children (the CSS
+ * `min-height` on `.hero__line` keeps that line's row height, CLS 0).
+ *
+ * Indexes `text` by UTF-16 code unit (`text[i]`/`text.length`), matching
+ * `buildRetypeSchedule`'s own `.length`/`.slice()` semantics for
+ * `caretIndex.col` — the two stay in lockstep for any input this engine
+ * is ever given (plain-ASCII headline phrases).
+ */
+function renderLine(lineEl: HTMLElement, text: string): void {
+  lineEl.textContent = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const charEl = document.createElement('span');
+    charEl.className = 'byte-char';
+    charEl.textContent = text[i];
+    lineEl.appendChild(charEl);
+  }
+}
