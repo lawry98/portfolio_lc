@@ -210,12 +210,15 @@ export function buildRetypeSchedule(
  * call re-anchors the schedule's start). `step(now)` is a pure read of the
  * schedule against `now`; it mutates only the one-time `startMs` anchor and
  * the `busy`/`current` bookkeeping at completion — still no wall-clock read
- * in here, `now` is supplied by the caller every time.
+ * in here, `now` is supplied by the caller every time. `reset(lines)` re-seeds
+ * the settled phrase without animating (the entrance uses it to start from an
+ * empty headline) — see its own doc comment below.
  */
 export function createRetype(cfg: RetypeConfig): {
   enqueue(next: readonly [string, string]): void;
   step(now: number): RetypeFrame | null;
   isBusy(): boolean;
+  reset(lines: readonly [string, string]): void;
 } {
   const { initial, ...rest } = cfg;
 
@@ -267,7 +270,23 @@ export function createRetype(cfg: RetypeConfig): {
     return busy;
   }
 
-  return { enqueue, step, isBusy };
+  /**
+   * Re-seed the settled phrase WITHOUT animating: drop any in-flight schedule
+   * and treat `lines` as the phrase now on-screen. The entrance re-seeds to
+   * `['', '']` so the next `enqueue` types phrase #1 up from empty; a
+   * subsequent `enqueue(next)` builds its schedule `from` this value (not from
+   * whatever was previously settled or mid-flight). Purity is unchanged — no
+   * imports, no clock, no random.
+   */
+  function reset(lines: readonly [string, string]): void {
+    current = lines;
+    pending = lines;
+    keyframes = [];
+    startMs = null;
+    busy = false;
+  }
+
+  return { enqueue, step, isBusy, reset };
 }
 
 /**

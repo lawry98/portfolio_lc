@@ -85,8 +85,10 @@ export interface RigSource {
   clips: Partial<Record<ClipName, THREE.AnimationClip>>;
 }
 
-/** Byte's states (SPEC §6). Full union defined once here; T4 drives the idle-brain subset,
- *  later tickets drive dashing/eating/retyping/traveling behaviour (R-T4-9). */
+/** Byte's states (SPEC §6). Full union defined once here. T4 drove the idle-brain
+ *  subset; T5 added the feed beats (dashing/eating); T6a added the retype reward
+ *  (retyping); T6b's entrance drives hidden/entering (hidden --SHOWN--> entering
+ *  --ENTERED--> idle). Only `traveling` is still reserved for a later ticket (R-T4-9). */
 export type PetState =
   | 'hidden'
   | 'entering'
@@ -105,9 +107,10 @@ export type PetState =
  *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3);
  *  REACHED/ATE come from the feeder (T5) marking dash-arrival and eat-animation-
  *  complete respectively; RETYPED comes from the retype-driver (T6) marking
- *  retype-animation-complete — the FSM only reacts to these, it never times a
- *  real dash/eat/retype itself. Time-based transitions are NOT events — they
- *  happen inside tickTimers(). */
+ *  retype-animation-complete; SHOWN/ENTERED come from the entrance driver (T6b)
+ *  marking the drop-in start and phrase-#1 live-type completion respectively —
+ *  the FSM only reacts to these, it never times a real dash/eat/retype/entrance
+ *  itself. Time-based transitions are NOT events — they happen inside tickTimers(). */
 export type PetEvent =
   | 'POINTER_NEAR'
   | 'POINTER_FAR'
@@ -116,10 +119,14 @@ export type PetEvent =
   | 'PEEK'
   | 'REACHED' // feeder: Byte arrived at the food (dashing -> eating)
   | 'ATE' // feeder: the eat animation finished (eating -> retyping)
-  | 'RETYPED'; // engine: retype animation finished (retyping -> idle)
+  | 'RETYPED' // engine: retype animation finished (retyping -> idle)
+  | 'SHOWN' // entrance: overlay lifted / drop-in begins (hidden -> entering)
+  | 'ENTERED'; // entrance: phrase #1 typed (entering -> idle)
 
-/** Timer durations (ms). All optional; createFSM applies the defaults below. */
+/** Timer durations (ms) plus the initial state. All optional; createFSM applies the
+ *  defaults below (`initialState` excepted — it's a start value, not a duration). */
 export interface PetFSMConfig {
+  initialState?: PetState; // default 'idle' — the entrance (T6b) starts it in 'hidden'
   curiousToInvitedMs?: number; // default 2500  (SPEC "~2.5s curious, no click")
   idleToSleepMs?: number; // default 30000 (SPEC "30s idle")
   peekMs?: number; // default 1200  (SPEC "peek over for ~1.2s")
@@ -127,6 +134,7 @@ export interface PetFSMConfig {
   dashMs?: number; // default 1200 — SAFETY cap only; dashing normally exits on REACHED. Feeder dash is 380-600ms by distance; this must stay > that so it never pre-empts a real dash.
   eatMs?: number; // default 1500 — SAFETY cap only; eating normally exits on ATE.
   retypeMs?: number; // default 4000 — SAFETY cap only; retyping normally exits on RETYPED.
+  enteringMs?: number; // default 8000 — SAFETY cap only; entering normally exits on ENTERED.
 }
 
 /** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */

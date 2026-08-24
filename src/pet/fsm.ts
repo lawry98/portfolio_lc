@@ -2,10 +2,12 @@
  * Byte's brain — a pure, deterministic finite-state machine deciding Byte's
  * state from interaction events + timers. T4 built the idle-brain subset
  * (SPEC §6); T5 added the feeding beats (dashing -> eating, driven by the
- * feeder's REACHED/ATE events) on the same shape; T6 extends the feed's
+ * feeder's REACHED/ATE events) on the same shape; T6a extended the feed's
  * completion into the retype reward (eating -> retyping -> idle, driven by
- * the retype-driver's RETYPED event) — traveling remains for a later ticket
- * (R-T4-9).
+ * the retype-driver's RETYPED event); T6b adds the entrance drop-in
+ * (hidden -> entering -> idle, driven by the entrance driver's SHOWN/ENTERED
+ * events and started via `initialState: 'hidden'`) — traveling remains for a
+ * later ticket (R-T4-9).
  *
  * Purity is the whole point (and the ticket's central requirement): this
  * file imports neither `gsap` nor `three`, and never reads the wall clock
@@ -38,7 +40,16 @@
  */
 import type { PetEvent, PetFSM, PetFSMConfig, PetState } from './types';
 
-const DEFAULTS: Required<PetFSMConfig> = {
+/**
+ * Config with every DURATION knob resolved to its default. `initialState` is
+ * omitted on purpose — it's a start value, not a duration, so it never gets a
+ * DEFAULTS entry; `createFSM` reads it straight off the caller's `cfg` with
+ * `?? 'idle'`. Mirrors retype.ts's `ResolvedRetypeConfig`, which likewise omits
+ * its own non-duration field (`initial`).
+ */
+type ResolvedFSMConfig = Required<Omit<PetFSMConfig, 'initialState'>>;
+
+const DEFAULTS: ResolvedFSMConfig = {
   curiousToInvitedMs: 2500,
   idleToSleepMs: 30000,
   peekMs: 1200,
@@ -46,6 +57,7 @@ const DEFAULTS: Required<PetFSMConfig> = {
   dashMs: 1200,
   eatMs: 1500,
   retypeMs: 4000,
+  enteringMs: 8000,
 };
 
 /**
@@ -67,8 +79,11 @@ const DEFAULTS: Required<PetFSMConfig> = {
  *    retype-driver's RETYPED (or its own retypeMs safety-cap timer), never
  *    via this overlay.
  *  - `sleeping`/`waking` are excluded (already asleep / already waking up);
- *  `hidden`/`entering`/`traveling` aren't reachable by any current transition
- *  yet but are excluded on principle — none is a "resting" state.
+ *  - `hidden`/`entering` ARE reachable now (T6b's entrance drop-in) but are
+ *    still excluded — the mid-entrance beats are not "resting" states, so Byte
+ *    can't drift to sleep before phrase #1 has even finished typing;
+ *    `traveling` isn't reachable by any transition yet but is excluded on the
+ *    same principle — none is a "resting" state.
  */
 function isSleepEligible(state: PetState): boolean {
   return state === 'idle' || state === 'curious' || state === 'invited' || state === 'peeking';
@@ -83,7 +98,7 @@ function isSleepEligible(state: PetState): boolean {
 function specificTimerTarget(
   state: PetState,
   stateTimerMs: number,
-  cfg: Required<PetFSMConfig>,
+  cfg: ResolvedFSMConfig,
   pendingFeed: boolean,
 ): PetState | null {
   switch (state) {
@@ -102,6 +117,10 @@ function specificTimerTarget(
       // Safety cap only — the retype-driver's RETYPED normally fires well
       // before this.
       return stateTimerMs >= cfg.retypeMs ? 'idle' : null;
+    case 'entering':
+      // Safety cap only — the entrance driver's ENTERED (phrase #1 finished
+      // live-typing) normally fires well before this; mirrors retyping.
+      return stateTimerMs >= cfg.enteringMs ? 'idle' : null;
     case 'waking':
       // Because pendingFeed — the wake→feed payoff (T5 renders it).
       return pendingFeed && stateTimerMs >= cfg.wakeMs ? 'dashing' : null;
@@ -111,14 +130,18 @@ function specificTimerTarget(
 }
 
 /**
- * `createFSM(cfg)` — the pure FSM handle. Starts in `idle` (the
- * preloader/entrance choreography that would use `hidden`/`entering` is T6;
- * in T4 the bot simply appears idle).
+ * `createFSM(cfg)` — the pure FSM handle. Starts in `cfg.initialState`,
+ * defaulting to `idle`. T6b's entrance constructs it with `initialState:
+ * 'hidden'` so the drop-in can play (hidden --SHOWN--> entering --ENTERED-->
+ * idle); every other caller omits it and Byte simply appears idle.
  */
 export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
-  const config: Required<PetFSMConfig> = { ...DEFAULTS, ...cfg };
+  const config: ResolvedFSMConfig = { ...DEFAULTS, ...cfg };
 
-  let current: PetState = 'idle';
+  // `initialState` is a start value, not a duration, so it's read straight off
+  // `cfg` (never merged into DEFAULTS) — default `idle` keeps the no-config
+  // baseline unchanged.
+  let current: PetState = cfg.initialState ?? 'idle';
   let stateTimerMs = 0;
   let sleepAccumMs = 0;
   /** Set by sleeping's POINTER_DOWN; consumed when waking's timer elapses. */
@@ -275,10 +298,31 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         }
         return;
 
+      case 'hidden':
+        // Entrance beat 1 (hidden -> entering): the overlay lifts / the drop-in
+        // begins on SHOWN; every other event is ignored. Like `retyping`, this
+        // does NOT reset the sleep accumulator — `hidden` isn't sleep-eligible
+        // (see `isSleepEligible`), so there's nothing to protect.
+        if (event === 'SHOWN') {
+          enter('entering');
+        }
+        return;
+
+      case 'entering':
+        // Entrance beat 2 (entering -> idle): phrase #1 has finished live-typing
+        // on ENTERED; every other event is ignored. The enteringMs safety cap
+        // also exits straight to idle (see `specificTimerTarget`), mirroring
+        // retyping's retypeMs. Not sleep-eligible either, so — as above — no
+        // accumulator reset is needed here.
+        if (event === 'ENTERED') {
+          enter('idle');
+        }
+        return;
+
       // `waking` ignores every event — it runs to completion solely via its
-      // own state timer (see `specificTimerTarget`). (`hidden`/`entering`/
-      // `traveling` fall through here too; none is reachable by any
-      // transition yet.)
+      // own state timer (see `specificTimerTarget`). (`traveling` falls through
+      // here too; it isn't reachable by any transition yet — the entrance's
+      // `hidden`/`entering` now have their own cases above.)
       default:
         return;
     }

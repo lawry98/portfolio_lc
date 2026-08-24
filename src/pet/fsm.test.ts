@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFSM } from './fsm';
-import type { PetState } from './types';
+import type { PetFSMConfig, PetState } from './types';
 
 describe('createFSM: initial state', () => {
   it('starts in idle', () => {
@@ -438,6 +438,185 @@ describe('createFSM: retyping', () => {
       expect(fsm.state()).toBe('idle');
     },
   );
+});
+
+describe('createFSM: entrance (hidden/entering)', () => {
+  /** Reach `entering` the real way — start `hidden`, then SHOWN. `cfg` (e.g.
+   *  a custom `enteringMs`) is applied but never overrides the forced
+   *  `initialState: 'hidden'`. */
+  function enterEntering(cfg: PetFSMConfig = {}) {
+    const fsm = createFSM({ ...cfg, initialState: 'hidden' });
+    fsm.send('SHOWN');
+    return fsm;
+  }
+
+  it('initialState config starts the FSM in that state (hidden)', () => {
+    expect(createFSM({ initialState: 'hidden' }).state()).toBe('hidden');
+  });
+
+  it('initialState defaults to idle when omitted (baseline behaviour unchanged)', () => {
+    expect(createFSM().state()).toBe('idle');
+    expect(createFSM({}).state()).toBe('idle');
+  });
+
+  it('hidden -> entering on SHOWN', () => {
+    const fsm = createFSM({ initialState: 'hidden' });
+    fsm.send('SHOWN');
+    expect(fsm.state()).toBe('entering');
+  });
+
+  it('entering -> idle on ENTERED (phrase #1 finished live-typing)', () => {
+    const fsm = enterEntering();
+    expect(fsm.state()).toBe('entering');
+
+    fsm.send('ENTERED');
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it('hidden ignores every event but SHOWN (no transition, no onEnter)', () => {
+    const fsm = createFSM({ initialState: 'hidden' });
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    for (const event of [
+      'POINTER_NEAR',
+      'POINTER_FAR',
+      'POINTER_DOWN',
+      'FEED',
+      'PEEK',
+      'REACHED',
+      'ATE',
+      'RETYPED',
+      'ENTERED', // the entering->idle event is illegal while still hidden
+    ] as const) {
+      fsm.send(event);
+    }
+
+    expect(fsm.state()).toBe('hidden');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('entering ignores every event but ENTERED (no transition, no onEnter)', () => {
+    const fsm = enterEntering();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    for (const event of [
+      'POINTER_NEAR',
+      'POINTER_FAR',
+      'POINTER_DOWN',
+      'FEED',
+      'PEEK',
+      'REACHED',
+      'ATE',
+      'RETYPED',
+      'SHOWN', // the hidden->entering event is illegal once already entering
+    ] as const) {
+      fsm.send(event);
+    }
+
+    expect(fsm.state()).toBe('entering');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('hidden does NOT reset the sleep accumulator on illegal events', () => {
+    // hidden is not sleep-eligible, so the accumulator can't discharge while
+    // hidden — observe it after walking to idle (SHOWN/ENTERED never reset it
+    // either). If any illegal event below wrongly reset the accumulator, the
+    // walk would land idle with a fresh clock and NOT sleep at these ticks.
+    const fsm = createFSM({ initialState: 'hidden' });
+
+    fsm.tickTimers(20000); // accum = 20000; hidden stays hidden (no sleep)
+    expect(fsm.state()).toBe('hidden');
+
+    fsm.send('FEED'); // all illegal in hidden — must NOT reset the accumulator
+    fsm.send('POINTER_DOWN');
+    fsm.send('POINTER_NEAR');
+    expect(fsm.state()).toBe('hidden');
+
+    fsm.send('SHOWN'); // -> entering (accum still 20000)
+    fsm.send('ENTERED'); // -> idle (accum still 20000)
+    expect(fsm.state()).toBe('idle');
+
+    fsm.tickTimers(9999); // idle, accum = 29999 (< 30000)
+    expect(fsm.state()).toBe('idle');
+
+    fsm.tickTimers(1); // accum = 30000 -> sleeping (proves no reset upstream)
+    expect(fsm.state()).toBe('sleeping');
+  });
+
+  it('entering does NOT reset its enteringMs safety-cap state timer on illegal events', () => {
+    const fsm = enterEntering({ enteringMs: 1000 });
+
+    fsm.tickTimers(999); // 1ms shy of the cap
+    fsm.send('FEED'); // all illegal in entering — must NOT reset the state timer
+    fsm.send('POINTER_NEAR');
+    fsm.send('RETYPED');
+    expect(fsm.state()).toBe('entering');
+
+    fsm.tickTimers(1); // cumulative state timer = 1000 -> cap fires to idle
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it(
+    'entering -> idle after tickTimers(enteringMs) with no ENTERED ' +
+      '(safety cap only — the entrance driver normally fires ENTERED long before this)',
+    () => {
+      const fsm = enterEntering({ enteringMs: 100 });
+
+      fsm.tickTimers(99);
+      expect(fsm.state()).toBe('entering');
+
+      fsm.tickTimers(1);
+      expect(fsm.state()).toBe('idle');
+    },
+  );
+
+  it('hidden is NOT sleep-eligible: ticking past idleToSleepMs stays hidden', () => {
+    const fsm = createFSM({ initialState: 'hidden' });
+    fsm.tickTimers(60000); // well past idleToSleepMs (30000)
+    expect(fsm.state()).toBe('hidden');
+  });
+
+  it('entering is NOT sleep-eligible: only its enteringMs cap exits it, never the sleep overlay', () => {
+    // enteringMs high enough that the safety cap can't pre-empt this.
+    const fsm = enterEntering({ enteringMs: 90000 });
+    expect(fsm.state()).toBe('entering');
+
+    fsm.tickTimers(60000); // > idleToSleepMs (30000), < enteringMs (90000)
+    expect(fsm.state()).toBe('entering');
+  });
+
+  it('onEnter fires (entering, hidden) then (idle, entering); never for the initial hidden', () => {
+    const fsm = createFSM({ initialState: 'hidden' });
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter); // subscribe AFTER construction
+    expect(onEnter).not.toHaveBeenCalled(); // no fire for the initial hidden
+
+    fsm.send('SHOWN');
+    expect(fsm.state()).toBe('entering');
+
+    fsm.send('ENTERED');
+    expect(fsm.state()).toBe('idle');
+
+    expect(onEnter.mock.calls).toEqual([
+      ['entering', 'hidden'],
+      ['idle', 'entering'],
+    ]);
+  });
+
+  it('full entrance walk hidden -> entering -> idle lands in idle; idle behaviour (PEEK) then works', () => {
+    const fsm = createFSM({ initialState: 'hidden' });
+
+    fsm.send('SHOWN');
+    fsm.send('ENTERED');
+    expect(fsm.state()).toBe('idle');
+
+    // Guards against regressing the idle brain: the pre-existing idle
+    // transitions must still work once the entrance has handed off.
+    fsm.send('PEEK');
+    expect(fsm.state()).toBe('peeking');
+  });
 });
 
 describe('createFSM: sleeping / waking', () => {

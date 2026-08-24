@@ -308,6 +308,65 @@ describe('createRetype: 6. isBusy() / step() lifecycle', () => {
   });
 });
 
+describe('createRetype: reset() re-seeds the settled phrase (entrance primitive)', () => {
+  it('abandons any in-flight schedule (isBusy() false) and re-seeds `from` for the next enqueue', () => {
+    const r = createRetype({ initial: FROM });
+    r.enqueue(TO); // FROM -> TO, now in flight
+    expect(r.isBusy()).toBe(true);
+
+    // Re-seed to a phrase distinct from both `initial` (FROM) and the
+    // abandoned in-flight target (TO), so the next schedule's `from` is
+    // unambiguously the reset value.
+    const reseeded: readonly [string, string] = ['RE-SEEDED', 'LINE TWO'];
+    r.reset(reseeded);
+    expect(r.isBusy()).toBe(false);
+
+    // The next enqueue must build its schedule FROM the reset value. keyframe 0
+    // is always the full `from` phrase (caret at the end of its bottom line) —
+    // observe it as the first stepped frame.
+    r.enqueue(['GO', '']);
+    const first = r.step(1_000); // anchors the clock; elapsed 0 -> keyframe 0
+    expect(first).toEqual({
+      line0: 'RE-SEEDED',
+      line1: 'LINE TWO',
+      caretIndex: { line: 1, col: 'LINE TWO'.length },
+    });
+  });
+
+  it("reset(['','']) makes the next enqueue a pure type-up from empty (both-empty keyframe 0, zero deletes)", () => {
+    const r = createRetype({ initial: FROM });
+    // Whatever was on-screen, re-seed to empty so the entrance types phrase #1
+    // up from nothing (the entrance's real use of reset).
+    r.reset(['', '']);
+    expect(r.isBusy()).toBe(false);
+
+    // The engine's next enqueue builds exactly buildRetypeSchedule(current, next)
+    // with current === ['', ''] after the reset; cross-check that schedule's shape.
+    const target: readonly [string, string] = ['FULL-STACK', '+AI'];
+    const schedule = buildRetypeSchedule(['', ''], target);
+
+    // keyframe 0: both lines empty (caret at the end of the empty bottom line).
+    expect(schedule[0].frame).toEqual({ line0: '', line1: '', caretIndex: { line: 1, col: 0 } });
+
+    // ZERO delete keyframes: the total char count never decreases across the
+    // whole schedule (a pure type — nothing is ever removed).
+    const total = (f: RetypeFrame): number => f.line0.length + f.line1.length;
+    for (let i = 1; i < schedule.length; i++) {
+      expect(total(schedule[i].frame)).toBeGreaterThanOrEqual(total(schedule[i - 1].frame));
+    }
+
+    // Drive the real engine through reset -> enqueue -> step and confirm it
+    // lands on the target with isBusy() false after stepping past the end.
+    r.enqueue(target);
+    expect(r.isBusy()).toBe(true);
+    const totalMs = schedule.at(-1)!.atMs;
+    r.step(0); // anchor
+    const final = r.step(totalMs + 500); // well past completion
+    expect(final).toEqual({ line0: 'FULL-STACK', line1: '+AI', caretIndex: { line: 1, col: 3 } });
+    expect(r.isBusy()).toBe(false);
+  });
+});
+
 /**
  * `renderRetype` is this file's one DOM-touching function (see its doc
  * comment) — these tests are structural, not pixel-based: jsdom has no real
