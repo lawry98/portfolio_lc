@@ -5,6 +5,7 @@
  * (see `scene.ts` for the pure pixel-space math + `hasWebGL()`).
  */
 import type * as THREE from 'three';
+import type { Phrase } from '../phrases';
 
 /**
  * Inputs to `createScene()` (Task 2). `headlineEl` sizes/positions the rig
@@ -145,11 +146,11 @@ export interface ClipPlayOptions {
 }
 
 /**
- * Inputs to `createBytePet()` (Task 4, SPEC §4.4). Only the fields Task 4
- * actually consumes — `noUnusedParameters` is on, so an option nothing reads
+ * Inputs to `createBytePet()` (SPEC §4.4). Only the fields there's a real
+ * consumer for — `noUnusedParameters` is on, so an option nothing reads
  * would fail the build. Later tickets extend this (`footerEl` for T8's
- * migration, `phrases`/`sounds` for T6/T7, `modelUrl` for T-GLB) once they
- * have a real consumer for each; adding them now would be dead weight.
+ * migration, `sounds` for T7, `modelUrl` for T-GLB) once they have a real
+ * consumer for each; adding them now would be dead weight.
  */
 export interface PetOptions {
   /** The live headline element Byte anchors to and sizes itself from (`unitPx` = its computed font-size). */
@@ -158,6 +159,15 @@ export interface PetOptions {
   theme?: 'light' | 'dark';
   /** Caller-supplied reduced-motion override. `createBytePet` also self-detects via `matchMedia` when this is absent — see its `gsap.matchMedia()` wiring. */
   reducedMotion?: boolean;
+  /**
+   * Ordered phrase cycle for the retype reward (SPEC §6/§10). `phrases[0]`
+   * should equal the static headline #1 (the phrase currently on-screen), so
+   * the first eat retypes into `phrases[1]`. Omitted (or a single-entry
+   * cycle) → the retype is a no-op pass-through: the FSM still advances
+   * eating→retyping→idle, the driver just fires `RETYPED` without editing the
+   * headline.
+   */
+  phrases?: readonly Phrase[];
 }
 
 /**

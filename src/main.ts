@@ -12,6 +12,7 @@ import { initLab } from './page/lab';
 import { hasWebGL } from './pet/scene';
 import { createBytePet } from './pet/createBytePet';
 import type { BytePetHandle } from './pet/types';
+import { phrases } from './phrases';
 
 /**
  * Byte demo entry point.
@@ -131,7 +132,15 @@ function bootstrap(): void {
 
   const reducedMotion = prefersReducedMotion();
 
-  bytePet = createBytePet(document.body, { headlineEl, theme: theme.current(), reducedMotion });
+  bytePet = createBytePet(document.body, {
+    headlineEl,
+    theme: theme.current(),
+    reducedMotion,
+    // The retype reward's phrase cycle (SPEC §6/§10). `phrases.identity[0]`
+    // is the static headline #1 already in the markup, so the first eat
+    // retypes into `identity[1]`, and so on, wrapping the cycle.
+    phrases: phrases.identity,
+  });
 
   // Footer FED counter (T5, SPEC §8.6) — lives in the footer (`index.html`),
   // not the hero. Wired here rather than inside `createBytePet` (which stays

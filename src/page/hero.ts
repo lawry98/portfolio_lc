@@ -35,6 +35,21 @@ gsap.registerPlugin(ScrollTrigger);
  */
 const FONTS_TIMEOUT_MS = 1500;
 
+/**
+ * Seconds after the load reveal fires before its SplitText is reverted
+ * (R-T6a-4). Comfortably past the ≤~1.1s mask-rise, so the animation always
+ * completes first. Reverting unwraps SplitText's `mask: 'lines'` line/mask
+ * wrappers and restores the original `.hero__line` spans (carrying the
+ * `data-byte-line` tags `createBytePet` set on them) as direct children of
+ * `#hero-headline` — which the retype caret's offset math depends on
+ * (`pet/createBytePet.ts` appends the caret to the headline expecting it to
+ * be the offsetParent; the mask wrappers would otherwise become that parent
+ * and skew the caret x/y). The retype itself still works without this via
+ * the `data-byte-line` attribute lookup (`pet/retype.ts`); the revert only
+ * keeps the caret geometry honest.
+ */
+const REVEAL_REVERT_S = 2;
+
 /** Parallax budget — "a few px", never more than this on either axis. */
 const PARALLAX_MAX_PX = 8;
 /**
@@ -145,7 +160,22 @@ export function initHero(root: ParentNode = document): void {
   // elapses), never gated on anything that can hang forever. No
   // `scrollTrigger` — this is a load reveal, not a scroll one.
   void whenFontsSettled().then(() => {
-    revealLines(headline);
+    const revealCleanup = revealLines(headline);
+
+    // Revert the load-reveal SplitText once the mask-rise has played
+    // (R-T6a-4): unwraps SplitText's line/mask wrappers so the retype caret's
+    // offsetParent is `#hero-headline` itself (see REVEAL_REVERT_S). Bounded
+    // (a single `delayedCall`, not a recurring one) and guarded — a failed
+    // revert is a missed nice-to-have (the retype still finds its lines via
+    // their `data-byte-line` tags), never a broken page, mirroring the
+    // `ScrollTrigger.refresh()` guard below.
+    gsap.delayedCall(REVEAL_REVERT_S, () => {
+      try {
+        revealCleanup();
+      } catch {
+        // Defensive only — see the comment above.
+      }
+    });
 
     // The reveal ScrollTriggers (this section's own, plus manifesto/work/
     // footer's — all booted synchronously earlier in the same `bootstrap()`

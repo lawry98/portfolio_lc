@@ -34,6 +34,7 @@ import { createFeeder } from './feed';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
+import { createRetype, renderRetype } from './retype';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
 type Theme = 'light' | 'dark';
@@ -119,6 +120,19 @@ const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'waking',
 ]);
 const REACQUIRE_DURATION_S = 0.3;
+
+/**
+ * T6 retype reward (SPEC §6 "Byte operates the caret"). `RETYPE_FOLLOW_*`
+ * time the per-frame `quickTo` glide of Byte's root to the live caret world
+ * position; `SPARK_*` size the minimal per-edit caret "spark" (a cheap
+ * box-shadow glow pulse — SPEC §18 explicitly sanctions tuning this at the
+ * "small spark links Byte↔caret" level during T6; a fuller 3D streak is
+ * deferrable polish). All hand-picked, free to retune.
+ */
+const RETYPE_FOLLOW_DURATION_S = 0.18;
+const SPARK_DURATION_S = 0.06;
+const SPARK_BLUR_PX = 8;
+const SPARK_SPREAD_PX = 2;
 
 /**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
@@ -247,6 +261,53 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
   }
 
+  // --- Retype reward: line tags + DOM caret (T6, R-T6a-3) -------------------
+  // Tag the headline's two line elements with `data-byte-line` attributes so
+  // `renderRetype` (retype.ts) finds them by ATTRIBUTE — never a page CSS
+  // class name, keeping `pet/` portable — and so the tags travel with the
+  // spans through the hero's async SplitText line-reveal (which wraps them;
+  // see hero.ts's bounded revert, R-T6a-4). Done synchronously here, at
+  // construction, before that reveal (fired off `whenFontsSettled()`, a later
+  // task) ever runs, so it always tags the ORIGINAL `.hero__line` spans.
+  const lineEls = Array.from(opts.headlineEl.children).slice(0, 2) as HTMLElement[];
+  lineEls.forEach((el, i) => el.setAttribute('data-byte-line', String(i)));
+
+  // Byte's DOM caret. Carries BOTH `class="byte-caret"` (CSS dimensions/color,
+  // global.css) AND the `data-byte-caret` attribute (the reduced-motion blink
+  // opt-back-in in global.css keys off the attribute). Appended as a DIRECT
+  // child of `headlineEl` so its offsetParent is `#hero-headline` — the
+  // coordinate frame `renderRetype`'s `offsetLeft`/`offsetTop` math assumes.
+  // Moved by `transform` WRITES only (renderRetype during a retype; the
+  // rest-position write in `onTick` otherwise), never inserted in flow, so it
+  // can never reflow the headline (CLS 0).
+  const caretEl = document.createElement('span');
+  caretEl.className = 'byte-caret';
+  caretEl.setAttribute('data-byte-caret', '');
+  caretEl.setAttribute('aria-hidden', 'true');
+  opts.headlineEl.appendChild(caretEl);
+
+  // --- Retype reward: phrase cycle + pure engine (T6) ----------------------
+  // `cycle[phraseIndex]` is the phrase CURRENTLY shown (`cycle[0]` == the
+  // static headline #1); each eat advances the index and retypes into the
+  // next. The engine is pure (retype.ts) — inject `Math.random` for the typed
+  // jitter, seed `initial` with the shown phrase so the first schedule
+  // deletes from the right text.
+  const cycle = opts.phrases ?? [];
+  let phraseIndex = 0;
+  function currentLinesText(): [string, string] {
+    return [lineEls[0]?.textContent ?? '', lineEls[1]?.textContent ?? ''];
+  }
+  const retype = createRetype({ initial: cycle[0] ?? currentLinesText(), random: Math.random });
+  // Whether a FULL-motion retype is being driven per-tick in `onTick` (false
+  // under reduced motion, where the retype is an instant text set instead).
+  let retypeActive = false;
+  // Free-running ms clock the engine's `step()` reads during a full retype —
+  // accumulated every tick (below); the engine re-anchors it on each enqueue.
+  let retypeClockMs = 0;
+  // Edit detector for the per-edit spark: the previous frame's total char
+  // count. `-1` so the first observed frame differs (a harmless spark).
+  let lastRetypeTotal = -1;
+
   // --- Tween bookkeeping -----------------------------------------------------
   // `track()` self-prunes on natural completion (composed with whatever
   // onComplete the caller already passed — `gsap.delayedCall`'s own
@@ -275,6 +336,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     return null;
   }
 
+  /** Schedules `fn` for gsap's NEXT ticker pass (mirrors `feed.ts`'s helper of
+   *  the same name) — never a synchronous `fsm.send()` inside an `onEnter`
+   *  dispatch, which would recurse through the listener loop mid-transition. */
+  function fireOnNextTick(fn: () => void): void {
+    track(gsap.delayedCall(0, fn));
+  }
+
   const mm = gsap.matchMedia();
 
   let blinkTimeline: ReturnType<typeof gsap.timeline> | null = null;
@@ -285,6 +353,25 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let hintTween: ReturnType<typeof gsap.to> | null = null;
   /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
   let reacquireTween: ReturnType<typeof gsap.to> | null = null;
+  // Per-frame Byte→caret follow (T6): `quickTo` so the per-tick target update
+  // during a retype reuses ONE tween per axis instead of spawning a fresh
+  // tween each frame (CLAUDE.md GSAP conventions). Created once here; drives
+  // `rig.object3d.position` ONLY while `retyping` (nothing else pins the root
+  // then — `retyping` isn't a HOME_STATE). NOT in `liveTweens` (quickTo owns
+  // its own reused tween) — `destroy()` kills it via `gsap.killTweensOf`.
+  const byteToCaretX = gsap.quickTo(rig.object3d.position, 'x', {
+    duration: RETYPE_FOLLOW_DURATION_S,
+    ease: 'power2',
+  });
+  const byteToCaretY = gsap.quickTo(rig.object3d.position, 'y', {
+    duration: RETYPE_FOLLOW_DURATION_S,
+    ease: 'power2',
+  });
+  // The per-edit caret spark. One shared proxy + a single named slot (mirrors
+  // `hintTween`): each edit kills+restarts the same tween via `killTracked`,
+  // so overlapping edits never accumulate competing box-shadow writers.
+  const sparkProxy = { v: 0 };
+  let sparkTween: ReturnType<typeof gsap.to> | null = null;
   // Whether the guaranteed-early peek (SPEC §6 "must happen within the first
   // ~10 idle seconds") has ever fired. Set once, on the FIRST successful
   // micro-behaviour roll of the bot's life, and never reset afterward — see
@@ -671,6 +758,82 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
   }
 
+  // --- Retype reward: caret spark + the retyping-entry driver (T6) ----------
+  /**
+   * A minimal per-edit "spark" linking Byte→caret (SPEC §6): a quick
+   * box-shadow glow pulse on the caret. Deliberately NOT a `transform`/scale
+   * tween — `renderRetype` and the rest-position write already own the
+   * caret's `transform`, and the CSS blink owns its `opacity`; box-shadow
+   * (driven off a numeric proxy so the accent stays a live `var()`) is the
+   * one channel nothing else writes. Skipped under reduced motion.
+   */
+  function sparkAtCaret(): void {
+    if (reducedActive) {
+      return;
+    }
+    sparkTween = killTracked(sparkTween);
+    sparkProxy.v = 0;
+    sparkTween = track(
+      gsap.to(sparkProxy, {
+        v: 1,
+        duration: SPARK_DURATION_S,
+        ease: 'power2.out',
+        yoyo: true,
+        repeat: 1,
+        onUpdate: () => {
+          caretEl.style.boxShadow = `0 0 ${SPARK_BLUR_PX * sparkProxy.v}px ${
+            SPARK_SPREAD_PX * sparkProxy.v
+          }px var(--accent)`;
+        },
+        onComplete: () => {
+          sparkTween = null;
+          caretEl.style.boxShadow = '';
+        },
+      }),
+    );
+  }
+
+  /**
+   * `retyping` entry (T6): retype the headline into the NEXT phrase in the
+   * cycle. Three paths, each firing `RETYPED` promptly so the FSM's
+   * retyping→idle drains without waiting on its 4s `retypeMs` safety cap (the
+   * feeder's queue-drain only runs on idle entry):
+   *  - No cycle / a single phrase → nothing to retype into: beat straight
+   *    through to `RETYPED` next tick (pass-through).
+   *  - Reduced motion (SPEC §12) → an INSTANT text set, no Byte glide, no
+   *    spark: enqueue, then drive the engine to completion with TWO `step()`s
+   *    — the first anchors the schedule's clock (elapsed 0), the second, well
+   *    past the schedule end, settles it and advances its `current` (see
+   *    retype.ts's `step` + retype.test.ts's own two-call completion). Render
+   *    the final frame, then fire `RETYPED` next tick. The caret's CSS blink
+   *    stays (global.css).
+   *  - Full motion → enqueue and flip `retypeActive`; `onTick` drives it
+   *    per-frame and fires `RETYPED` on engine completion.
+   */
+  function handleEnterRetyping(): void {
+    if (cycle.length < 2) {
+      fireOnNextTick(() => fsm.send('RETYPED'));
+      return;
+    }
+
+    phraseIndex = (phraseIndex + 1) % cycle.length;
+    const next = cycle[phraseIndex];
+
+    if (reducedActive) {
+      retype.enqueue(next);
+      retype.step(0);
+      const finalFrame = retype.step(Number.MAX_SAFE_INTEGER);
+      if (finalFrame) {
+        renderRetype(finalFrame, opts.headlineEl, caretEl);
+      }
+      fireOnNextTick(() => fsm.send('RETYPED'));
+      return;
+    }
+
+    retype.enqueue(next);
+    retypeActive = true;
+  }
+
   // --- FSM → choreography dispatch (brief 4d, "the idle brain") -------------------
   function dispatch(state: PetState): void {
     // A prior onEnter listener may have caused a NESTED transition mid-loop (e.g. the
@@ -749,10 +912,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // case) — `killTracked(null)` is a no-op.
         reacquireTween = killTracked(reacquireTween);
         break;
+      case 'retyping':
+        // T6: drive the headline retype into the next phrase (full-motion
+        // path continues per-tick in `onTick`; reduced-motion is an instant
+        // set here). Fires `RETYPED` on completion to advance the FSM.
+        handleEnterRetyping();
+        break;
       default:
-        // 'retyping' | 'traveling' | 'hidden' | 'entering' are not reachable
-        // via the current FSM (fsm.ts never transitions into them yet) —
-        // reserved for later tickets.
+        // 'traveling' | 'hidden' | 'entering' are not reachable via the
+        // current FSM (fsm.ts never transitions into them yet) — reserved for
+        // later tickets.
         break;
     }
   }
@@ -781,6 +950,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Per-tick update (brief 4b) -----------------------------------------------------
   function onTick(dt: number): void {
+    // Free-running retype clock — ALWAYS advanced (independent of state) so
+    // the engine's `step()` reads a monotonic ms value during a full retype;
+    // the engine re-anchors it on each `enqueue`. Cheap.
+    retypeClockMs += dt * 1000;
+
     // Re-derive the headline's text-end anchor every tick (never snapshot) —
     // the canvases are viewport-fixed and the headline reflows once fonts/
     // SplitText settle, exactly as the (now-removed) T3 `?glcube` rig did.
@@ -866,6 +1040,39 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
     wasHome = home;
 
+    // Retype reward (T6): while `retyping` under full motion, step the engine
+    // off `retypeClockMs`, paint the frame, and glide Byte's root to the live
+    // caret world position — Byte "operates the caret". `retyping` isn't a
+    // HOME_STATE, so the block above pinned nothing this tick: the `quickTo`
+    // follow is the root's sole writer here, and on completion the `wasHome`
+    // edge above fires the existing no-snap reacquire home next tick (the same
+    // seam T5 built — no new handoff code). The `quickTo` tween is the oldest
+    // tween of `rig.object3d.position` (created at init), so the reacquire /
+    // any fresh dash / the steady-state hard-pin all render AFTER it and win,
+    // leaving no lingering fight once retyping ends.
+    if (fsm.state() === 'retyping' && retypeActive) {
+      const frame = retype.step(retypeClockMs);
+      if (frame) {
+        renderRetype(frame, opts.headlineEl, caretEl);
+        // Caret's live world position → Byte's feet (its vertical center
+        // minus half the bot height, matching the home anchor's `- unitPx/2`).
+        const cr = caretEl.getBoundingClientRect();
+        const cw = scene.worldFromScreen(cr.left, cr.top + cr.height / 2);
+        byteToCaretX(cw.x);
+        byteToCaretY(cw.y - unitPx / 2);
+        // Spark once per ACTUAL edit (the total char count changed).
+        const total = frame.line0.length + frame.line1.length;
+        if (total !== lastRetypeTotal) {
+          lastRetypeTotal = total;
+          sparkAtCaret();
+        }
+      }
+      if (!retype.isBusy()) {
+        retypeActive = false;
+        fireOnNextTick(() => fsm.send('RETYPED'));
+      }
+    }
+
     // Shadow follows the root's ACTUAL current position, not the freshly
     // recomputed anchor: during dashing/eating (feeder-owned) and during the
     // reacquire glide just above, `rig.object3d.position` is wherever the
@@ -881,6 +1088,19 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const hintLeft = lineRect.left;
     const hintTop = lineRect.bottom + HINT_GAP_PX;
     hintEl.style.transform = `translate(${hintLeft}px, ${hintTop}px)`;
+
+    // Permanent caret rest position (SPEC: "a blinking DOM caret remains in
+    // the headline"): when NOT mid-retype, park the caret at the end of the
+    // bottom line's text, in `headlineEl`-relative coords. Transform-only on
+    // the absolutely-positioned caret, so it never reflows (CLS 0); reuses the
+    // `lineRect` already read for the anchor. During a retype, `renderRetype`
+    // owns the caret transform instead (so this is gated off then).
+    if (fsm.state() !== 'retyping') {
+      const headlineRect = opts.headlineEl.getBoundingClientRect();
+      caretEl.style.transform = `translate(${lineRect.right - headlineRect.left}px, ${
+        lineRect.top - headlineRect.top
+      }px)`;
+    }
   }
 
   scene.onTick(onTick);
@@ -926,10 +1146,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     peekTimeline = null;
     hintTween = null;
     reacquireTween = null;
+    sparkTween = null;
+    // The Byte→caret follow (`byteToCaretX/Y`) is a `quickTo` — its reused
+    // tween is NOT in `liveTweens`, so kill it explicitly here.
+    gsap.killTweensOf(rig.object3d.position);
 
     mm.revert();
 
     hintEl.remove();
+    caretEl.remove();
 
     feeder.dispose();
     rig.dispose();
