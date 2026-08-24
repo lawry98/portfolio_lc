@@ -1,9 +1,11 @@
 /**
  * Byte's brain — a pure, deterministic finite-state machine deciding Byte's
  * state from interaction events + timers. T4 built the idle-brain subset
- * (SPEC §6); T5 adds the feeding beats (dashing -> eating -> idle, driven by
- * the feeder's REACHED/ATE events) on the same shape — retyping/traveling
- * remain for later tickets (R-T4-9).
+ * (SPEC §6); T5 added the feeding beats (dashing -> eating, driven by the
+ * feeder's REACHED/ATE events) on the same shape; T6 extends the feed's
+ * completion into the retype reward (eating -> retyping -> idle, driven by
+ * the retype-driver's RETYPED event) — traveling remains for a later ticket
+ * (R-T4-9).
  *
  * Purity is the whole point (and the ticket's central requirement): this
  * file imports neither `gsap` nor `three`, and never reads the wall clock
@@ -43,6 +45,7 @@ const DEFAULTS: Required<PetFSMConfig> = {
   wakeMs: 600,
   dashMs: 1200,
   eatMs: 1500,
+  retypeMs: 4000,
 };
 
 /**
@@ -59,9 +62,13 @@ const DEFAULTS: Required<PetFSMConfig> = {
  *    eat) before it's allowed to drift to sleep — those two states only ever
  *    exit via the feeder's REACHED/ATE (or their generous safety-cap timers),
  *    never via this overlay.
+ *  - `retyping` is excluded too: it's the post-eat reward animation, not a
+ *    resting state — no sleep mid-retype. It only ever exits via the
+ *    retype-driver's RETYPED (or its own retypeMs safety-cap timer), never
+ *    via this overlay.
  *  - `sleeping`/`waking` are excluded (already asleep / already waking up);
- *  `hidden`/`entering`/`retyping`/`traveling` aren't reachable by any current
- *  transition yet but are excluded on principle — none is a "resting" state.
+ *  `hidden`/`entering`/`traveling` aren't reachable by any current transition
+ *  yet but are excluded on principle — none is a "resting" state.
  */
 function isSleepEligible(state: PetState): boolean {
   return state === 'idle' || state === 'curious' || state === 'invited' || state === 'peeking';
@@ -91,6 +98,10 @@ function specificTimerTarget(
     case 'eating':
       // Safety cap only — the feeder's ATE normally fires well before this.
       return stateTimerMs >= cfg.eatMs ? 'idle' : null;
+    case 'retyping':
+      // Safety cap only — the retype-driver's RETYPED normally fires well
+      // before this.
+      return stateTimerMs >= cfg.retypeMs ? 'idle' : null;
     case 'waking':
       // Because pendingFeed — the wake→feed payoff (T5 renders it).
       return pendingFeed && stateTimerMs >= cfg.wakeMs ? 'dashing' : null;
@@ -243,16 +254,31 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         // Only ATE (the feeder marking eat-animation-complete) is legal;
         // eating is NOT sleep-eligible (see `isSleepEligible`), so — unlike
         // every other real transition above — there's no sleep accumulator
-        // that needs protecting by a reset here.
+        // that needs protecting by a reset here. Eat-complete now hands off
+        // to the retype reward (eating -> retyping); the eatMs safety cap
+        // still exits straight to idle as an emergency path (see
+        // `specificTimerTarget`), deliberately skipping the reward.
         if (event === 'ATE') {
+          enter('retyping');
+        }
+        return;
+
+      case 'retyping':
+        // Only RETYPED (the retype-driver marking retype-animation-complete)
+        // is legal; every other event is ignored — otherwise retyping runs
+        // to completion solely via its own safety-cap timer (see
+        // `specificTimerTarget`), mirroring `dashing`/`eating`. Does NOT
+        // reset the sleep accumulator: retyping isn't sleep-eligible (see
+        // `isSleepEligible`), so there's nothing to protect.
+        if (event === 'RETYPED') {
           enter('idle');
         }
         return;
 
       // `waking` ignores every event — it runs to completion solely via its
       // own state timer (see `specificTimerTarget`). (`hidden`/`entering`/
-      // `retyping`/`traveling` fall through here too; none is reachable by
-      // any transition yet.)
+      // `traveling` fall through here too; none is reachable by any
+      // transition yet.)
       default:
         return;
     }

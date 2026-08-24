@@ -103,9 +103,10 @@ export type PetState =
 /** External inputs to the FSM. Interaction events come from createBytePet's pointer
  *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3);
  *  REACHED/ATE come from the feeder (T5) marking dash-arrival and eat-animation-
- *  complete respectively — the FSM only reacts to them, it never times a real
- *  dash/eat itself. Time-based transitions are NOT events — they happen inside
- *  tickTimers(). */
+ *  complete respectively; RETYPED comes from the retype-driver (T6) marking
+ *  retype-animation-complete — the FSM only reacts to these, it never times a
+ *  real dash/eat/retype itself. Time-based transitions are NOT events — they
+ *  happen inside tickTimers(). */
 export type PetEvent =
   | 'POINTER_NEAR'
   | 'POINTER_FAR'
@@ -113,7 +114,8 @@ export type PetEvent =
   | 'FEED'
   | 'PEEK'
   | 'REACHED' // feeder: Byte arrived at the food (dashing -> eating)
-  | 'ATE'; // feeder: the eat animation finished (eating -> idle)
+  | 'ATE' // feeder: the eat animation finished (eating -> retyping)
+  | 'RETYPED'; // engine: retype animation finished (retyping -> idle)
 
 /** Timer durations (ms). All optional; createFSM applies the defaults below. */
 export interface PetFSMConfig {
@@ -123,6 +125,7 @@ export interface PetFSMConfig {
   wakeMs?: number; // default 600   (startled jump/shake, then counts as feed)
   dashMs?: number; // default 1200 — SAFETY cap only; dashing normally exits on REACHED. Feeder dash is 380-600ms by distance; this must stay > that so it never pre-empts a real dash.
   eatMs?: number; // default 1500 — SAFETY cap only; eating normally exits on ATE.
+  retypeMs?: number; // default 4000 — SAFETY cap only; retyping normally exits on RETYPED.
 }
 
 /** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */

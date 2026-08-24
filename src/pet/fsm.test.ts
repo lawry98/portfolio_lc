@@ -310,12 +310,12 @@ describe('createFSM: eating', () => {
     return fsm;
   }
 
-  it('eating -> idle on ATE (the feeder marking eat-animation-complete)', () => {
+  it('eating -> retyping on ATE (the feeder marking eat-animation-complete)', () => {
     const fsm = enterEating();
     expect(fsm.state()).toBe('eating');
 
     fsm.send('ATE');
-    expect(fsm.state()).toBe('idle');
+    expect(fsm.state()).toBe('retyping');
   });
 
   it(
@@ -350,6 +350,94 @@ describe('createFSM: eating', () => {
     expect(fsm.state()).toBe('eating');
     expect(onEnter).not.toHaveBeenCalled();
   });
+});
+
+describe('createFSM: retyping', () => {
+  function enterRetyping() {
+    const fsm = createFSM();
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+    return fsm;
+  }
+
+  it('retyping -> idle on RETYPED', () => {
+    const fsm = enterRetyping();
+    expect(fsm.state()).toBe('retyping');
+
+    fsm.send('RETYPED');
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it(
+    'retyping -> idle after tickTimers(retypeMs) with no RETYPED ' +
+      '(safety cap only — the retype-driver normally fires RETYPED long before this)',
+    () => {
+      const fsm = createFSM({ retypeMs: 100 });
+      fsm.send('FEED');
+      fsm.send('REACHED');
+      fsm.send('ATE');
+      expect(fsm.state()).toBe('retyping');
+
+      fsm.tickTimers(99);
+      expect(fsm.state()).toBe('retyping');
+
+      fsm.tickTimers(1);
+      expect(fsm.state()).toBe('idle');
+    },
+  );
+
+  it('ignores POINTER_*/FEED/PEEK/REACHED/ATE while retyping (only RETYPED ends it)', () => {
+    const fsm = enterRetyping();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.send('POINTER_NEAR');
+    fsm.send('POINTER_FAR');
+    fsm.send('POINTER_DOWN');
+    fsm.send('FEED');
+    fsm.send('PEEK');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+
+    expect(fsm.state()).toBe('retyping');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('retyping is NOT sleep-eligible: ticking past idleToSleepMs stays retyping', () => {
+    // retypeMs set high enough that the retype safety cap can't pre-empt this.
+    const fsm = createFSM({ retypeMs: 90000 });
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE'); // eating -> retyping
+    expect(fsm.state()).toBe('retyping');
+
+    // Exceeds idleToSleepMs (30000) by a wide margin; if retyping were still
+    // sleep-eligible, Byte would fall asleep mid-retype.
+    fsm.tickTimers(60000);
+    expect(fsm.state()).toBe('retyping');
+  });
+
+  it(
+    'full reachability chain: idle -> dashing -> eating -> retyping -> idle ' +
+      '(FEED, REACHED, ATE, RETYPED, in order)',
+    () => {
+      const fsm = createFSM();
+      expect(fsm.state()).toBe('idle');
+
+      fsm.send('FEED');
+      expect(fsm.state()).toBe('dashing');
+
+      fsm.send('REACHED');
+      expect(fsm.state()).toBe('eating');
+
+      fsm.send('ATE');
+      expect(fsm.state()).toBe('retyping');
+
+      fsm.send('RETYPED');
+      expect(fsm.state()).toBe('idle');
+    },
+  );
 });
 
 describe('createFSM: sleeping / waking', () => {
@@ -598,13 +686,15 @@ describe('createFSM: onEnter', () => {
     fsm.send('POINTER_NEAR'); // idle -> curious
     fsm.send('FEED'); // curious -> dashing
     fsm.send('REACHED'); // dashing -> eating
-    fsm.send('ATE'); // eating -> idle
+    fsm.send('ATE'); // eating -> retyping
+    fsm.send('RETYPED'); // retyping -> idle
 
     expect(seen).toEqual([
       ['curious', 'idle'],
       ['dashing', 'curious'],
       ['eating', 'dashing'],
-      ['idle', 'eating'],
+      ['retyping', 'eating'],
+      ['idle', 'retyping'],
     ]);
   });
 });
