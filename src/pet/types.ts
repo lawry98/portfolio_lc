@@ -176,6 +176,8 @@ export interface PetOptions {
    * headline.
    */
   phrases?: readonly Phrase[];
+  /** Run the SPEC §8.1 entrance: start hidden, drop in, live-type phrase #1 (default false → start idle, as before). */
+  entrance?: boolean;
 }
 
 /**
@@ -190,6 +192,8 @@ export interface BytePetHandle {
   setTheme(t: 'light' | 'dark'): void;
   /** Subscribe to the running eaten-glyph total (the demo wires this to the footer's FED counter). Register-many; fires on each eat. */
   onEat(cb: (total: number) => void): void;
+  /** SPEC §8.1: drop Byte in + live-type phrase #1 (reduced-motion: instant). Resolves when the entrance settles into idle. Safe no-op-ish if not constructed with `{ entrance: true }`. */
+  enterAndType(): Promise<void>;
   /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
   destroy(): void;
 }

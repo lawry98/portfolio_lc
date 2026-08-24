@@ -135,6 +135,20 @@ const SPARK_BLUR_PX = 8;
 const SPARK_SPREAD_PX = 2;
 
 /**
+ * T6b entrance drop-in (SPEC §8.1, full motion only). Byte falls from
+ * `ENTRANCE_DROP_UNITS` bot-heights above the type-start anchor to it with a
+ * `bounce.out` ease over `ENTRANCE_DROP_DURATION_S`, its body scaling up from
+ * `ENTRANCE_SCALE_FROM` to 1 over the same beat. `ENTRANCE_DROP_UNITS` is a
+ * multiple of `unitPx` (the bot's own unit height) rather than a fixed px —
+ * mirroring how the shadow/peek code scales its px targets by `unitPx` inline
+ * — so the drop reads the same at any headline size. All hand-picked, free to
+ * retune (same spirit as the `RETYPE_*`/`PEEK_*` constants above).
+ */
+const ENTRANCE_DROP_UNITS = 2;
+const ENTRANCE_DROP_DURATION_S = 0.7;
+const ENTRANCE_SCALE_FROM = 0.6;
+
+/**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
  * `Range` over its last non-empty text node — deliberately NOT
  * `el.getBoundingClientRect()`. This project's `.hero__line` spans are
@@ -189,7 +203,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const shadow = createBlobShadow();
   scene.addToFront(shadow.mesh);
 
-  const fsm = createFSM({ peekMs: PEEK_MS });
+  // `initialState: 'hidden'` (T6b entrance) starts Byte in the construction
+  // mode `enterAndType()` reveals + drops in from; omitting the entrance keeps
+  // the FSM starting `idle`, byte-for-byte as before.
+  const fsm = createFSM({ peekMs: PEEK_MS, initialState: opts.entrance ? 'hidden' : 'idle' });
 
   // --- Feeder (T5, R-T5-8) ---------------------------------------------------
   // Owns the toss/dash/eat glyph choreography end to end: `feed(x,y)` tosses
@@ -342,6 +359,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // Edit detector for the per-edit spark: the previous frame's total char
   // count. `-1` so the first observed frame differs (a harmless spark).
   let lastRetypeTotal = -1;
+
+  // --- Entrance (T6b) --------------------------------------------------------
+  // The `enterAndType()` Promise's resolver, held while the entrance is in
+  // flight and cleared by the one-shot completion detector (entering→idle) or
+  // `destroy()`. `null` whenever no entrance is running. The entrance reuses
+  // the retype engine + the `onTick` retype-driver above to live-type phrase
+  // #1 — there is no second typing path.
+  let entranceResolve: (() => void) | null = null;
 
   // --- Tween bookkeeping -----------------------------------------------------
   // `track()` self-prunes on natural completion (composed with whatever
@@ -956,20 +981,65 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // set here). Fires `RETYPED` on completion to advance the FSM.
         handleEnterRetyping();
         break;
+      case 'hidden':
+      case 'entering':
+        // T6b entrance beats — deliberate no-ops beyond the shared per-state
+        // resets above (no idle brain, no clip, no hint). `hidden` is the
+        // construction-time initial state (dispatch never fires for the
+        // initial state, so this case is purely defensive); `entering` is
+        // driven entirely by `enterAndType()` (reveal + drop-in) and the
+        // generalized `onTick` retype-driver (phrase #1 live-type + ENTERED),
+        // never from here.
+        break;
       default:
-        // 'traveling' | 'hidden' | 'entering' are not reachable via the
-        // current FSM (fsm.ts never transitions into them yet) — reserved for
-        // later tickets.
+        // 'traveling' is not reachable via the current FSM (fsm.ts never
+        // transitions into it yet) — reserved for a later ticket.
+        // ('hidden'/'entering' are now entrance-driven — handled above.)
         break;
     }
   }
 
   fsm.onEnter(dispatch);
 
-  // onEnter never fires for the FSM's initial state (createFSM() starts in
-  // 'idle'), so both of these need an explicit initial call.
+  // Entrance completion detector (T6b): resolve `enterAndType()`'s Promise
+  // exactly when the entrance settles (entering → idle), whether that beat
+  // came from the live-typed `ENTERED` (full motion) or the reduced-motion
+  // instant one. A one-shot in effect — it self-clears `entranceResolve`, so
+  // it does nothing on any later idle re-entry; `onEnter` has no unsubscribe
+  // in this module by design, which is fine since the guard is `null` outside
+  // an entrance. Registered right after `dispatch` so `dispatch('idle')`
+  // (which starts the idle brain) runs first on that same transition.
+  fsm.onEnter((next, prev) => {
+    if (next === 'idle' && prev === 'entering') {
+      entranceResolve?.();
+      entranceResolve = null;
+    }
+  });
+
+  // onEnter never fires for the FSM's initial state, so the initial choreography
+  // is invoked explicitly here. `applyTheme(theme)` runs either way. Then, per
+  // the initial state:
+  //  - `hidden` (entrance): hidden-prep — keep Byte + shadow invisible until
+  //    `enterAndType()` reveals them, and (full motion only) clear the headline
+  //    to empty so the type-from-empty has no first-frame flash of phrase #1.
+  //    Under reduced motion, leave phrase #1's static text in place (the reduced
+  //    entrance sets phrase #1 "directly" by simply leaving it). Runs AFTER the
+  //    `mm.matchMedia` block above, so `reducedActive` is already final here.
+  //  - `idle` (default, no entrance): appear idle immediately, exactly as before.
   applyTheme(theme);
-  enterIdleBehaviour();
+  if (fsm.state() === 'hidden') {
+    rig.object3d.visible = false;
+    shadow.mesh.visible = false;
+    if (!reducedActive) {
+      renderRetype(
+        { line0: '', line1: '', caretIndex: { line: 1, col: 0 } },
+        opts.headlineEl,
+        liveCaret(),
+      );
+    }
+  } else {
+    enterIdleBehaviour();
+  }
 
   // --- Pointer wiring → FSM events (brief 4c) --------------------------------------
   function onPointerMove(e: PointerEvent): void {
@@ -1078,17 +1148,25 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
     wasHome = home;
 
-    // Retype reward (T6): while `retyping` under full motion, step the engine
-    // off `retypeClockMs`, paint the frame, and glide Byte's root to the live
-    // caret world position — Byte "operates the caret". `retyping` isn't a
+    // Retype/entrance driver (T6/T6b, R-T6b-3): the ONE per-frame typing path,
+    // shared by a reward `retyping` AND the entrance's `entering` phrase-#1
+    // live-type — no second typing loop, no second caret path. While either
+    // state is active under full motion, step the engine off `retypeClockMs`,
+    // paint the frame, and glide Byte's root to the live caret world position
+    // — Byte "operates the caret". Neither `retyping` nor `entering` is a
     // HOME_STATE, so the block above pinned nothing this tick: the `quickTo`
-    // follow is the root's sole writer here, and on completion the `wasHome`
-    // edge above fires the existing no-snap reacquire home next tick (the same
-    // seam T5 built — no new handoff code). The `quickTo` tween is the oldest
-    // tween of `rig.object3d.position` (created at init), so the reacquire /
-    // any fresh dash / the steady-state hard-pin all render AFTER it and win,
-    // leaving no lingering fight once retyping ends.
-    if (fsm.state() === 'retyping' && retypeActive) {
+    // follow is the root's sole writer here (during the entrance it takes over
+    // only AFTER `enterAndType`'s drop-in bounce has completed, so the two
+    // never write `rig.object3d.position` on the same frame), and on
+    // completion the `wasHome` edge above fires the existing no-snap reacquire
+    // home next tick (the same seam T5 built — no new handoff code). The
+    // `quickTo` tween is the oldest tween of `rig.object3d.position` (created
+    // at init), so the reacquire / any fresh dash / the steady-state hard-pin
+    // all render AFTER it and win, leaving no lingering fight once typing ends.
+    // On engine completion, fire the state-appropriate beat: `ENTERED` closes
+    // the entrance (entering → idle), `RETYPED` closes a reward (retyping →
+    // idle).
+    if ((fsm.state() === 'retyping' || fsm.state() === 'entering') && retypeActive) {
       const frame = retype.step(retypeClockMs);
       if (frame) {
         const caret = liveCaret();
@@ -1108,7 +1186,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       }
       if (!retype.isBusy()) {
         retypeActive = false;
-        fireOnNextTick(() => fsm.send('RETYPED'));
+        fireOnNextTick(() => fsm.send(fsm.state() === 'entering' ? 'ENTERED' : 'RETYPED'));
       }
     }
 
@@ -1129,12 +1207,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     hintEl.style.transform = `translate(${hintLeft}px, ${hintTop}px)`;
 
     // Permanent caret rest position (SPEC: "a blinking DOM caret remains in
-    // the headline"): when NOT mid-retype, park the LIVE caret at the end of
+    // the headline"): when NOT mid-type, park the LIVE caret at the end of
     // the bottom line's text, in `headlineEl`-relative coords. Transform-only
     // on the absolutely-positioned caret, so it never reflows (CLS 0); reuses
-    // the `lineRect` already read for the anchor. During a retype,
-    // `renderRetype` owns the caret transform instead (so this is gated off).
-    if (fsm.state() !== 'retyping') {
+    // the `lineRect` already read for the anchor. During a retype OR the
+    // entrance's phrase-#1 type, `renderRetype` owns the caret transform
+    // instead — so the rest write runs only when the state is neither
+    // `retyping` nor `entering` (R-T6b-3, the inverse of the driver gate).
+    if (fsm.state() !== 'retyping' && fsm.state() !== 'entering') {
       liveCaret().style.transform = caretRestTransform(lineRect);
     }
   }
@@ -1157,6 +1237,116 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   function onEat(cb: (total: number) => void): void {
     feeder.onEat(cb);
+  }
+
+  // --- Entrance choreography (T6b, SPEC §8.1) -------------------------------
+  /**
+   * The full-motion drop-in: place Byte `ENTRANCE_DROP_UNITS` bot-heights
+   * above the type-start anchor (the TOP line's left edge — where phrase #1
+   * begins), shrunk to `ENTRANCE_SCALE_FROM`, then bounce it down onto the
+   * anchor while its body scales up to 1, `ease: 'bounce.out'`. Writes the
+   * ROOT's `position.y` (world placement) and the clip-owned `pose`'s `scale`
+   * — the normalized body node the clips animate, NOT the root (whose scale is
+   * `unitPx`; scaling the root to 1 would shrink Byte permanently). `pose`'s
+   * identity scale is 1 and `rig.play('Idle')` resets it to 1 when the idle
+   * brain takes over, and this tween already ends there, so there is no jump.
+   * Returns a Promise resolved on the bounce's `onComplete` (composed via
+   * `track()`); `enterAndType` `await`s it so the `byteToCaret` follow — which
+   * also writes the root's position — only begins after the bounce finishes,
+   * never on the same frame.
+   */
+  function runDropIn(): Promise<void> {
+    // Type-start anchor: the TOP line's left edge (phrase #1 types line0
+    // first). It's empty at this point (hidden-prep cleared it), but its box
+    // still carries the CSS-reserved line height, so its rect gives the spot.
+    const line0El = opts.headlineEl.querySelector<HTMLElement>('[data-byte-line="0"]');
+    const startRect = (line0El ?? opts.headlineEl).getBoundingClientRect();
+    const landWorld = scene.worldFromScreen(startRect.left, startRect.top + startRect.height / 2);
+    const landX = landWorld.x;
+    const landY = landWorld.y - unitPx / 2; // feet, matching onTick's `- unitPx/2`
+
+    // Snap to the elevated, shrunk start BEFORE the bounce so frame 0 is that
+    // start (world +y is up, so "above" is a larger y), never the origin.
+    rig.object3d.position.set(landX, landY + unitPx * ENTRANCE_DROP_UNITS, 0);
+    if (pose) {
+      pose.scale.setScalar(ENTRANCE_SCALE_FROM);
+    }
+
+    return new Promise<void>((resolve) => {
+      const tl = track(gsap.timeline({ onComplete: resolve }));
+      tl.to(
+        rig.object3d.position,
+        { y: landY, duration: ENTRANCE_DROP_DURATION_S, ease: 'bounce.out' },
+        0,
+      );
+      if (pose) {
+        tl.to(
+          pose.scale,
+          { x: 1, y: 1, z: 1, duration: ENTRANCE_DROP_DURATION_S, ease: 'bounce.out' },
+          0,
+        );
+      }
+    });
+  }
+
+  /**
+   * SPEC §8.1 entrance: reveal Byte, drop it in, and live-type phrase #1 by
+   * reusing the retype engine + the `onTick` retype-driver (no second typing
+   * path). Reduced motion sets phrase #1 directly (no drop-in, no type).
+   * Resolves when the entrance settles into idle (the entering→idle completion
+   * detector registered above). Defensive no-op-resolve if not constructed
+   * with `{ entrance: true }` (the FSM won't be in `hidden`).
+   */
+  async function enterAndType(): Promise<void> {
+    // Guard: only meaningful in the entrance path (FSM starts `hidden`).
+    // Otherwise Byte is already idle — resolve immediately. `main.ts` only
+    // calls this on the entrance path anyway.
+    if (fsm.state() !== 'hidden') {
+      return;
+    }
+
+    // The Promise the caller awaits; its resolver is fired by the entering→idle
+    // completion detector (covers BOTH the full `ENTERED` and the reduced one).
+    const entered = new Promise<void>((resolve) => {
+      entranceResolve = resolve;
+    });
+
+    // Reveal Byte + its shadow (hidden-prep hid both).
+    rig.object3d.visible = true;
+    shadow.mesh.visible = true;
+
+    if (reducedActive) {
+      // Reduced motion (SPEC §12): no drop-in, no spark, no glide. Place Byte at
+      // the home anchor instantly — computed exactly like `onTick`'s root pin
+      // (`lastLineTextRect` → `worldFromScreen`, minus `unitPx/2` in y) — so it
+      // never first appears at the world origin, and leave phrase #1 as its
+      // static headline text (hidden-prep left it untouched). Then beat through
+      // the FSM: SHOWN now, ENTERED next tick (never a synchronous send inside
+      // this call); the completion detector resolves `entered`.
+      const anchor = lastLineTextRect(opts.headlineEl);
+      const anchorWorld = scene.worldFromScreen(anchor.right, anchor.top + anchor.height / 2);
+      rig.object3d.position.set(anchorWorld.x, anchorWorld.y - unitPx / 2, 0);
+      fsm.send('SHOWN');
+      fireOnNextTick(() => fsm.send('ENTERED'));
+      return entered;
+    }
+
+    // Full motion: hidden → entering (SHOWN), drop Byte in and AWAIT the bounce
+    // to completion, THEN start the shared retype-driver typing phrase #1 up
+    // from an empty headline. Awaiting the bounce first guarantees it and the
+    // `byteToCaret` `quickTo` never write `rig.object3d.position` on the same
+    // frame. `reset(['',''])` + `enqueue(phrase)` = a pure type-from-empty (see
+    // retype.ts); if `cycle` is empty this enqueues `currentLinesText()` (empty
+    // under full motion) and the driver beats straight to `ENTERED` next tick —
+    // mirroring `handleEnterRetyping`'s pass-through. `lastRetypeTotal = -1`
+    // re-arms the per-edit spark detector.
+    fsm.send('SHOWN');
+    await runDropIn();
+    retype.reset(['', '']);
+    retype.enqueue(cycle[0] ?? currentLinesText());
+    lastRetypeTotal = -1;
+    retypeActive = true;
+    return entered;
   }
 
   let destroyed = false;
@@ -1183,6 +1373,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     hintTween = null;
     reacquireTween = null;
     sparkTween = null;
+    // Drop any in-flight entrance resolver (the drop-in tween itself is in
+    // `liveTweens`, already killed by the bulk kill above). A destroy mid-
+    // entrance leaves the `enterAndType()` Promise unresolved — intentional:
+    // the page is going away, and nothing awaits it past teardown.
+    entranceResolve = null;
     // The Byte→caret follow (`byteToCaretX/Y`) is a `quickTo` — its reused
     // tween is NOT in `liveTweens`, so kill it explicitly here.
     gsap.killTweensOf(rig.object3d.position);
@@ -1203,5 +1398,5 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     scene.dispose();
   }
 
-  return { feed, setTheme, onEat, destroy };
+  return { feed, setTheme, onEat, enterAndType, destroy };
 }
