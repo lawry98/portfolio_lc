@@ -683,14 +683,28 @@ small,
   font-weight: 700;
   font-size: clamp(2.5rem, 1.75rem + 4vw, 5rem);
   line-height: 1;
-  letter-spacing: 0.01em;
+  /* No tracking: letter-spacing would push "100" past the pct's `3ch`
+     reservation below (the `ch` unit doesn't count letter-spacing), regrowing
+     this box and re-centering the % + caret at the 99→100 crossing. A mono
+     numeral needs no tracking anyway. */
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
-/* The counting number. Mono (via `.preloader__inner`) already fixes digit
-   width; `tabular-nums` is belt-and-suspenders (keeps the fallback
-   `ui-monospace` honest too) so 88→89→90 never nudges width → CLS 0. */
+/* The counting number. Two independent width-stability guards that together
+   keep the inner box from resizing across the whole 0→100 count (CLS 0):
+   - `tabular-nums` (with the mono family from `.preloader__inner`) fixes each
+     digit's glyph width, so 88→89→90 never nudges width;
+   - a reserved `min-width: 3ch` box (`inline-block` so width applies) holds the
+     widest value ("100" = 3ch), so the STRING growing 1→2→3 chars at 9→10 and
+     99→100 does not grow this box — without it the centered `.preloader__inner`
+     would re-center and visibly shift the `%` + caret at those two crossings.
+   `text-align: right` keeps the trailing `%`/caret dead still (digits fill in
+   leftward, odometer-style). */
 .preloader__pct {
+  display: inline-block;
+  min-width: 3ch;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
