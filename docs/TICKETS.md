@@ -190,7 +190,9 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ---
 
-## T6 — Retype reward + entrance  ⛳ STOP POINT (owner play-test)
+## T6 — Retype reward + entrance ✅ DONE  ⛳ STOP POINT (owner play-test)
+
+> **DONE — both halves (2026-08-24).** Retype-reward `f5222ea..53210cd` (D-13) + entrance `237389a..c7b5196` (D-14). After a feed, Byte glides to the line end and drives the DOM caret to backspace + retype the next Identity phrase (**CLS 0**); and the preloader (blinking caret + %, bounded `document.fonts.ready`+MIN gate that **can never hang**) lifts, Byte **drops in with a bounce and live-types phrase #1 by REUSING the retype engine** (`hidden→entering→idle` via new `SHOWN`/`ENTERED` beats + `enteringMs` cap; `createRetype().reset(['',''])` → `enqueue(cycle[0])`). Reduced-motion → instant (no drop-in; static phrase #1). JS-off/no-WebGL → static headline #1 (`<noscript>` + inline fallback), no hang. Controller browser QA PASS (CLS-0 desktop+mobile, feed→retype loop intact post-entrance, early peek fires, both themes, mobile no-overflow, zero console errors). **JS 205.35KB gz / 176 tests.** Via `subagent-driven-development` (both halves). ⛳ **Owner play-test stop** — branch stays open for T7–T10 (no merge).
 
 **Goal:** The signature move: after a feed, Byte glides to the line end and drives the DOM caret to backspace + retype the next phrase (zero layout shift); plus the preloader → Byte-types-the-headline entrance.
 
