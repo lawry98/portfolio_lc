@@ -363,15 +363,25 @@ export function initSoundControls({
   };
 
   // ---- First-gesture unlock (SPEC §8.3): one-shot, capture-phase, on window. ----
-  // `capture` + `once` so it runs before — and independently of — the EQ
-  // button's own click handler, and can never fire twice. If that first gesture
-  // happens to land on the EQ button, this unlock runs first, then the click
-  // toggles `enabled` (an accepted edge case; both engine calls are order-safe).
+  // Listen for BOTH `pointerdown` and `keydown`: a keyboard-only user never
+  // fires `pointerdown` (they Tab to a control and press Enter/Space), and
+  // browsers accept `keydown` as valid user activation for
+  // `AudioContext.resume()` exactly like a pointer gesture — so keying anywhere
+  // must be able to unlock sound too (SPEC §12 keyboard operability, §15 QA).
+  // `capture` so this runs before — and independently of — the EQ button's own
+  // click handler; the handler removes BOTH siblings up front (and each is
+  // `once` as a belt-and-suspenders self-removal), so whichever gesture lands
+  // first tears the other listener down as well. If that first gesture happens
+  // to land on the EQ button, this unlock runs first, then the click toggles
+  // `enabled` (an accepted edge case; both engine calls are order-safe).
   const handleFirstGesture = (): void => {
+    window.removeEventListener('pointerdown', handleFirstGesture, { capture: true });
+    window.removeEventListener('keydown', handleFirstGesture, { capture: true });
     unlocked = true;
     engine.unlock();
     removeGateLabel();
     syncButton();
   };
   window.addEventListener('pointerdown', handleFirstGesture, { capture: true, once: true });
+  window.addEventListener('keydown', handleFirstGesture, { capture: true, once: true });
 }

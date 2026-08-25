@@ -157,6 +157,25 @@ describe('initSoundControls', () => {
     expect(button.classList.contains('is-on')).toBe(true);
   });
 
+  it('first window keydown also unlocks the engine, removes the gate hint, and lights the EQ', () => {
+    // Keyboard-only users never fire `pointerdown` — the unlock must also accept
+    // a `keydown` (SPEC §12 keyboard operability), or "enable sound" is unusable
+    // for them.
+    const engine = createMockEngine(true);
+    initSoundControls({ engine });
+    const button = eqButton();
+
+    expect(document.querySelector(GATE_LABEL_SELECTOR)).not.toBeNull();
+    expect(engine.unlock).not.toHaveBeenCalled();
+    expect(button.classList.contains('is-on')).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+
+    expect(engine.unlock).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(GATE_LABEL_SELECTOR)).toBeNull();
+    expect(button.classList.contains('is-on')).toBe(true);
+  });
+
   it('on a fine pointer, builds a following (non-static) hint and cleans it up on unlock', () => {
     mockMatchMedia((query) => query === FINE_POINTER_QUERY);
     const engine = createMockEngine(true);
