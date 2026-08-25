@@ -35,6 +35,7 @@ import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
 import { createRetype, renderRetype } from './retype';
+import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
 type Theme = 'light' | 'dark';
@@ -133,6 +134,14 @@ const RETYPE_FOLLOW_DURATION_S = 0.18;
 const SPARK_DURATION_S = 0.06;
 const SPARK_BLUR_PX = 8;
 const SPARK_SPREAD_PX = 2;
+/**
+ * T7 (R7-6): ONE shared throttle for the caret spark AND the `typeTick` cue.
+ * The retype/entrance driver detects an edit roughly once per typed character;
+ * firing the spark + tick on every Nth detected edit (rather than ~1/char)
+ * keeps both the glow pulse and the sound from machine-gunning. `3` sits in the
+ * ticket's "every 2–3 edits" band; free to retune.
+ */
+const TYPE_TICK_EVERY = 3;
 
 /**
  * T6b entrance drop-in (SPEC §8.1, full motion only). Byte falls from
@@ -186,6 +195,12 @@ function lastLineTextRect(el: HTMLElement): DOMRect {
  */
 export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHandle {
   let theme: Theme = opts.theme ?? 'light';
+  // T7 sound seam (R7-1): every cue this module or its feeder fires goes through
+  // this one `SoundEngine`. Defaults to the exported `silentSoundEngine` no-op
+  // when `main.ts` injects no engine, so all `sound.play(...)` calls become
+  // no-ops and behaviour stays byte-identical to before sound existed. Only the
+  // `SoundEngine` interface is ever referenced here — never a concrete engine.
+  const sound: SoundEngine = opts.sound ?? silentSoundEngine;
 
   // --- Assemble (brief 4b) --------------------------------------------------
   const scene = createScene({
@@ -220,6 +235,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const feeder = createFeeder(rig, scene, fsm, {
     prefersReducedMotion: () => reducedActive,
     unitPx,
+    sound,
   });
 
   // The placeholder's internal clip-motion node (`placeholderBot.ts`'s "root
@@ -356,9 +372,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // Free-running ms clock the engine's `step()` reads during a full retype —
   // accumulated every tick (below); the engine re-anchors it on each enqueue.
   let retypeClockMs = 0;
-  // Edit detector for the per-edit spark: the previous frame's total char
-  // count. `-1` so the first observed frame differs (a harmless spark).
+  // Edit detector for the per-edit spark + typeTick throttle: the previous
+  // frame's total char count. `-1` so the first observed frame differs. The
+  // stray first frame after an entrance re-arm has `total === 0` and is now
+  // explicitly suppressed in the driver below, so it no longer sparks/ticks.
   let lastRetypeTotal = -1;
+  // T7 (R7-6): monotonic count of REAL typing edits (char total changed, and
+  // the frame is neither empty nor reduced-motion) the retype/entrance driver
+  // has seen. The ONE shared spark+typeTick throttle emits every
+  // `TYPE_TICK_EVERY`th such edit — see the driver's per-edit block.
+  let typeEditCount = 0;
 
   // --- Entrance (T6b) --------------------------------------------------------
   // The `enterAndType()` Promise's resolver, held while the entrance is in
@@ -953,6 +976,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         maybeShowHint();
         break;
       case 'peeking':
+        // T7 (R7-2): chirp on peek only (wakeBoing owns wake). A discrete cue —
+        // fires in BOTH motion modes; the engine alone gates it.
+        sound.play('chirp');
         currentPeekRunner();
         break;
       case 'sleeping':
@@ -960,6 +986,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         break;
       case 'waking':
         playUnlessReduced('Wake');
+        // T7 (R7-2): wakeBoing owns the startled wake. A discrete cue — fires in
+        // BOTH motion modes (unlike `playUnlessReduced`, which is full-only).
+        sound.play('wakeBoing');
         break;
       case 'dashing':
       case 'eating':
@@ -1177,11 +1206,24 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         const cw = scene.worldFromScreen(cr.left, cr.top + cr.height / 2);
         byteToCaretX(cw.x);
         byteToCaretY(cw.y - unitPx / 2);
-        // Spark once per ACTUAL edit (the total char count changed).
+        // T7 (R7-6): keep the edit DETECTOR live every frame (`lastRetypeTotal`
+        // tracks the char total), but gate the EFFECTS — the caret spark AND
+        // the `typeTick` cue — behind ONE shared throttle so they fire together
+        // roughly every `TYPE_TICK_EVERY` edits instead of ~1/char. Skip the
+        // stray empty-headline frame the entrance re-arm leaves (`total === 0`)
+        // and skip under reduced motion (`sparkAtCaret` already no-ops there;
+        // the tick must be suppressed too). Only real, emittable edits advance
+        // the throttle counter, so neither skip ever consumes a slot.
         const total = frame.line0.length + frame.line1.length;
         if (total !== lastRetypeTotal) {
           lastRetypeTotal = total;
-          sparkAtCaret();
+          if (total !== 0 && !reducedActive) {
+            typeEditCount += 1;
+            if (typeEditCount % TYPE_TICK_EVERY === 0) {
+              sparkAtCaret();
+              sound.play('typeTick');
+            }
+          }
         }
       }
       if (!retype.isBusy()) {
@@ -1232,6 +1274,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   function setTheme(t: Theme): void {
+    // T7 (R7-1): whoosh on an EXPLICIT theme change only. Fired here in the
+    // public wrapper — NOT in `applyTheme`, which also runs once at construction
+    // (`applyTheme(theme)` below), where it would whoosh on page load.
+    sound.play('themeWhoosh');
     applyTheme(t);
   }
 

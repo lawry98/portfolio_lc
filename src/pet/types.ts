@@ -6,6 +6,7 @@
  */
 import type * as THREE from 'three';
 import type { Phrase } from '../phrases';
+import type { SoundEngine } from './sound/SoundEngine';
 
 /**
  * Inputs to `createScene()` (Task 2). `headlineEl` sizes/positions the rig
@@ -157,8 +158,8 @@ export interface ClipPlayOptions {
  * Inputs to `createBytePet()` (SPEC §4.4). Only the fields there's a real
  * consumer for — `noUnusedParameters` is on, so an option nothing reads
  * would fail the build. Later tickets extend this (`footerEl` for T8's
- * migration, `sounds` for T7, `modelUrl` for T-GLB) once they have a real
- * consumer for each; adding them now would be dead weight.
+ * migration, `modelUrl` for T-GLB) once they have a real consumer for each;
+ * adding them now would be dead weight. (T7 added the `sound` seam below.)
  */
 export interface PetOptions {
   /** The live headline element Byte anchors to and sizes itself from (`unitPx` = its computed font-size). */
@@ -178,6 +179,15 @@ export interface PetOptions {
   phrases?: readonly Phrase[];
   /** Run the SPEC §8.1 entrance: start hidden, drop in, live-type phrase #1 (default false → start idle, as before). */
   entrance?: boolean;
+  /**
+   * T7 sound seam (R7-1): the engine Byte plays named cues through. Every call
+   * site speaks ONLY to this `SoundEngine` interface — the concrete engine
+   * (WebAudio synth today, a Howler sample bank later) is constructed and
+   * injected by `main.ts`. Omitted → `createBytePet` defaults to the exported
+   * `silentSoundEngine` no-op, so cue-emitting code paths stay byte-identical
+   * whether or not sound was ever wired up (no `if (sound)` guards).
+   */
+  sound?: SoundEngine;
 }
 
 /**

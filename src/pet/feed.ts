@@ -60,6 +60,7 @@ import * as THREE from 'three';
 import { createGlyphQueue, makeGlyph } from './glyphs';
 import type { GlyphKind } from './glyphs';
 import type { ClipName, PetFSM, PetRig, PetState, SceneHandle } from './types';
+import type { SoundEngine } from './sound/SoundEngine';
 
 // ---------------------------------------------------------------------------
 // Public contract (brief 3a).
@@ -70,6 +71,14 @@ export interface FeederDeps {
   prefersReducedMotion: () => boolean;
   /** Headline font-size (px) — sizes tossed glyphs/particles proportionally, same convention `placeholderBot.ts` uses for Byte itself. */
   unitPx: number;
+  /**
+   * T7 sound seam (R7-1): the engine the feeder plays toss/eat cues through
+   * (`spawnPop` on a toss, `eatA`/`eatB` on the two chomps). `createBytePet`
+   * always supplies this — its own resolved `SoundEngine` (the injected engine
+   * or the `silentSoundEngine` no-op) — so it is non-optional here. Only the
+   * `SoundEngine.play` interface is touched; the feeder never knows the engine.
+   */
+  sound: SoundEngine;
 }
 
 export interface Feeder {
@@ -433,6 +442,10 @@ export function createFeeder(
     scene.addToFront(glyph);
     liveGlyphMeshes.add(glyph);
 
+    // T7 (R7-1): one `spawnPop` per tossed glyph, before the motion-mode split
+    // so it fires exactly once in BOTH modes (a toss always happens on feed()).
+    deps.sound.play('spawnPop');
+
     if (deps.prefersReducedMotion()) {
       glyph.position.set(landing.x, landing.y, 0);
       glyph.scale.setScalar(glyphScale);
@@ -646,8 +659,10 @@ export function createFeeder(
 
     if (deps.prefersReducedMotion()) {
       // "Vanishes into the mouth without a hop" — no lingering tiny-scale
-      // mesh, just an immediate, full teardown.
+      // mesh, just an immediate, full teardown. T7: one `eatA` blip stands in
+      // for the two full-motion chomps (discrete cues fire in BOTH modes).
       finishEating(target.id, glyph, mouth);
+      deps.sound.play('eatA');
       fireOnNextTick(() => fsm.send('ATE'));
       return;
     }
@@ -690,6 +705,12 @@ export function createFeeder(
       { x: 0, y: 0, z: 0, duration: EAT_BITE_DURATION, ease: 'power2.in' },
       EAT_BITE_DURATION,
     );
+    // T7 (R7-1): the two eat blips ALTERNATE with the chomps — `eatA` at
+    // chomp 1's start (offset 0), `eatB` at chomp 2's start (EAT_BITE_DURATION).
+    // `tl.call` fires each at its absolute timeline position regardless of
+    // insertion order, so the cues stay in lockstep with the bite tweens above.
+    tl.call(() => deps.sound.play('eatA'), [], 0);
+    tl.call(() => deps.sound.play('eatB'), [], EAT_BITE_DURATION);
     eatTween = track(tl);
   }
 
