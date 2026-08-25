@@ -60,10 +60,6 @@ class MockAudioParam {
     this.value = value;
     return this;
   }
-
-  cancelScheduledValues(): this {
-    return this;
-  }
 }
 
 class MockOscillatorNode {
@@ -172,6 +168,36 @@ describe('createWebAudioSynth: the unlock gate', () => {
 
     expect(audioSpies.ctor).toHaveBeenCalledTimes(1);
     expect(audioSpies.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles a rejected AudioContext.resume() so the refusal cannot escape', async () => {
+    // A real resume() reports refusal (autoplay policy / closed context) by
+    // REJECTING its promise, not by throwing synchronously. Attaching a .catch()
+    // to that promise is precisely what stops the rejection from surfacing as an
+    // unhandled rejection — so assert the engine attaches one. (A global
+    // unhandledRejection listener is non-deterministic here: Node does not
+    // reliably emit within a single macrotask under vitest, so it can pass even
+    // against the unguarded code.)
+    const refusal = new Error('InvalidStateError: the AudioContext is closed');
+    const rejected = Promise.reject<void>(refusal);
+    // Safety net (via .then, not .catch) so this test can never leak a rejection
+    // even if the engine's guard is later removed — the assertion below, not leak
+    // detection, is what fails in that case.
+    void rejected.then(undefined, () => {});
+    const catchSpy = vi.spyOn(rejected, 'catch'); // calls through to the real catch
+    audioSpies.resume.mockImplementationOnce(() => rejected);
+
+    const synth = createWebAudioSynth();
+    expect(() => synth.unlock()).not.toThrow();
+    expect(() => synth.play('typeTick')).not.toThrow();
+
+    // The engine attached a rejection handler to resume()'s promise → the refusal
+    // is handled, not a floating (unhandled) rejection.
+    expect(catchSpy).toHaveBeenCalledTimes(1);
+    expect(catchSpy).toHaveBeenCalledWith(expect.any(Function));
+    expect(audioSpies.resume).toHaveBeenCalledTimes(1);
+
+    await Promise.allSettled([rejected]);
   });
 
   it('after unlock while enabled, play(cue) starts an oscillator', () => {

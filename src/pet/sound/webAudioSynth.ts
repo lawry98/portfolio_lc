@@ -221,9 +221,15 @@ export function createWebAudioSynth(): SoundEngine {
         return;
       }
       try {
-        void ctx.resume();
+        // resume() reports refusal (autoplay policy / closed context) by
+        // REJECTING its promise, not throwing — attach a .catch() so that
+        // rejection cannot surface as an unhandled promise rejection. The outer
+        // try/catch additionally guards the rare synchronous throw.
+        void ctx.resume().catch(() => {
+          // A refused resume() must not surface to the caller.
+        });
       } catch {
-        // A refused resume() must not surface to the caller.
+        // ctx.resume() itself threw synchronously (non-spec engines) — ignore.
       }
     },
 
