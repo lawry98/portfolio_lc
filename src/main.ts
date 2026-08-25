@@ -4,7 +4,8 @@ import './styles/grain.css';
 import { initTheme, type ThemeController } from './lib/theme';
 import { initGrain } from './lib/grain';
 import { initLenis } from './lib/lenisScroll';
-import { initHero } from './page/hero';
+import { initCursor, type CursorLabel } from './lib/cursor';
+import { initHero, initSoundControls } from './page/hero';
 import { initManifesto } from './page/manifesto';
 import { initWork } from './page/work';
 import { initFooter } from './page/footer';
@@ -12,6 +13,7 @@ import { initLab } from './page/lab';
 import { runEntrance } from './page/preloader';
 import { hasWebGL } from './pet/scene';
 import { createBytePet } from './pet/createBytePet';
+import { createWebAudioSynth } from './pet/sound/webAudioSynth';
 import type { BytePetHandle } from './pet/types';
 import { phrases } from './phrases';
 
@@ -97,6 +99,123 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * Cursor zone → pill label (ruling R7-4). A PURE hit-test over the element
+ * under the pointer, resolved by `closest()` in priority order: any link is an
+ * `OPEN` affordance, the theme/EQ buttons are `TOGGLE`, anywhere else inside
+ * the hero is `FEED` (Byte lives there), and everything else clears the pill.
+ * `lib/cursor.ts` is a blind mechanism — this is the only place that knows
+ * which zone maps to which label, driving the dot purely through `setLabel()`.
+ * On touch `initCursor()` returns an inert handle, so the delegated
+ * `pointermove` listener that calls this resolves labels no one ever shows —
+ * harmless, hence no touch-branch here.
+ */
+function resolveCursorLabel(target: EventTarget | null): CursorLabel {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  if (target.closest('a[href]')) {
+    return 'OPEN';
+  }
+  if (target.closest('#theme-toggle, [data-eq-toggle]')) {
+    return 'TOGGLE';
+  }
+  if (target.closest('#hero')) {
+    return 'FEED';
+  }
+  return null;
+}
+
+/**
+ * `still hungry` tooltip runtime (ruling R7-8). An INLINE-STYLED element (the
+ * precedent is the pet's own `(click to feed Byte)` hint in `createBytePet.ts`,
+ * styled in JS rather than via a page CSS class), anchored just under the
+ * headline. It reveals only once Byte has eaten `FEED_THRESHOLD`+ glyphs AND
+ * the Style Lab's Tooltip axis is `on` (`<html data-tooltip="on">`) — the axis
+ * defaults to `off`, so in production the tooltip stays hidden.
+ *
+ * Mounted on `#hero` (a `position: relative` box), NOT inside `#hero-headline`:
+ * the hero's SplitText line-reveal can replace the headline's children with
+ * clones (see `retype.ts`), which would strand a child appended there. Position
+ * is expressed as bounding-rect DELTAS relative to the hero — the same
+ * offsetParent-immune technique `renderRetype` uses for the caret — so it never
+ * depends on `.container` being positioned. `position: absolute` +
+ * `pointer-events: none` + opacity-only fades mean it can never shift page
+ * layout (CLS 0) or intercept input. Only reads layout when actually shown.
+ */
+function createHungryTooltip(
+  hero: HTMLElement,
+  headlineEl: HTMLElement,
+): { setCount(total: number): void } {
+  /** SPEC §8.6 / ruling R7-8: "still hungry" appears after 3+ feeds. */
+  const FEED_THRESHOLD = 3;
+  /** Gap (px) between the headline's bottom edge and the tooltip, below it. */
+  const GAP_PX = 12;
+
+  const el = document.createElement('p');
+  el.textContent = 'still hungry';
+  el.setAttribute('aria-hidden', 'true');
+  Object.assign(el.style, {
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    margin: '0',
+    // Above #gl-front (z-index 40, scene.ts), below the grain overlay (9999) —
+    // mirrors the pet hint's own layering in `createBytePet.ts`.
+    zIndex: '41',
+    pointerEvents: 'none',
+    color: 'inherit',
+    fontFamily: 'inherit',
+    fontSize: '0.85rem',
+    letterSpacing: '0.02em',
+    opacity: '0',
+    transition: 'opacity 0.3s ease',
+    willChange: 'opacity',
+  } satisfies Partial<CSSStyleDeclaration>);
+  hero.appendChild(el);
+
+  let count = 0;
+
+  const position = (): void => {
+    const heroRect = hero.getBoundingClientRect();
+    const headRect = headlineEl.getBoundingClientRect();
+    el.style.left = `${headRect.left - heroRect.left}px`;
+    el.style.top = `${headRect.bottom - heroRect.top + GAP_PX}px`;
+  };
+
+  const sync = (): void => {
+    const on = document.documentElement.dataset.tooltip === 'on';
+    const show = count >= FEED_THRESHOLD && on;
+    if (show) {
+      position();
+    }
+    el.style.opacity = show ? '1' : '0';
+  };
+
+  // The lab flips `data-tooltip` with a plain attribute write and no event to
+  // listen for, so observe `<html>` directly: this lets the tooltip appear the
+  // instant the axis is turned on even between feeds (e.g. the QA flow that
+  // feeds Byte first, then enables the axis to see the reward).
+  const observer = new MutationObserver(sync);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-tooltip'],
+  });
+
+  // Re-anchor on resize (the headline's fluid clamp() font-size moves it a lot
+  // across breakpoints); `sync` only reads layout while the tooltip is shown.
+  window.addEventListener('resize', sync, { passive: true });
+
+  sync();
+
+  return {
+    setCount(total: number): void {
+      count = total;
+      sync();
+    },
+  };
+}
+
 // Kept in module scope (rather than dropped like `initLenis()`'s handle) so
 // both the theme-toggle callback and the `pagehide` teardown below can reach
 // it — `undefined` on the no-WebGL path, where there is no Byte to theme or
@@ -147,6 +266,25 @@ function bootstrap(): void {
   initFooter();
   initLab();
 
+  // Sound + custom cursor (T7, SPEC §8.3/§8.7) — pure garnish: it must never
+  // block first paint or throw into boot. ONE engine is constructed here (the
+  // single WebAudio construction site; everything downstream — Byte's cues,
+  // the nav controls — speaks only the `SoundEngine` interface) and is injected
+  // into Byte below so every pet cue routes through it. The custom cursor, the
+  // nav EQ toggle + `(click to enable sound)` gate, and the first-gesture
+  // `unlock()` do NOT depend on WebGL, so they init HERE, before the no-WebGL
+  // early return, and work on that floor too. `initCursor()` returns an inert
+  // handle on touch, so the delegated zone listener that drives its pill is a
+  // harmless no-op there (no touch-branching needed).
+  const sound = createWebAudioSynth();
+  const cursor = initCursor();
+  initSoundControls({ engine: sound, cursor });
+  document.addEventListener(
+    'pointermove',
+    (event) => cursor.setLabel(resolveCursorLabel(event.target)),
+    { passive: true },
+  );
+
   // WebGL pet layer (T3 foundation, T4 real Byte, T6b entrance) — graceful
   // degradation per SPEC/CLAUDE.md: no WebGL means no canvases at all, so the
   // page stays exactly as T2 left it (static headline #1, fully usable). The
@@ -182,6 +320,11 @@ function bootstrap(): void {
     // is the static headline #1 already in the markup, so the first eat
     // retypes into `identity[1]`, and so on, wrapping the cycle.
     phrases: phrases.identity,
+    // T7 sound seam (R7-1): route every pet cue (typeTick / eat / spawnPop /
+    // themeWhoosh / wakeBoing / chirp) through the one engine constructed
+    // above. `createBytePet` speaks only the `SoundEngine` interface — this is
+    // its single injection point; omitting it would fall back to silence.
+    sound,
   });
 
   // Footer FED counter (T5, SPEC §8.6) — lives in the footer (`index.html`),
@@ -191,10 +334,21 @@ function bootstrap(): void {
   // never runs, so the counter simply stays at its static markup default
   // (`FED 0 GLYPHS`) — still correct.
   const fedCounter = document.querySelector<HTMLElement>('[data-fed-counter]');
+  // `still hungry` tooltip (T7, ruling R7-8) — a WebGL-only garnish, so it is
+  // created and wired HERE, inside the `bytePet` block, which naturally guards
+  // its `onEat` subscription (no Byte, no feeds, so nothing to show). Anchored
+  // to `#hero`; if that lookup ever fails on a stripped page it simply stays
+  // absent rather than throwing. It REUSES the single `onEat` bridge below (the
+  // handle's subscription is register-many, but one callback drives both the
+  // footer counter and the tooltip off the same running `total` — no duplicate
+  // count).
+  const hero = headlineEl.closest<HTMLElement>('#hero');
+  const hungryTooltip = hero ? createHungryTooltip(hero, headlineEl) : null;
   bytePet.onEat((total) => {
     if (fedCounter) {
       fedCounter.textContent = `FED ${total} GLYPH${total === 1 ? '' : 'S'}`;
     }
+    hungryTooltip?.setCount(total);
   });
 
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
