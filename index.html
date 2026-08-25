@@ -89,10 +89,34 @@
             <span class="nav__name">Lawrence Crasto</span>
             <span class="nav__role eyebrow">Full-stack + AI Product Engineer</span>
           </div>
-          <button type="button" id="theme-toggle" class="nav__theme-toggle" aria-pressed="false">
-            <span class="visually-hidden">Toggle color theme</span>
-            <span aria-hidden="true" data-theme-toggle-icon>&#9728;</span>
-          </button>
+          <div class="nav__actions">
+            <button type="button" id="theme-toggle" class="nav__theme-toggle" aria-pressed="false">
+              <span class="visually-hidden">Toggle color theme</span>
+              <span aria-hidden="true" data-theme-toggle-icon>&#9728;</span>
+            </button>
+            <!--
+              Sound EQ mute/unmute (SPEC §8.3). The three bars are the equalizer
+              icon; page/hero.ts's initSoundControls keeps aria-pressed in sync
+              with the mute preference and toggles the `is-on` class (the bars
+              animate ONLY once sound is audible — enabled AND past the
+              first-gesture unlock). The bars are aria-hidden: the button's
+              accessible name is its own aria-label. The static
+              aria-pressed="false" is corrected by JS on init, and degrades to a
+              harmless inert button if the app module never boots.
+            -->
+            <button
+              type="button"
+              id="sound-toggle"
+              class="nav__eq-toggle"
+              aria-pressed="false"
+              data-eq-toggle
+              aria-label="Toggle sound"
+            >
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
       </header>
 

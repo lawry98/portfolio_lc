@@ -218,7 +218,11 @@ small,
   line-height: 1.2;
 }
 
-.nav__theme-toggle {
+/* Shared round-button chrome for the two nav controls — the theme toggle and
+   the sound EQ toggle (whose bars, equalizer keyframes, and gate hint are
+   appended in their own block near the end of this file). */
+.nav__theme-toggle,
+.nav__eq-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -233,16 +237,19 @@ small,
     transform 0.2s ease;
 }
 
-.nav__theme-toggle:hover {
+.nav__theme-toggle:hover,
+.nav__eq-toggle:hover {
   border-color: var(--accent);
 }
 
-.nav__theme-toggle:focus-visible {
+.nav__theme-toggle:focus-visible,
+.nav__eq-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.nav__theme-toggle:active {
+.nav__theme-toggle:active,
+.nav__eq-toggle:active {
   transform: scale(0.94);
 }
 
@@ -842,4 +849,130 @@ small,
    this file must spell out the hidden state itself. */
 .byte-cursor__pill[hidden] {
   display: none;
+}
+
+/* ==========================================================================
+   Nav EQ toggle + sound gate hint — T7 (SPEC §8.3). The nav's mute/unmute
+   control is a 3-bar equalizer button whose bars bounce ONLY while sound is
+   actually audible (enabled AND past the first-gesture unlock — the `.is-on`
+   class, driven by `page/hero.ts`'s `initSoundControls`). Before that gate
+   opens, a small `(click to enable sound)` hint follows the cursor on fine
+   pointers (or sits statically on touch). The round button chrome itself is
+   shared with `.nav__theme-toggle` (both are on that rule higher up); THIS
+   block owns only the bars, the equalizer keyframes, and the gate hint.
+   Distinct from — and appended after — Task 2's `.byte-cursor*` block above.
+   ========================================================================== */
+
+/* The two nav controls sit together at the right end of the bar. */
+.nav__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The 3 bars are laid out in a row by the shared inline-flex button base; this
+   only adds the inter-bar gap that base doesn't set. */
+.nav__eq-toggle {
+  gap: 0.18rem;
+}
+
+/* One equalizer bar. Default (muted / not yet audible) = short, low-contrast,
+   and perfectly still. `transform-origin: center` so each bar scales
+   symmetrically about its middle. */
+.nav__eq-toggle span {
+  inline-size: 0.16rem;
+  block-size: 0.85rem;
+  border-radius: 1px;
+  background: var(--muted);
+  transform: scaleY(0.4);
+  transform-origin: center;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+/* Audible (enabled AND unlocked): accent-coloured, with per-bar heights that
+   read as a static equalizer silhouette. This is exactly the look
+   reduced-motion users keep — the bounce below is opted into only under
+   `no-preference`, so it never applies here. */
+.nav__eq-toggle.is-on span {
+  background: var(--accent);
+}
+
+.nav__eq-toggle.is-on span:nth-child(1) {
+  transform: scaleY(0.55);
+}
+
+.nav__eq-toggle.is-on span:nth-child(2) {
+  transform: scaleY(1);
+}
+
+.nav__eq-toggle.is-on span:nth-child(3) {
+  transform: scaleY(0.72);
+}
+
+/* Full-motion only: the bars bounce. Wrapping the animation in `no-preference`
+   (rather than relying on the base reduced-motion freeze near the top of this
+   file) is the explicit contract — reduced-motion users get the static "on"
+   silhouette above and never a frozen mid-bounce frame. */
+@media (prefers-reduced-motion: no-preference) {
+  .nav__eq-toggle.is-on span {
+    animation: byte-eq-bounce 0.9s ease-in-out infinite;
+  }
+
+  .nav__eq-toggle.is-on span:nth-child(1) {
+    animation-delay: -0.15s;
+  }
+
+  .nav__eq-toggle.is-on span:nth-child(2) {
+    animation-delay: -0.5s;
+  }
+
+  .nav__eq-toggle.is-on span:nth-child(3) {
+    animation-delay: -0.3s;
+  }
+}
+
+@keyframes byte-eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* `(click to enable sound)` gate hint. `position: fixed` + `pointer-events:
+   none` so it can trail the cursor (transform-driven by `initSoundControls`
+   via `gsap.quickTo`) without ever intercepting the very gesture that unlocks
+   audio. Subtle by design (mono, muted, paper-2 pill — matching the Style Lab
+   panel), and removed the moment the first gesture unlocks sound. z-index sits
+   below the preloader (9990) so it stays hidden behind the loading overlay,
+   and below the grain (9999) like the rest of the page content. */
+.sound-gate-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9980;
+  padding: 0.25rem 0.55rem;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Touch/coarse-pointer variant: no cursor to follow, so the hint rests quietly
+   in the corner instead (still `pointer-events: none`, still auto-removed on
+   the first tap). `top`/`left` are cleared since nothing sets its transform. */
+.sound-gate-label--static {
+  top: auto;
+  left: auto;
+  right: 1.25rem;
+  bottom: 1.25rem;
 }

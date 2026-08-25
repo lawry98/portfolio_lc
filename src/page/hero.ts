@@ -25,6 +25,7 @@
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import { revealLines } from './reveals';
+import type { SoundEngine } from '../pet/sound/SoundEngine';
 
 // Registered defensively (idempotent — see reveals.ts) since this module
 // calls `ScrollTrigger.refresh()` directly below, rather than only going
@@ -220,4 +221,157 @@ export function initHero(opts?: { root?: ParentNode; headlineReveal?: boolean })
 
   const labels = Array.from(hero.querySelectorAll<HTMLElement>('[data-parallax]'));
   initParallax(hero, headline, labels);
+}
+
+/* ==========================================================================
+   Nav sound controls (T7, SPEC §8.3) — the EQ mute/unmute toggle, the
+   `(click to enable sound)` gate hint, and the one-time first-gesture unlock.
+   ADDED alongside the hero reveal/parallax above; it shares none of that code.
+   ========================================================================== */
+
+/**
+ * Fine-pointer gate for the follow behaviour — the exact string `lib/cursor.ts`
+ * uses (ruling R7-5), so the hint trails the pointer precisely where the custom
+ * cursor lives; a touch/coarse device gets a static hint instead.
+ */
+const FINE_POINTER_QUERY = '(hover: hover) and (pointer: fine)';
+/**
+ * Smoothing gate for the follow — mirrors `lib/cursor.ts`: reduced motion skips
+ * the `quickTo` tween and snaps the hint to the pointer instantly instead.
+ */
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+/** Pre-unlock hint copy (SPEC §8.3's first-gesture sound gate). */
+const SOUND_GATE_TEXT = '(click to enable sound)';
+/** Offset (px) so the hint trails below-right of the pointer, never under it. */
+const SOUND_GATE_OFFSET_X = 16;
+const SOUND_GATE_OFFSET_Y = 18;
+/** Follow smoothing — a hair softer than the cursor dot, nearer the hero's parallax feel. */
+const SOUND_GATE_FOLLOW_VARS = { duration: 0.3, ease: 'power3' };
+
+/**
+ * `window.matchMedia` guard, treated as "does not match" when the API is absent
+ * (mirrors `main.ts`'s `prefersReducedMotion` / `lib/cursor.ts`'s `queryMatches`).
+ */
+function matchesMedia(query: string): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+}
+
+/**
+ * Nav sound controls (T7, SPEC §8.3): the EQ mute/unmute toggle, the
+ * `(click to enable sound)` gate hint, and the one-time first-gesture unlock.
+ *
+ * State it reconciles: the engine owns `enabled()` (the persisted mute
+ * preference, default on) but NOT whether audio has been unlocked — WebAudio is
+ * silent until a user gesture resumes it (see `pet/sound/webAudioSynth.ts`), and
+ * the `SoundEngine` interface exposes no `unlocked()`, so this function tracks
+ * `unlocked` itself (starts false, flips on the first `pointerdown`). Sound is
+ * AUDIBLE only when both are true — which is exactly when the equalizer animates
+ * (`.is-on`); `aria-pressed` tracks the mute preference the button toggles.
+ *
+ * Every DOM lookup is guarded: with the nav EQ button absent (a stripped page, a
+ * test fixture without it) the whole function is a silent no-op.
+ *
+ * `cursor` (an optional custom-cursor handle) is accepted so a later task
+ * (T7 Task 6, the zone→label wiring) can pass it without changing this
+ * signature; it is intentionally NOT consumed here.
+ */
+export function initSoundControls({
+  engine,
+}: {
+  engine: SoundEngine;
+  cursor?: { setLabel(l: 'FEED' | 'TOGGLE' | 'OPEN' | null): void; destroy(): void };
+}): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-eq-toggle]');
+  if (!button) {
+    return;
+  }
+
+  // The engine owns `enabled()`; `unlocked` is this module's own gate flag —
+  // nothing is audible until the first gesture resumes the AudioContext.
+  let unlocked = false;
+
+  // Audible — and the equalizer animates — only when the user hasn't muted AND
+  // the first-gesture gate has opened.
+  const isAudible = (): boolean => engine.enabled() && unlocked;
+
+  const syncButton = (): void => {
+    // `aria-pressed` reflects the mute preference the button toggles; the
+    // `is-on` class (the animated/accent look) reflects actual audibility.
+    button.setAttribute('aria-pressed', String(engine.enabled()));
+    button.classList.toggle('is-on', isAudible());
+  };
+
+  syncButton();
+
+  button.addEventListener('click', () => {
+    engine.setEnabled(!engine.enabled());
+    syncButton();
+  });
+
+  // ---- Gate hint: `(click to enable sound)` until the first gesture. ----
+  const label = document.createElement('div');
+  label.className = 'sound-gate-label';
+  label.textContent = SOUND_GATE_TEXT;
+  label.setAttribute('aria-hidden', 'true');
+
+  // Set only on the fine-pointer path; the unlock cleanup calls it to drop the
+  // `pointermove` follow listener + kill the hint's tweens.
+  let removeFollow: (() => void) | null = null;
+
+  if (matchesMedia(FINE_POINTER_QUERY)) {
+    // Fine pointer: the hint trails the cursor. Start invisible so it never
+    // flashes in the top-left corner before the first move positions it.
+    label.style.opacity = '0';
+    document.body.appendChild(label);
+
+    // Reduced motion snaps instead of smoothing — mirrors `lib/cursor.ts`.
+    const reduced = matchesMedia(REDUCED_MOTION_QUERY);
+    const setX = reduced ? null : gsap.quickTo(label, 'x', SOUND_GATE_FOLLOW_VARS);
+    const setY = reduced ? null : gsap.quickTo(label, 'y', SOUND_GATE_FOLLOW_VARS);
+
+    let revealed = false;
+    const handlePointerMove = (event: PointerEvent): void => {
+      const x = event.clientX + SOUND_GATE_OFFSET_X;
+      const y = event.clientY + SOUND_GATE_OFFSET_Y;
+      if (setX && setY) {
+        setX(x);
+        setY(y);
+      } else {
+        gsap.set(label, { x, y });
+      }
+      if (!revealed) {
+        revealed = true;
+        label.style.opacity = '1';
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    removeFollow = (): void => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      gsap.killTweensOf(label);
+    };
+  } else {
+    // Touch/coarse: nothing to follow, so the hint rests quietly in the corner.
+    label.classList.add('sound-gate-label--static');
+    document.body.appendChild(label);
+  }
+
+  const removeGateLabel = (): void => {
+    removeFollow?.();
+    label.remove();
+  };
+
+  // ---- First-gesture unlock (SPEC §8.3): one-shot, capture-phase, on window. ----
+  // `capture` + `once` so it runs before — and independently of — the EQ
+  // button's own click handler, and can never fire twice. If that first gesture
+  // happens to land on the EQ button, this unlock runs first, then the click
+  // toggles `enabled` (an accepted edge case; both engine calls are order-safe).
+  const handleFirstGesture = (): void => {
+    unlocked = true;
+    engine.unlock();
+    removeGateLabel();
+    syncButton();
+  };
+  window.addEventListener('pointerdown', handleFirstGesture, { capture: true, once: true });
 }
