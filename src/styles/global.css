@@ -778,3 +778,68 @@ small,
     animation-iteration-count: infinite !important;
   }
 }
+
+/* ==========================================================================
+   Custom cursor — SPEC §8.7 "custom cursor dot → labeled pills" (T7,
+   rulings R7-4/R7-5). `lib/cursor.ts` builds `.byte-cursor`/`.byte-cursor__pill`
+   ONLY on a fine-pointer/hover device — a touch/coarse pointer gets none of
+   this DOM at all, so nothing here ever paints there ("no cursor-pill labels
+   on touch"). The dot's position is driven by GSAP (see cursor.ts); this
+   block only owns the two elements' look, the pill's hidden/shown state, and
+   the native-cursor-hiding root class. `z-index` sits above the grain
+   overlay (9999, `grain.css`) AND the Style Lab panel (10000, above) so the
+   custom cursor is always the topmost layer. Zone→label wiring is a LATER
+   task's job (`main.ts`) — this block stays zone-agnostic, styling only the
+   mechanism itself.
+   ========================================================================== */
+
+/* Hides the native cursor everywhere while the custom one is live (toggled
+   by `initCursor()`/`destroy()`) — the `*` covers links/buttons, which
+   otherwise keep their own UA-stylesheet pointer cursor despite this class
+   sitting on `<html>`, since `cursor` only inherits where nothing else sets
+   it directly. */
+.byte-cursor-active,
+.byte-cursor-active * {
+  cursor: none;
+}
+
+.byte-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10001;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: -0.25rem 0 0 -0.25rem;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.byte-cursor__pill {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* `[hidden]` alone would lose to the `display: inline-flex` above (an author
+   rule on the exact same element beats the UA `[hidden]{display:none}` rule
+   — same reasoning as the preloader's own `[hidden]` override above), so
+   this file must spell out the hidden state itself. */
+.byte-cursor__pill[hidden] {
+  display: none;
+}
