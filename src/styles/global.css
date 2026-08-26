@@ -666,6 +666,18 @@ small,
   outline-offset: 2px;
 }
 
+/* "Copy locked config" — the one lab control that isn't a radio group, so
+   none of the `.lab__group`/`.lab__option` rules above fit it. */
+.lab__button {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+}
+
 /* ==========================================================================
    Preloader — SPEC §8.1 entrance overlay. A blinking caret beside a counting
    `%`, painted over the whole viewport on load and lifted by `runEntrance()`
