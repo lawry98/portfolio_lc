@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { createGlyphQueue, makeGlyph, MAX_LIVE_GLYPHS } from './glyphs';
-import type { GlyphKind } from './glyphs';
+import { createGlyphQueue, GLYPH_KINDS, makeGlyph, MAX_LIVE_GLYPHS } from './glyphs';
 
 /**
  * `makeGlyph` builds real `THREE.Shape`/`ExtrudeGeometry`/`Mesh`/
@@ -10,9 +9,12 @@ import type { GlyphKind } from './glyphs';
  * module doc comment). `createGlyphQueue` is plain data (no gsap, no
  * three) and is tested with trivial numeric stand-ins for the glyph handle,
  * exactly as the feeder will instantiate it with `THREE.Mesh` later.
+ *
+ * `GLYPH_KINDS` is imported from `glyphs.ts` itself (T5 task-5 fold) rather
+ * than re-declared as a local literal — this file, `feed.ts`, and
+ * `glyphs.ts`'s own `GlyphKind` union used to each keep an independent copy
+ * of the same six kinds.
  */
-
-const GLYPH_KINDS: GlyphKind[] = ['{', ';', '>', '*', '+', '='];
 
 describe('makeGlyph', () => {
   it.each(GLYPH_KINDS)(

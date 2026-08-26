@@ -165,8 +165,20 @@ export function createGlyphQueue<T = unknown>(cap: number = MAX_LIVE_GLYPHS): Gl
 // no renderer or GL context), so `glyphs.test.ts` exercises this directly.
 // ---------------------------------------------------------------------------
 
-/** The six code-glyph kinds Byte can be fed (SPEC §6 "`{ ; > *`" plus `+`/`=`). */
-export type GlyphKind = '{' | ';' | '>' | '*' | '+' | '=';
+/**
+ * The six code-glyph kinds Byte can be fed (SPEC §6 "`{ ; > *`" plus `+`/`=`)
+ * — the single exported source of truth (T5 task-5 carry-forward fold: this
+ * used to be duplicated three ways — this file's own `GlyphKind` union,
+ * `feed.ts`'s local `GLYPH_KINDS` const, and `glyphs.test.ts`'s own literal).
+ * `GlyphKind` below is DERIVED from this array rather than declared as an
+ * independent literal union, so the two can never drift out of lockstep.
+ * `feed.ts`'s `randomGlyphKind()` imports this directly for its runtime
+ * pick; `glyphs.test.ts` imports it for its `it.each` sweep.
+ */
+export const GLYPH_KINDS = ['{', ';', '>', '*', '+', '='] as const;
+
+/** Every kind `makeGlyph()` can build — derived from `GLYPH_KINDS` above. */
+export type GlyphKind = (typeof GLYPH_KINDS)[number];
 
 /** Stroke thickness shared by every bar-built glyph, in the ~1-unit local
  *  box `makeGlyph` authors in before `geometry.center()` re-centers it — a

@@ -217,6 +217,19 @@ const MIGRATE_LANE_FOLLOW_DURATION_S = 0.5;
 const MIGRATE_ARRIVE_DIST_PX = 40;
 
 /**
+ * T5 task 5 "happy 360° spin" — the ONLY reward for a feed that begins while
+ * `traveling` (SPEC §6: no retype for a trip-feed — fsm.ts's own
+ * `feedFromTraveling` fork already routes `eating --ATE--> traveling`
+ * instead of `retyping` for that edge). `SPIN_DURATION_S`/`SPIN_EASE` tune
+ * the one-full-turn `rig.object3d.rotation.y` tween `playHappySpin()`
+ * (declared just above `dispatch`, below) plays on that edge only — hand-
+ * picked, free to retune visually, same spirit as every other tunable in
+ * this section.
+ */
+const SPIN_DURATION_S = 0.6;
+const SPIN_EASE = 'back.out(1.4)';
+
+/**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
  * `Range` over its last non-empty text node — deliberately NOT
  * `el.getBoundingClientRect()`. This project's `.hero__line` spans are
@@ -558,6 +571,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let hintTween: ReturnType<typeof gsap.to> | null = null;
   /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
   let reacquireTween: ReturnType<typeof gsap.to> | null = null;
+  /** T5 task 5's happy-spin tween (`playHappySpin`, declared just above
+   *  `dispatch` below) — a named slot mirroring `dashTween`/`eatTween`/
+   *  `reacquireTween` so a hypothetical rapid re-entry into `traveling` from
+   *  `eating` can defensively kill a still-in-flight predecessor before
+   *  starting a fresh one (in practice a full dash+eat cycle is always
+   *  slower than this spin's own duration, so the two should never actually
+   *  overlap — belt-and-suspenders, same reasoning as those three). */
+  let spinTween: ReturnType<typeof gsap.to> | null = null;
   // Per-frame Byte→caret follow (T6): `quickTo` so the per-tick target update
   // during a retype reuses ONE tween per axis instead of spawning a fresh
   // tween each frame (CLAUDE.md GSAP conventions). Created once here; drives
@@ -1091,8 +1112,43 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     retypeActive = true;
   }
 
+  // --- T5 task 5: feed-while-traveling happy spin ----------------------------
+  /**
+   * Plays once, on the `eating`->`traveling` edge only (a feed that began
+   * mid-trip; fsm.ts's `feedFromTraveling` fork) — see `dispatch`'s
+   * `'traveling'` case for the `prev === 'eating'` gate that calls this.
+   * Never fires for a MIGRATE-driven entry into `traveling` from a home
+   * state. Skipped outright under `reducedActive` (no spin a reduced-motion
+   * user can't stop, matching every other full-motion-only beat in this
+   * module). A full turn of `rig.object3d.rotation.y` — a channel nothing
+   * else ever writes: `rig.ts`'s look system drives `source.eye.rotation`
+   * (a different node, yaw+pitch for the eyes), and the dash bank
+   * (`feed.ts`) / curious lean (`applyCuriousLean`) both live on
+   * `rotation.z` — so this can never fight another writer. Hard-resets to
+   * exactly 0 on completion (rather than leaving it at the tweened '+=2π'
+   * value) so repeated spins never accumulate float drift.
+   */
+  function playHappySpin(): void {
+    spinTween = killTracked(spinTween);
+    if (reducedActive) {
+      return;
+    }
+    const root = rig.object3d;
+    spinTween = track(
+      gsap.to(root.rotation, {
+        y: `+=${Math.PI * 2}`,
+        duration: SPIN_DURATION_S,
+        ease: SPIN_EASE,
+        onComplete: () => {
+          spinTween = null;
+          root.rotation.y = 0;
+        },
+      }),
+    );
+  }
+
   // --- FSM → choreography dispatch (brief 4d, "the idle brain") -------------------
-  function dispatch(state: PetState): void {
+  function dispatch(state: PetState, prev: PetState): void {
     // A prior onEnter listener may have caused a NESTED transition mid-loop (e.g. the
     // feeder re-chaining idle→FEED→dashing for the next queued glyph). When that
     // happens this callback still fires for the now-superseded state, so bail if the
@@ -1182,15 +1238,24 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         handleEnterRetyping();
         break;
       case 'traveling':
-        // T8 migration: nothing to trigger here beyond the shared per-state
-        // resets above (`setBehind(false)`, pause the micro scheduler +
-        // clear any glance, hide the hint, clear the curious lean) — Byte
-        // just keeps blinking while it travels. The lane `quickTo`
-        // (`byteToLaneX/Y`) is the sole writer of `rig.object3d.position`
-        // for this state, driven per-tick from `onTick`'s
-        // `runMigrationFull` off the LIVE `pickAnchor` result (never a
-        // target decided once on entry) — that's what makes a mid-trip
-        // reversal turn Byte around instead of stranding it in the lane.
+        // T8 migration: beyond the shared per-state resets above
+        // (`setBehind(false)`, pause the micro scheduler + clear any
+        // glance, hide the hint, clear the curious lean), Byte just keeps
+        // blinking while it travels. The lane `quickTo` (`byteToLaneX/Y`)
+        // is the sole writer of `rig.object3d.position` for this state,
+        // driven per-tick from `onTick`'s `runMigrationFull` off the LIVE
+        // `pickAnchor` result (never a target decided once on entry) —
+        // that's what makes a mid-trip reversal turn Byte around instead
+        // of stranding it in the lane.
+        //
+        // T5 task 5: the ONE exception — entering `traveling` FROM
+        // `eating` (a feed that began mid-trip; fsm.ts's
+        // `feedFromTraveling` fork) is the happy-spin reward, no retype.
+        // A MIGRATE-driven entry into `traveling` from a home state
+        // (`prev` is idle/curious/invited) must NOT spin.
+        if (prev === 'eating') {
+          playHappySpin();
+        }
         break;
       case 'hidden':
       case 'entering':
@@ -1843,6 +1908,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     peekTimeline = null;
     hintTween = null;
     reacquireTween = null;
+    spinTween = null;
     sparkTween = null;
     // Drop any in-flight entrance resolver (the drop-in tween itself is in
     // `liveTweens`, already killed by the bulk kill above). A destroy mid-

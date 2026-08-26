@@ -57,7 +57,7 @@
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
-import { createGlyphQueue, makeGlyph } from './glyphs';
+import { createGlyphQueue, GLYPH_KINDS, makeGlyph } from './glyphs';
 import type { GlyphKind } from './glyphs';
 import type { ClipName, PetFSM, PetRig, PetState, SceneHandle } from './types';
 import type { SoundEngine } from './sound/SoundEngine';
@@ -96,9 +96,6 @@ export interface Feeder {
 // Tunables — glyph appearance (R-T5-10). Hand-picked, free to retune
 // visually — same spirit as rig.ts/shadow.ts's own constants.
 // ---------------------------------------------------------------------------
-
-/** Every kind `glyphs.ts`'s `makeGlyph()` can build — SPEC §6's set. */
-const GLYPH_KINDS: readonly GlyphKind[] = ['{', ';', '>', '*', '+', '='];
 
 /** Rendered glyph height range, as a fraction of `deps.unitPx` (brief: "~0.4-0.6 x unitPx"). */
 const GLYPH_SCALE_MIN = 0.4;
@@ -205,11 +202,19 @@ const SATISFIED_WIGGLE_SCALE = 1.08;
 const SATISFIED_WIGGLE_UP_DURATION = 0.12;
 const SATISFIED_WIGGLE_DOWN_DURATION = 0.18;
 
-/** States `fsm.send('FEED')` is legal from (fsm.ts) — `maybeStartProcessing()`'s gate. */
+/**
+ * States `fsm.send('FEED')` is legal from (fsm.ts) — `maybeStartProcessing()`'s
+ * gate. T8 task 5: `traveling` accepts FEED too — a feed begun mid-trip runs
+ * the exact same dash/eat choreography below (the feeder never forks on
+ * *why* it's dashing/eating), and fsm.ts's own `feedFromTraveling` fork routes
+ * its `ATE` back to `traveling` (a happy 360° spin, no retype — see
+ * `createBytePet.ts`'s `dispatch`) instead of `retyping`.
+ */
 const FEED_ACCEPTING_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'idle',
   'curious',
   'invited',
+  'traveling',
 ]);
 
 // ---------------------------------------------------------------------------
