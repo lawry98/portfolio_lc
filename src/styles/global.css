@@ -553,12 +553,25 @@ small,
   line-height: 1.05;
   letter-spacing: -0.01em;
   min-height: calc(1.05em * 2);
+  /* Positioning context for Byte's footer retype caret (T8) — mirrors
+     `.hero__headline` above. `renderRetype` (pet/retype.ts) moves
+     `[data-byte-caret]` via `transform`, read as deltas relative to this
+     element; the caret's own `position: absolute; top/left: 0` must resolve
+     against THIS element (its offsetParent), so this must be positioned.
+     Adding `position: relative` shifts no layout — it only changes what the
+     absolutely-placed caret anchors to. */
+  position: relative;
 }
 
 .footer__line {
   display: block;
   white-space: nowrap;
   hyphens: none;
+  /* CLS-0 companion to the headline's own 2-line min-height above (mirrors
+     `.hero__line`): an emptied line mid-retype still reserves its own row, so
+     deleting every char on one line never collapses that line's height.
+     `1.05em` matches this element's line-height. */
+  min-height: 1.05em;
 }
 
 .footer__meta {

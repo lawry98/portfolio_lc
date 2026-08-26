@@ -306,6 +306,12 @@ function bootstrap(): void {
     return;
   }
 
+  // T8: the footer CTA is Byte's SECOND retype home. Resolve its 2-line
+  // headline (guarded like `headlineEl` — a stripped page without it simply
+  // gets no footer home, hero-only). `createBytePet` builds the footer home
+  // only when BOTH `footerEl` and `footerPhrases` are present.
+  const footerEl = root.querySelector<HTMLElement>('.footer__headline') ?? undefined;
+
   bytePet = createBytePet(document.body, {
     headlineEl,
     theme: theme.current(),
@@ -320,6 +326,12 @@ function bootstrap(): void {
     // is the static headline #1 already in the markup, so the first eat
     // retypes into `identity[1]`, and so on, wrapping the cycle.
     phrases: phrases.identity,
+    // T8 switchable footer home: `setHomeAnchor(footerEl)` re-points Byte's
+    // retype at the footer's `phrases.footer` cycle (`footer[0] = ["LET'S",
+    // "BUILD"]` == the static footer markup, so the first footer feed deletes
+    // the right text). WHEN Byte migrates is a later task; the home just exists.
+    footerEl,
+    footerPhrases: phrases.footer,
     // T7 sound seam (R7-1): route every pet cue (typeTick / eat / spawnPop /
     // themeWhoosh / wakeBoing / chirp) through the one engine constructed
     // above. `createBytePet` speaks only the `SoundEngine` interface — this is
@@ -350,6 +362,21 @@ function bootstrap(): void {
     }
     hungryTooltip?.setCount(total);
   });
+
+  // T8 browser-QA hook (temporary dev affordance, in the spirit of the
+  // project's `?lab` / `data-tooltip` axes): the scroll-driven hero<->footer
+  // migration that would call `setHomeAnchor` automatically is the NEXT task,
+  // so expose it (plus the two home elements + `feed`) on `window.__byteQA` for
+  // now. Manual QA switches Byte's home then feeds it —
+  // `__byteQA.setHomeAnchor(__byteQA.footerEl)` then `__byteQA.feed(x, y)` — to
+  // exercise the footer retype before that automatic driver lands. Guarded via
+  // optional-chaining; only defined on the WebGL path (no Byte otherwise).
+  (window as unknown as { __byteQA?: unknown }).__byteQA = {
+    setHomeAnchor: (el: HTMLElement) => bytePet?.setHomeAnchor(el),
+    feed: (x: number, y: number) => bytePet?.feed(x, y),
+    headlineEl,
+    footerEl,
+  };
 
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
   // to exist beyond the theme-toggle callback above: tear it down (kills

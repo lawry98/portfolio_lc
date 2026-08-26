@@ -163,13 +163,29 @@ export interface ClipPlayOptions {
 /**
  * Inputs to `createBytePet()` (SPEC §4.4). Only the fields there's a real
  * consumer for — `noUnusedParameters` is on, so an option nothing reads
- * would fail the build. Later tickets extend this (`footerEl` for T8's
- * migration, `modelUrl` for T-GLB) once they have a real consumer for each;
- * adding them now would be dead weight. (T7 added the `sound` seam below.)
+ * would fail the build. Later tickets extend this (`modelUrl` for T-GLB)
+ * once they have a real consumer for each; adding them now would be dead
+ * weight. (T7 added the `sound` seam below; T8 un-deferred `footerEl` +
+ * `footerPhrases` for the switchable footer home.)
  */
 export interface PetOptions {
   /** The live headline element Byte anchors to and sizes itself from (`unitPx` = its computed font-size). */
   headlineEl: HTMLElement;
+  /**
+   * The footer CTA's 2-line headline — Byte's SECOND home (T8). Supplied
+   * together with `footerPhrases`, `createBytePet` builds a footer home (its
+   * own DOM caret + `data-byte-line` lines + phrase cycle) that
+   * `setHomeAnchor(footerEl)` can switch Byte's retype target to. Omit either
+   * one and there is no footer home — hero-only, byte-identical to before.
+   */
+  footerEl?: HTMLElement;
+  /**
+   * The footer retype cycle (SPEC §6/§10). `footerPhrases[0]` should equal the
+   * static footer headline #1 (`phrases.footer[0] = ["LET'S","BUILD"]`) so the
+   * first footer feed deletes the text actually shown there. Only consumed
+   * when `footerEl` is also present (both gate the footer home).
+   */
+  footerPhrases?: readonly Phrase[];
   /** Starting theme; defaults to `'light'` if omitted (the caller's own theme controller is the source of truth thereafter via `setTheme`). */
   theme?: 'light' | 'dark';
   /** Caller-supplied reduced-motion override. `createBytePet` also self-detects via `matchMedia` when this is absent — see its `gsap.matchMedia()` wiring. */
@@ -210,6 +226,15 @@ export interface BytePetHandle {
   onEat(cb: (total: number) => void): void;
   /** SPEC §8.1: drop Byte in + live-type phrase #1 (reduced-motion: instant). Resolves when the entrance settles into idle. Safe no-op-ish if not constructed with `{ entrance: true }`. */
   enterAndType(): Promise<void>;
+  /**
+   * Switch Byte's active home between the hero headline and the footer CTA
+   * (T8): the anchor, DOM caret, retype target, and phrase cycle all follow.
+   * No-op if `el` is already the active home; ignored if `el` matches neither
+   * home (defensive). Does NOT itself drive the scroll migration — that (the
+   * FSM `MIGRATE`/`ARRIVED` beats) is wired by a later task; for now this is
+   * called manually (browser QA) to point Byte at the footer.
+   */
+  setHomeAnchor(el: HTMLElement): void;
   /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
   destroy(): void;
 }

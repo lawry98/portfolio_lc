@@ -36,6 +36,7 @@ import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
 import { createRetype, renderRetype } from './retype';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
+import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
 type Theme = 'light' | 'dark';
@@ -294,78 +295,117 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
   }
 
-  // --- Retype reward: line tags + DOM caret (T6, R-T6a-3) -------------------
-  // Tag the headline's two line elements with `data-byte-line` attributes so
-  // `renderRetype` (retype.ts) finds them by ATTRIBUTE — never a page CSS
-  // class name, keeping `pet/` portable — and so the tags travel with the
-  // spans through the hero's async SplitText line-reveal (which wraps them;
-  // see hero.ts's bounded revert, R-T6a-4). Done synchronously here, at
-  // construction, before that reveal (fired off `whenFontsSettled()`, a later
-  // task) ever runs, so it always tags the ORIGINAL `.hero__line` spans.
-  const lineEls = Array.from(opts.headlineEl.children).slice(0, 2) as HTMLElement[];
-  lineEls.forEach((el, i) => el.setAttribute('data-byte-line', String(i)));
+  // --- Active home model: anchor + caret + lines + phrase cycle (T6/T8) -----
+  // Byte's "home" is generalized (T8) from the single hero headline to a
+  // SWITCHABLE record: an anchor element, its OWN DOM caret, its OWN
+  // `data-byte-line` line spans, and its OWN phrase cycle + index.
+  // `buildHome` runs the SAME per-home setup (line tagging R-T6a-3 + caret
+  // seed) for the hero AND the footer — ONE caret/tag path, never forked —
+  // and `setHomeAnchor` (below) switches which home is active. Each home
+  // independently remembers its cycle position, so hero and footer keep
+  // separate `phraseIndex`es.
+  interface Home {
+    el: HTMLElement;
+    caret: HTMLElement;
+    lines: HTMLElement[];
+    cycle: readonly Phrase[];
+    phraseIndex: number;
+  }
 
-  // Byte's DOM caret (the SEED node). Carries BOTH `class="byte-caret"` (CSS
-  // dimensions/color, global.css) AND the `data-byte-caret` attribute (the
-  // reduced-motion blink opt-back-in in global.css keys off the attribute, and
-  // `liveCaret()` re-finds the caret by it after any SplitText clone-swap).
-  // Appended as a DIRECT child of `headlineEl`. Moved by `transform` WRITES
-  // only (renderRetype during a retype; the rest-position write in `onTick`
-  // otherwise), never inserted in flow, so it can never reflow the headline
-  // (CLS 0).
-  const caretEl = document.createElement('span');
-  caretEl.className = 'byte-caret';
-  caretEl.setAttribute('data-byte-caret', '');
-  caretEl.setAttribute('aria-hidden', 'true');
-  opts.headlineEl.appendChild(caretEl);
-
-  /** The caret's rest transform — parked at the end of the bottom line's text
-   *  in `headlineEl`-relative coords (bounding-rect deltas, immune to any
-   *  positioned ancestor). Shared by the creation seed just below and the
-   *  per-tick rest write in `onTick`, so the two can never drift. */
-  function caretRestTransform(lineRect: DOMRect): string {
-    const headlineRect = opts.headlineEl.getBoundingClientRect();
+  /** The caret's rest transform for home `el` — parked at the end of the
+   *  bottom line's text in `el`-relative coords (bounding-rect deltas, immune
+   *  to any positioned ancestor between the anchor glyph and `el`). Shared by
+   *  `buildHome`'s seed and the per-tick rest write in `onTick`, so the two
+   *  can never drift. `el` MUST be the caret's offsetParent (both
+   *  `.hero__headline` and `.footer__headline` are `position: relative`) so the
+   *  caret's `top:0/left:0` base sits at `el`'s own top-left. */
+  function caretRestTransform(el: HTMLElement, lineRect: DOMRect): string {
+    const headlineRect = el.getBoundingClientRect();
     return `translate(${lineRect.right - headlineRect.left}px, ${
       lineRect.top - headlineRect.top
     }px)`;
   }
 
-  // Seed the caret at its rest position immediately, so it never flashes at the
-  // headline's top-left for the ≤1 frame before the first `onTick` positions it
-  // (fix-wave finding 2). The headline is already laid out here (createBytePet
-  // boots after the DOM is ready); `onTick` refines it from frame 1.
-  caretEl.style.transform = caretRestTransform(lastLineTextRect(opts.headlineEl));
+  /**
+   * Builds a `Home` from an anchor `el` + its phrase `cycle`, running the
+   * per-home retype setup that used to be hero-only:
+   *  - tag the first two child line spans `data-byte-line="0|1"` (R-T6a-3 — by
+   *    ATTRIBUTE, never a page CSS class, keeping `pet/` portable — so the tags
+   *    travel with the spans through the hero's/footer's SplitText line-reveal
+   *    which wraps them, and survive its revert). Runs synchronously here, at
+   *    construction, BEFORE either reveal's SplitText runs (the hero reveal is
+   *    deferred to `whenFontsSettled()`; the footer reveal is deferred a frame
+   *    in `page/footer.ts` for exactly this reason), so it always tags the
+   *    ORIGINAL `.hero__line`/`.footer__line` spans;
+   *  - create the SEED caret (`class="byte-caret"` for CSS dims/color +
+   *    `data-byte-caret` for the reduced-motion blink opt-back-in and the
+   *    `liveCaret` re-find) appended as a DIRECT child of `el`, moved by
+   *    `transform` WRITES only (never inserted in flow) so it can never reflow
+   *    `el` (CLS 0);
+   *  - seed the caret at its rest position immediately so it never flashes at
+   *    `el`'s top-left for the ≤1 frame before the first `onTick` positions it.
+   */
+  function buildHome(el: HTMLElement, cycle: readonly Phrase[]): Home {
+    const lines = Array.from(el.children).slice(0, 2) as HTMLElement[];
+    lines.forEach((lineEl, i) => lineEl.setAttribute('data-byte-line', String(i)));
+
+    const caret = document.createElement('span');
+    caret.className = 'byte-caret';
+    caret.setAttribute('data-byte-caret', '');
+    caret.setAttribute('aria-hidden', 'true');
+    el.appendChild(caret);
+    caret.style.transform = caretRestTransform(el, lastLineTextRect(el));
+
+    return { el, caret, lines, cycle, phraseIndex: 0 };
+  }
+
+  // Always build the HERO home. Build the FOOTER home only when BOTH
+  // `footerEl` and `footerPhrases` are supplied (§6). `activeHome` starts as
+  // the hero — the entrance always boots hero-active, byte-identical to before.
+  const heroHome = buildHome(opts.headlineEl, opts.phrases ?? []);
+  const footerHome: Home | null =
+    opts.footerEl && opts.footerPhrases ? buildHome(opts.footerEl, opts.footerPhrases) : null;
+  let activeHome: Home = heroHome;
 
   /**
-   * The LIVE caret node. The hero's async SplitText line-reveal (+ its
-   * R-T6a-4 revert) can REPLACE `#hero-headline`'s children with clones that
-   * keep the `data-byte-*` attributes but ORPHAN this init-captured `caretEl`
-   * reference. So resolve the caret by attribute at every runtime point of use
+   * The LIVE caret node for `home`. That home's SplitText line-reveal (+ its
+   * revert) can REPLACE its children with clones that keep the `data-byte-*`
+   * attributes but ORPHAN the init-captured seed `home.caret`. So resolve the
+   * caret by attribute (scoped to `home.el`) at every runtime point of use
    * (symmetric with how `renderRetype` re-queries `[data-byte-line]` live),
-   * re-appending our seed `caretEl` only if none is currently in the DOM —
-   * keeping the caret revert- and clone-proof.
+   * re-appending the home's seed caret only if none is currently in `home.el`.
    */
-  function liveCaret(): HTMLElement {
-    const found = opts.headlineEl.querySelector<HTMLElement>('[data-byte-caret]');
+  function liveCaret(home: Home): HTMLElement {
+    const found = home.el.querySelector<HTMLElement>('[data-byte-caret]');
     if (found) {
       return found;
     }
-    opts.headlineEl.appendChild(caretEl);
-    return caretEl;
+    home.el.appendChild(home.caret);
+    return home.caret;
   }
 
-  // --- Retype reward: phrase cycle + pure engine (T6) ----------------------
-  // `cycle[phraseIndex]` is the phrase CURRENTLY shown (`cycle[0]` == the
-  // static headline #1); each eat advances the index and retypes into the
-  // next. The engine is pure (retype.ts) — inject `Math.random` for the typed
-  // jitter, seed `initial` with the shown phrase so the first schedule
-  // deletes from the right text.
-  const cycle = opts.phrases ?? [];
-  let phraseIndex = 0;
-  function currentLinesText(): [string, string] {
-    return [lineEls[0]?.textContent ?? '', lineEls[1]?.textContent ?? ''];
+  /** The two line texts currently shown in `home`, resolved LIVE by attribute
+   *  (so a SplitText clone-swap or a footer revert never returns stale text).
+   *  Used to seed / re-seed the retype engine so its next schedule deletes what
+   *  is actually on-screen. */
+  function currentTextOf(home: Home): [string, string] {
+    const l0 = home.el.querySelector<HTMLElement>('[data-byte-line="0"]');
+    const l1 = home.el.querySelector<HTMLElement>('[data-byte-line="1"]');
+    return [l0?.textContent ?? '', l1?.textContent ?? ''];
   }
-  const retype = createRetype({ initial: cycle[0] ?? currentLinesText(), random: Math.random });
+
+  // --- Retype reward: the ONE pure engine (T6, reused for BOTH homes) -------
+  // A SINGLE `createRetype` instance drives every retype — hero AND footer
+  // (carry-forward #1: one typing path, one caret path). `setHomeAnchor`
+  // re-seeds it to the new home's on-screen text; `activeHome.cycle[phraseIndex]`
+  // is the phrase currently shown (`cycle[0]` == that home's static headline #1).
+  // The engine is pure (retype.ts) — inject `Math.random` for the typed jitter,
+  // seed `initial` with the hero's shown phrase so the first schedule deletes
+  // from the right text.
+  const retype = createRetype({
+    initial: heroHome.cycle[0] ?? currentTextOf(heroHome),
+    random: Math.random,
+  });
   // Whether a FULL-motion retype is being driven per-tick in `onTick` (false
   // under reduced motion, where the retype is an instant text set instead).
   let retypeActive = false;
@@ -854,9 +894,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (reducedActive) {
       return;
     }
-    // Resolve the live caret once for this pulse (a spark only fires mid-edit,
-    // long after any load-time clone-swap has settled).
-    const caret = liveCaret();
+    // Resolve the active home's live caret once for this pulse (a spark only
+    // fires mid-edit, long after any load-time clone-swap has settled).
+    const caret = liveCaret(activeHome);
     sparkTween = killTracked(sparkTween);
     sparkProxy.v = 0;
     sparkTween = track(
@@ -897,20 +937,23 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    *    per-frame and fires `RETYPED` on engine completion.
    */
   function handleEnterRetyping(): void {
-    if (cycle.length < 2) {
+    // Drive the ACTIVE home's retype (hero or footer — same engine, same
+    // path). Each home advances its own `phraseIndex`.
+    const home = activeHome;
+    if (home.cycle.length < 2) {
       fireOnNextTick(() => fsm.send('RETYPED'));
       return;
     }
 
-    phraseIndex = (phraseIndex + 1) % cycle.length;
-    const next = cycle[phraseIndex];
+    home.phraseIndex = (home.phraseIndex + 1) % home.cycle.length;
+    const next = home.cycle[home.phraseIndex];
 
     if (reducedActive) {
       retype.enqueue(next);
       retype.step(0);
       const finalFrame = retype.step(Number.MAX_SAFE_INTEGER);
       if (finalFrame) {
-        renderRetype(finalFrame, opts.headlineEl, liveCaret());
+        renderRetype(finalFrame, home.el, liveCaret(home));
       }
       fireOnNextTick(() => fsm.send('RETYPED'));
       return;
@@ -1062,8 +1105,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (!reducedActive) {
       renderRetype(
         { line0: '', line1: '', caretIndex: { line: 1, col: 0 } },
-        opts.headlineEl,
-        liveCaret(),
+        activeHome.el,
+        liveCaret(activeHome),
       );
     }
   } else {
@@ -1092,10 +1135,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // the engine re-anchors it on each `enqueue`. Cheap.
     retypeClockMs += dt * 1000;
 
-    // Re-derive the headline's text-end anchor every tick (never snapshot) —
-    // the canvases are viewport-fixed and the headline reflows once fonts/
-    // SplitText settle, exactly as the (now-removed) T3 `?glcube` rig did.
-    const lineRect = lastLineTextRect(opts.headlineEl);
+    // Re-derive the ACTIVE home's text-end anchor every tick (never snapshot)
+    // — the canvases are viewport-fixed and the headline reflows once fonts/
+    // SplitText settle, exactly as the (now-removed) T3 `?glcube` rig did. On a
+    // `setHomeAnchor` switch this seamlessly re-anchors Byte/caret/hint to the
+    // new home from the next tick.
+    const lineRect = lastLineTextRect(activeHome.el);
     const anchorX = lineRect.right;
     const anchorY = lineRect.top + lineRect.height / 2;
     const anchorWorld = scene.worldFromScreen(anchorX, anchorY);
@@ -1198,8 +1243,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if ((fsm.state() === 'retyping' || fsm.state() === 'entering') && retypeActive) {
       const frame = retype.step(retypeClockMs);
       if (frame) {
-        const caret = liveCaret();
-        renderRetype(frame, opts.headlineEl, caret);
+        const caret = liveCaret(activeHome);
+        renderRetype(frame, activeHome.el, caret);
         // Caret's live world position → Byte's feet (its vertical center
         // minus half the bot height, matching the home anchor's `- unitPx/2`).
         const cr = caret.getBoundingClientRect();
@@ -1257,7 +1302,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // instead — so the rest write runs only when the state is neither
     // `retyping` nor `entering` (R-T6b-3, the inverse of the driver gate).
     if (fsm.state() !== 'retyping' && fsm.state() !== 'entering') {
-      liveCaret().style.transform = caretRestTransform(lineRect);
+      liveCaret(activeHome).style.transform = caretRestTransform(activeHome.el, lineRect);
     }
   }
 
@@ -1283,6 +1328,38 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   function onEat(cb: (total: number) => void): void {
     feeder.onEat(cb);
+  }
+
+  /**
+   * Switch Byte's active home (T8): the per-tick anchor, the DOM caret, the
+   * retype target, and the phrase cycle all follow `activeHome`. No-op if `el`
+   * already matches the active home; ignore an `el` matching NEITHER home
+   * (defensive). On a real switch, re-seed the ONE retype engine to the new
+   * home's on-screen text (`retype.reset(currentTextOf(next))`) so the next
+   * retype deletes what is actually shown there; `onTick` parks the new home's
+   * caret at its rest position from the next tick (it already writes the
+   * active home's rest transform). Each home keeps its OWN `phraseIndex`, so
+   * hero and footer independently remember their cycle position.
+   *
+   * This does NOT drive migration/travel — it only re-points the retype
+   * machinery. WHEN to switch (the scroll-driven `MIGRATE`/`ARRIVED` FSM
+   * beats) is a later task; for now this is called manually (browser QA).
+   */
+  function setHomeAnchor(el: HTMLElement): void {
+    if (el === activeHome.el) {
+      return;
+    }
+    let next: Home | null = null;
+    if (el === heroHome.el) {
+      next = heroHome;
+    } else if (footerHome && el === footerHome.el) {
+      next = footerHome;
+    }
+    if (!next) {
+      return;
+    }
+    activeHome = next;
+    retype.reset(currentTextOf(next));
   }
 
   // --- Entrance choreography (T6b, SPEC §8.1) -------------------------------
@@ -1382,14 +1459,17 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // from an empty headline. Awaiting the bounce first guarantees it and the
     // `byteToCaret` `quickTo` never write `rig.object3d.position` on the same
     // frame. `reset(['',''])` + `enqueue(phrase)` = a pure type-from-empty (see
-    // retype.ts); if `cycle` is empty this enqueues `currentLinesText()` (empty
-    // under full motion) and the driver beats straight to `ENTERED` next tick —
-    // mirroring `handleEnterRetyping`'s pass-through. `lastRetypeTotal = -1`
-    // re-arms the per-edit spark detector.
+    // retype.ts); if the hero cycle is empty this enqueues
+    // `currentTextOf(heroHome)` (empty under full motion) and the driver beats
+    // straight to `ENTERED` next tick — mirroring `handleEnterRetyping`'s
+    // pass-through. `lastRetypeTotal = -1` re-arms the per-edit spark detector.
     fsm.send('SHOWN');
     await runDropIn();
     retype.reset(['', '']);
-    retype.enqueue(cycle[0] ?? currentLinesText());
+    // The entrance always types phrase #1 into the HERO home (boot is always
+    // hero-active). `heroHome.cycle[0] ?? currentTextOf(heroHome)` mirrors the
+    // pre-T8 `cycle[0] ?? currentLinesText()` exactly.
+    retype.enqueue(heroHome.cycle[0] ?? currentTextOf(heroHome));
     lastRetypeTotal = -1;
     retypeActive = true;
     return entered;
@@ -1431,12 +1511,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     mm.revert();
 
     hintEl.remove();
-    // Remove the caret whether it's still our seed or a SplitText clone that
-    // replaced it (the live node, found by attribute), plus the seed itself in
-    // case a clone-swap orphaned it (`.remove()` on a detached node is a safe
-    // no-op).
-    opts.headlineEl.querySelector('[data-byte-caret]')?.remove();
-    caretEl.remove();
+    // Remove BOTH homes' carets: the live node (found by attribute, in case a
+    // SplitText clone-swap replaced the seed) AND the seed itself (a detached
+    // node's `.remove()` is a safe no-op). Hero-only when there is no footer
+    // home — byte-identical to before.
+    for (const home of footerHome ? [heroHome, footerHome] : [heroHome]) {
+      home.el.querySelector('[data-byte-caret]')?.remove();
+      home.caret.remove();
+    }
 
     feeder.dispose();
     rig.dispose();
@@ -1444,5 +1526,5 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     scene.dispose();
   }
 
-  return { feed, setTheme, onEat, enterAndType, destroy };
+  return { feed, setTheme, onEat, enterAndType, setHomeAnchor, destroy };
 }
