@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { createPetRig } from './rig';
 import { createPlaceholderBot, POSE_GROUP_NAME } from './placeholderBot';
 import { createFSM } from './fsm';
+import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
@@ -157,6 +158,53 @@ const TYPE_TICK_EVERY = 3;
 const ENTRANCE_DROP_UNITS = 2;
 const ENTRANCE_DROP_DURATION_S = 0.7;
 const ENTRANCE_SCALE_FROM = 0.6;
+
+/**
+ * T8 migration (SPEC §6 "traveling & footer migration"; TICKETS T8
+ * "right-margin travel lane following scroll"). Exactly TWO homes, so
+ * migration is unambiguous: when the ACTIVE home's own text-end anchor
+ * scrolls out of the comfortable on-screen band (`MIGRATE_BAND_*` below),
+ * Byte travels the right-margin lane to the OTHER home and re-homes once
+ * THAT home scrolls back into the band — see `runMigrationFull`/
+ * `runMigrationReduced` (declared just above `onTick`) for the full state
+ * machine. All hand-picked, free to retune visually — same spirit as the
+ * `PEEK_*`/`RETYPE_*`/`ENTRANCE_*` constants above.
+ */
+/** The RESTING subset of `HOME_STATES` eligible to trigger a `MIGRATE` —
+ *  mirrors the FSM's own idle/curious/invited MIGRATE-accepting cases
+ *  (fsm.ts) exactly. Deliberately excludes peeking/sleeping/waking (also
+ *  `HOME_STATES`): those settle back to `idle` on their own first, where
+ *  the trigger re-evaluates fresh — the `wasActiveInBand` re-arm in
+ *  `enterIdleBehaviour` (below) is the same "re-check on return to idle"
+ *  idiom `wasNear` already uses. */
+const MIGRATE_ELIGIBLE_STATES: ReadonlySet<PetState> = new Set<PetState>([
+  'idle',
+  'curious',
+  'invited',
+]);
+/** The comfortable on-screen band (viewport px, inset from each edge) an
+ *  anchor must sit inside to count as "home" for migration purposes —
+ *  tighter than the full `[0, innerHeight]` viewport so a migration
+ *  triggers/arrives a little before/after the text is fully at the
+ *  bleeding edge of the fold, not exactly at it. */
+const MIGRATE_BAND_TOP_PX = 96;
+const MIGRATE_BAND_BOTTOM_PX = 96;
+/** Right-margin lane: how far right of the migration target's own text-end
+ *  the lane sits, and how close to the viewport's right edge it may
+ *  approach on a narrow viewport (so Byte never travels fully off-screen).
+ *  Fixed viewport-scale px, NOT `unitPx`-scaled — this is screen-edge
+ *  geometry, not headline type size (same reasoning as `PROXIMITY_PX`). */
+const MIGRATE_LANE_GAP_PX = 48;
+const MIGRATE_LANE_MARGIN_PX = 56;
+/** Per-tick ease duration for the lane-follow `quickTo` pair
+ *  (`byteToLaneX/Y`) — slower than `RETYPE_FOLLOW_DURATION_S` since this
+ *  trails a multi-second scroll, not a snappy per-character caret chase. */
+const MIGRATE_LANE_FOLLOW_DURATION_S = 0.5;
+/** World-px "close enough" distance between Byte and the lane point — one
+ *  of three independent conditions (with `pickAnchor` + the target's own
+ *  band membership) `runMigrationFull` requires before calling
+ *  `setHomeAnchor`. */
+const MIGRATE_ARRIVE_DIST_PX = 40;
 
 /**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
@@ -514,6 +562,28 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     duration: RETYPE_FOLLOW_DURATION_S,
     ease: 'power2',
   });
+  // T8 migration lane-follow (mirrors byteToCaretX/Y exactly, same
+  // reasoning): a dedicated quickTo pair, created ONCE here (not per-trip),
+  // so it is provably the SECOND-oldest tween of `rig.object3d.position`
+  // (right after byteToCaretX/Y) — any LATER-created tween (a fresh
+  // reacquire glide; the steady-state hard-pin's direct `.set()`, which
+  // runs from this module's own ticker callback and so always applies
+  // after gsap's own tween pass for the frame) renders/applies after it and
+  // wins, so handing the root back over on arrival needs no explicit kill
+  // of this pair — exactly the "oldest tween loses the race" guarantee the
+  // `byteToCaretX/Y` doc comment (`onTick`, below) already relies on. Drives
+  // `rig.object3d.position` ONLY while `traveling` (`runMigrationFull`,
+  // below) — nothing else pins the root then, `traveling` isn't a
+  // HOME_STATE. Also covered by `destroy()`'s existing
+  // `gsap.killTweensOf(rig.object3d.position)`.
+  const byteToLaneX = gsap.quickTo(rig.object3d.position, 'x', {
+    duration: MIGRATE_LANE_FOLLOW_DURATION_S,
+    ease: 'power2',
+  });
+  const byteToLaneY = gsap.quickTo(rig.object3d.position, 'y', {
+    duration: MIGRATE_LANE_FOLLOW_DURATION_S,
+    ease: 'power2',
+  });
   // The per-edit caret spark. One shared proxy + a single named slot (mirrors
   // `hintTween`): each edit kills+restarts the same tween via `killTracked`,
   // so overlapping edits never accumulate competing box-shadow writers.
@@ -557,6 +627,26 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // per dashing/eating span. Starts `true`: `createFSM()` starts in `idle`,
   // already home, so there is no span to reacquire from on the first tick.
   let wasHome = true;
+  // T8 migration (SPEC §6): edge-triggered "was the ACTIVE home's own
+  // anchor inside the comfortable on-screen migration band last tick" —
+  // mirrors wasNear/wasHome exactly. `runMigrationFull`/`runMigrationReduced`
+  // (declared just above `onTick`) fire `MIGRATE` only on the true->false
+  // crossing, and only while Byte is resting (idle/curious/invited), so a
+  // scroll that merely keeps the active home out of band doesn't re-fire
+  // every tick. Re-armed to `true` in `enterIdleBehaviour()` (the same
+  // I-1-style fix `wasNear` uses) so a home that left band DURING an
+  // interrupting dashing/eating/traveling span is still detected as a
+  // fresh "leaving" edge the moment idle resumes, rather than being
+  // silently stranded off-screen forever. Starts `true`: Byte boots home,
+  // on-screen (mirrors `wasHome`'s own starting assumption).
+  let wasActiveInBand = true;
+  // T8: which `Home` Byte is currently traveling TOWARD — set the instant
+  // `MIGRATE` is sent (the trigger, in `runMigrationFull`/
+  // `runMigrationReduced`), consumed and cleared at arrival when
+  // `setHomeAnchor`/`ARRIVED` fire. `null` whenever Byte isn't traveling
+  // (including the entire hero-only lifetime with no footer home). A plain
+  // data field, not a tween/timer — nothing to kill in `destroy()`.
+  let migrationTarget: Home | null = null;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
   // Hard-step squash of `source.eye.scale.y` — an infinite-repeat timeline
@@ -870,6 +960,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // currently-near cursor as a fresh crossing and (correctly) fires
     // POINTER_NEAR once; a currently-far cursor still fires nothing.
     wasNear = false;
+    // T8: the same I-1-style re-arm for the migration band edge. Without
+    // this, the active home leaving the band DURING an interrupting
+    // dashing/eating/traveling span would already be reflected in
+    // `wasActiveInBand` by the time idle resumes, silently swallowing the
+    // edge — Byte would stay stranded at an off-screen home. Resetting to
+    // `true` means the very next tick treats a currently-out-of-band home
+    // as a fresh "leaving" edge and migrates immediately; a currently-
+    // in-band home still triggers nothing.
+    wasActiveInBand = true;
     // Deliberately does NOT reset `earlyPeekDelivered` — see
     // `pickMicroBehaviour()`'s doc comment. Every idle (re-)entry just
     // restarts the 4–8s scheduler; only the bot's very first-ever roll is
@@ -1077,6 +1176,17 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // set here). Fires `RETYPED` on completion to advance the FSM.
         handleEnterRetyping();
         break;
+      case 'traveling':
+        // T8 migration: nothing to trigger here beyond the shared per-state
+        // resets above (`setBehind(false)`, pause the micro scheduler +
+        // clear any glance, hide the hint, clear the curious lean) — Byte
+        // just keeps blinking while it travels. `migrationTarget` is set by
+        // the trigger BEFORE `MIGRATE` is sent (`runMigrationFull`/
+        // `runMigrationReduced`, above `onTick`), not here; the lane
+        // `quickTo` (`byteToLaneX/Y`) is the sole writer of
+        // `rig.object3d.position` for this state, driven per-tick from
+        // `onTick` rather than once on entry.
+        break;
       case 'hidden':
       case 'entering':
         // T6b entrance beats — deliberate no-ops beyond the shared per-state
@@ -1088,9 +1198,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // never from here.
         break;
       default:
-        // 'traveling' is not reachable via the current FSM (fsm.ts never
-        // transitions into it yet) — reserved for a later ticket.
-        // ('hidden'/'entering' are now entrance-driven — handled above.)
+        // Exhaustive: every `PetState` is now handled explicitly above.
+        // Kept as a defensive no-op (rather than an `assertNever`/throw) so
+        // a future `PetState` union addition fails soft here instead of
+        // breaking the choreography loop outright.
         break;
     }
   }
@@ -1152,12 +1263,181 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   feedZone.addEventListener('pointerdown', onPointerDown, { passive: true });
 
+  // --- T8 migration (SPEC §6 "traveling & footer migration") ---------------
+  // Only meaningful when a footer home exists — `onTick` (below) never
+  // calls either function otherwise, so migration is entirely inert
+  // (hero-only, byte-identical to Task 3). Reduced motion (SPEC §12
+  // "migration simplified") takes the separate `runMigrationReduced`
+  // branch below: no lane, an instant re-home snap instead.
+  //
+  // Concern #5 carried from Task 3's report (`setHomeAnchor` has no state
+  // guard against a mid-entrance/mid-retype switch): both functions below
+  // are safe BY CONSTRUCTION rather than by an added guard — the trigger
+  // only ever fires `MIGRATE` while `fsm.state()` is idle/curious/invited
+  // (`MIGRATE_ELIGIBLE_STATES`; the FSM itself only accepts `MIGRATE` from
+  // those three anyway, see fsm.ts), and `setHomeAnchor` is only ever
+  // called from the arrival branch, which only runs while
+  // `fsm.state() === 'traveling'`. Neither path can run mid-`entering` or
+  // mid-`retyping`.
+
+  /** Whether `anchorY` (screen-space, top-left-origin px) sits comfortably
+   *  inside the viewport — inset by `MIGRATE_BAND_TOP_PX`/`_BOTTOM_PX` on
+   *  either edge so a migration doesn't trigger/arrive right at the
+   *  bleeding edge of the fold. */
+  function inMigrationBand(anchorY: number): boolean {
+    return anchorY >= MIGRATE_BAND_TOP_PX && anchorY <= window.innerHeight - MIGRATE_BAND_BOTTOM_PX;
+  }
+
+  /**
+   * Full-motion migration driver — called every tick from `onTick`, BEFORE
+   * its generic anchor computation reads `activeHome.el`, whenever a
+   * footer home exists and reduced motion is off. Reads BOTH homes' live
+   * rects fresh every call (never cached — cheap `Range`-based reads,
+   * matching `onTick`'s own "never snapshot" anchor philosophy) and:
+   *  - while RESTING (`MIGRATE_ELIGIBLE_STATES`): fires `MIGRATE` + records
+   *    `migrationTarget` on the tick the ACTIVE home's own anchor crosses
+   *    OUT of the comfortable band — the `wasActiveInBand` edge guard
+   *    (mirrors `wasNear`/`wasHome`) makes this a once-per-crossing event,
+   *    not a per-tick spam (see its own doc comment for the full
+   *    reasoning);
+   *  - while TRAVELING toward a recorded `migrationTarget`: eases Byte
+   *    (`byteToLaneX/Y`) toward the right-margin lane point trailing that
+   *    target, and re-homes (`setHomeAnchor` + `ARRIVED`) once `pickAnchor`
+   *    agrees the target has won, the target's own anchor is back in the
+   *    comfortable band, AND Byte itself has caught up to within
+   *    `MIGRATE_ARRIVE_DIST_PX` of the lane point — three independent
+   *    confirmations so Byte never re-homes onto a target that's still
+   *    mostly off-screen or while still visibly mid-flight toward it.
+   *    `setHomeAnchor` runs here, BEFORE `onTick`'s own generic anchor
+   *    computation reads `activeHome.el` this same tick, so the existing
+   *    `wasHome` no-snap reacquire seam picks up the NEW anchor immediately
+   *    — no new home-handoff code, exactly as the brief asks;
+   *  - while traveling with no recorded target (defensive — shouldn't
+   *    happen, since every path into `traveling` here sets one first):
+   *    no-op, leaving the root exactly where it last was rather than
+   *    guessing.
+   */
+  function runMigrationFull(footer: Home): void {
+    const heroRect = lastLineTextRect(heroHome.el);
+    const footerRect = lastLineTextRect(footer.el);
+    const heroAnchorY = heroRect.top + heroRect.height / 2;
+    const footerAnchorY = footerRect.top + footerRect.height / 2;
+
+    const state = fsm.state();
+
+    if (MIGRATE_ELIGIBLE_STATES.has(state)) {
+      const activeAnchorY = activeHome === heroHome ? heroAnchorY : footerAnchorY;
+      const activeInBand = inMigrationBand(activeAnchorY);
+      if (!activeInBand && wasActiveInBand) {
+        migrationTarget = activeHome === heroHome ? footer : heroHome;
+        fsm.send('MIGRATE');
+      }
+      wasActiveInBand = activeInBand;
+      return;
+    }
+
+    if (state !== 'traveling' || !migrationTarget) {
+      return;
+    }
+    const target = migrationTarget;
+
+    const targetRect = target === heroHome ? heroRect : footerRect;
+    const targetAnchorY = target === heroHome ? heroAnchorY : footerAnchorY;
+    const targetInBand = inMigrationBand(targetAnchorY);
+
+    const laneScreenX = Math.min(
+      targetRect.right + MIGRATE_LANE_GAP_PX,
+      window.innerWidth - MIGRATE_LANE_MARGIN_PX,
+    );
+    const laneScreenY = gsap.utils.clamp(
+      MIGRATE_BAND_TOP_PX,
+      window.innerHeight - MIGRATE_BAND_BOTTOM_PX,
+      targetAnchorY,
+    );
+    const laneWorld = scene.worldFromScreen(laneScreenX, laneScreenY);
+    const laneRootY = laneWorld.y - unitPx / 2;
+
+    const dist = Math.hypot(
+      rig.object3d.position.x - laneWorld.x,
+      rig.object3d.position.y - laneRootY,
+    );
+    const pick = pickAnchor(heroRect, footerRect, { height: window.innerHeight });
+    const targetKey: 'hero' | 'footer' = target === heroHome ? 'hero' : 'footer';
+    const arrived = pick === targetKey && targetInBand && dist <= MIGRATE_ARRIVE_DIST_PX;
+
+    if (arrived) {
+      migrationTarget = null;
+      setHomeAnchor(target.el);
+      fsm.send('ARRIVED');
+      return;
+    }
+
+    byteToLaneX(laneWorld.x);
+    byteToLaneY(laneRootY);
+  }
+
+  /**
+   * Reduced-motion migration driver (SPEC §12 "migration simplified") — the
+   * SAME band-leave trigger as `runMigrationFull` (so the two stay in
+   * lockstep conceptually), but no lane and no arrival distance: the
+   * instant Byte's active home leaves the comfortable band, it snaps
+   * straight to the OTHER home's anchor. `fsm.send('MIGRATE')`, then
+   * `setHomeAnchor`, then the instant `rig.object3d.position` placement all
+   * happen synchronously here — before `onTick`'s generic anchor
+   * computation runs, the same seam the full-motion path uses — so the
+   * shadow (which reads the root's position later in the SAME tick) never
+   * renders one stale frame at the old home. `fsm.send('ARRIVED')` is
+   * deferred via `fireOnNextTick` — never a synchronous send back-to-back
+   * with `MIGRATE` — mirroring every other instant-completion beat in this
+   * module (the reduced-motion entrance, the reduced-motion retype).
+   */
+  function runMigrationReduced(footer: Home): void {
+    const state = fsm.state();
+    if (!MIGRATE_ELIGIBLE_STATES.has(state)) {
+      return;
+    }
+
+    const heroRect = lastLineTextRect(heroHome.el);
+    const footerRect = lastLineTextRect(footer.el);
+    const heroAnchorY = heroRect.top + heroRect.height / 2;
+    const footerAnchorY = footerRect.top + footerRect.height / 2;
+
+    const activeAnchorY = activeHome === heroHome ? heroAnchorY : footerAnchorY;
+    const activeInBand = inMigrationBand(activeAnchorY);
+
+    if (!activeInBand && wasActiveInBand) {
+      const target = activeHome === heroHome ? footer : heroHome;
+      const targetRect = target === heroHome ? heroRect : footerRect;
+      const targetAnchorY = target === heroHome ? heroAnchorY : footerAnchorY;
+      const targetWorld = scene.worldFromScreen(targetRect.right, targetAnchorY);
+
+      fsm.send('MIGRATE');
+      setHomeAnchor(target.el);
+      rig.object3d.position.set(targetWorld.x, targetWorld.y - unitPx / 2, 0);
+      fireOnNextTick(() => fsm.send('ARRIVED'));
+    }
+    wasActiveInBand = activeInBand;
+  }
+
   // --- Per-tick update (brief 4b) -----------------------------------------------------
   function onTick(dt: number): void {
     // Free-running retype clock — ALWAYS advanced (independent of state) so
     // the engine's `step()` reads a monotonic ms value during a full retype;
     // the engine re-anchors it on each `enqueue`. Cheap.
     retypeClockMs += dt * 1000;
+
+    // T8 migration — inert (no-op) with no footer home, exactly Task 3's
+    // hero-only behavior. Runs BEFORE the generic anchor computation below
+    // reads `activeHome.el`, so an arrival's `setHomeAnchor` call this same
+    // tick is already reflected in it (see `runMigrationFull`'s doc
+    // comment above).
+    if (footerHome) {
+      if (reducedActive) {
+        runMigrationReduced(footerHome);
+      } else {
+        runMigrationFull(footerHome);
+      }
+    }
 
     // Re-derive the ACTIVE home's text-end anchor every tick (never snapshot)
     // — the canvases are viewport-fixed and the headline reflows once fonts/
@@ -1532,8 +1812,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // entrance leaves the `enterAndType()` Promise unresolved — intentional:
     // the page is going away, and nothing awaits it past teardown.
     entranceResolve = null;
-    // The Byte→caret follow (`byteToCaretX/Y`) is a `quickTo` — its reused
-    // tween is NOT in `liveTweens`, so kill it explicitly here.
+    // T8 hygiene only (not a leak): no in-flight tween/timer references this,
+    // so there's nothing to kill — just drop the reference like the other
+    // plain-data resets above.
+    migrationTarget = null;
+    // The Byte→caret follow (`byteToCaretX/Y`) AND the migration lane-follow
+    // (`byteToLaneX/Y`) are both `quickTo`s — their reused tweens are NOT in
+    // `liveTweens`, so kill them explicitly here (one call: both target the
+    // same `rig.object3d.position` object).
     gsap.killTweensOf(rig.object3d.position);
 
     mm.revert();
