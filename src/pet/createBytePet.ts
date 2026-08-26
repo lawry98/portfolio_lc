@@ -394,6 +394,30 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     return [l0?.textContent ?? '', l1?.textContent ?? ''];
   }
 
+  /** Show/hide a home's caret via a STYLE toggle only. Uses `visibility` — NOT
+   *  `opacity` (the caret's CSS blink keyframe animates opacity and would
+   *  override an inline `opacity: 0`, so a "hidden" caret would still blink
+   *  into view) and NOT the `data-byte-caret` attribute (the engine +
+   *  `liveCaret` resolve carets by it). Resolves the LIVE caret so a SplitText
+   *  clone-swap is covered; the caret is absolutely positioned, so toggling
+   *  visibility never reflows (CLS 0), and `visibility: hidden` leaves no ghost
+   *  (the blink still runs when shown). */
+  function setCaretVisible(home: Home, visible: boolean): void {
+    liveCaret(home).style.visibility = visible ? '' : 'hidden';
+  }
+
+  // R8-1 / SPEC §6 "a blinking DOM caret remains in the headline" — exactly ONE
+  // visible caret, at Byte's ACTIVE home. The hero (active at boot) shows its
+  // caret; any inactive home (the footer) hides its own until `setHomeAnchor`
+  // switches to it. Hiding the footer's seed HERE, before its deferred
+  // SplitText split (page/footer.ts), means the `visibility: hidden` is
+  // captured in the split's innerHTML snapshot and survives the revert, so the
+  // restored clone stays hidden too — no second byte-caret ever blinks at rest.
+  setCaretVisible(heroHome, true);
+  if (footerHome) {
+    setCaretVisible(footerHome, false);
+  }
+
   // --- Retype reward: the ONE pure engine (T6, reused for BOTH homes) -------
   // A SINGLE `createRetype` instance drives every retype — hero AND footer
   // (carry-forward #1: one typing path, one caret path). `setHomeAnchor`
@@ -1334,12 +1358,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * Switch Byte's active home (T8): the per-tick anchor, the DOM caret, the
    * retype target, and the phrase cycle all follow `activeHome`. No-op if `el`
    * already matches the active home; ignore an `el` matching NEITHER home
-   * (defensive). On a real switch, re-seed the ONE retype engine to the new
-   * home's on-screen text (`retype.reset(currentTextOf(next))`) so the next
-   * retype deletes what is actually shown there; `onTick` parks the new home's
-   * caret at its rest position from the next tick (it already writes the
-   * active home's rest transform). Each home keeps its OWN `phraseIndex`, so
-   * hero and footer independently remember their cycle position.
+   * (defensive). On a real switch: hide the previously-active home's caret and
+   * show the newly-active one (R8-1 — exactly ONE visible caret, at Byte's
+   * home), re-seed the ONE retype engine to the new home's on-screen text
+   * (`retype.reset(currentTextOf(next))`) so the next retype deletes what is
+   * actually shown there; `onTick` parks the new home's caret at its rest
+   * position from the next tick (it already writes the active home's rest
+   * transform). Each home keeps its OWN `phraseIndex`, so hero and footer
+   * independently remember their cycle position.
    *
    * This does NOT drive migration/travel — it only re-points the retype
    * machinery. WHEN to switch (the scroll-driven `MIGRATE`/`ARRIVED` FSM
@@ -1358,7 +1384,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (!next) {
       return;
     }
+    setCaretVisible(activeHome, false);
     activeHome = next;
+    setCaretVisible(activeHome, true);
     retype.reset(currentTextOf(next));
   }
 

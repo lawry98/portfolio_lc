@@ -363,21 +363,6 @@ function bootstrap(): void {
     hungryTooltip?.setCount(total);
   });
 
-  // T8 browser-QA hook (temporary dev affordance, in the spirit of the
-  // project's `?lab` / `data-tooltip` axes): the scroll-driven hero<->footer
-  // migration that would call `setHomeAnchor` automatically is the NEXT task,
-  // so expose it (plus the two home elements + `feed`) on `window.__byteQA` for
-  // now. Manual QA switches Byte's home then feeds it —
-  // `__byteQA.setHomeAnchor(__byteQA.footerEl)` then `__byteQA.feed(x, y)` — to
-  // exercise the footer retype before that automatic driver lands. Guarded via
-  // optional-chaining; only defined on the WebGL path (no Byte otherwise).
-  (window as unknown as { __byteQA?: unknown }).__byteQA = {
-    setHomeAnchor: (el: HTMLElement) => bytePet?.setHomeAnchor(el),
-    feed: (x: number, y: number) => bytePet?.feed(x, y),
-    headlineEl,
-    footerEl,
-  };
-
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
   // to exist beyond the theme-toggle callback above: tear it down (kills
   // every tween/timer/listener + the scene's renderers/canvases) on a *real*
