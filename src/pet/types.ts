@@ -89,7 +89,9 @@ export interface RigSource {
 /** Byte's states (SPEC §6). Full union defined once here. T4 drove the idle-brain
  *  subset; T5 added the feed beats (dashing/eating); T6a added the retype reward
  *  (retyping); T6b's entrance drives hidden/entering (hidden --SHOWN--> entering
- *  --ENTERED--> idle). Only `traveling` is still reserved for a later ticket (R-T4-9). */
+ *  --ENTERED--> idle); T8 makes `traveling` reachable — the scroll-driven
+ *  hero<->footer migration (a resting home state --MIGRATE--> traveling
+ *  --ARRIVED--> idle). Every state in the union is now reachable. */
 export type PetState =
   | 'hidden'
   | 'entering'
@@ -109,9 +111,11 @@ export type PetState =
  *  REACHED/ATE come from the feeder (T5) marking dash-arrival and eat-animation-
  *  complete respectively; RETYPED comes from the retype-driver (T6) marking
  *  retype-animation-complete; SHOWN/ENTERED come from the entrance driver (T6b)
- *  marking the drop-in start and phrase-#1 live-type completion respectively —
- *  the FSM only reacts to these, it never times a real dash/eat/retype/entrance
- *  itself. Time-based transitions are NOT events — they happen inside tickTimers(). */
+ *  marking the drop-in start and phrase-#1 live-type completion respectively;
+ *  MIGRATE/ARRIVED come from the T8 scroll/migration driver marking the start of
+ *  a hero<->footer trip and its arrival respectively — the FSM only reacts to
+ *  these, it never times a real dash/eat/retype/entrance/trip itself. Time-based
+ *  transitions are NOT events — they happen inside tickTimers(). */
 export type PetEvent =
   | 'POINTER_NEAR'
   | 'POINTER_FAR'
@@ -119,10 +123,12 @@ export type PetEvent =
   | 'FEED'
   | 'PEEK'
   | 'REACHED' // feeder: Byte arrived at the food (dashing -> eating)
-  | 'ATE' // feeder: the eat animation finished (eating -> retyping)
+  | 'ATE' // feeder: the eat animation finished (eating -> retyping, or -> traveling for a feed begun mid-trip)
   | 'RETYPED' // engine: retype animation finished (retyping -> idle)
   | 'SHOWN' // entrance: overlay lifted / drop-in begins (hidden -> entering)
-  | 'ENTERED'; // entrance: phrase #1 typed (entering -> idle)
+  | 'ENTERED' // entrance: phrase #1 typed (entering -> idle)
+  | 'MIGRATE' // scroll: pull Byte from a resting home state into the hero<->footer trip (idle/curious/invited -> traveling)
+  | 'ARRIVED'; // scroll: Byte reached the migration destination (traveling -> idle)
 
 /** Timer durations (ms) plus the initial state. All optional; createFSM applies the
  *  defaults below (`initialState` excepted — it's a start value, not a duration). */

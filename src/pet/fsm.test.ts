@@ -919,3 +919,185 @@ describe('createFSM: config overrides', () => {
     expect(fsm.state()).toBe('dashing');
   });
 });
+
+describe('createFSM: traveling (T8 migration + feed-while-traveling)', () => {
+  function enterTraveling() {
+    const fsm = createFSM();
+    fsm.send('MIGRATE'); // idle -> traveling
+    return fsm;
+  }
+
+  it('idle -> traveling on MIGRATE', () => {
+    const fsm = createFSM();
+    fsm.send('MIGRATE');
+    expect(fsm.state()).toBe('traveling');
+  });
+
+  it('curious -> traveling on MIGRATE', () => {
+    const fsm = createFSM();
+    fsm.send('POINTER_NEAR'); // idle -> curious
+    expect(fsm.state()).toBe('curious');
+
+    fsm.send('MIGRATE');
+    expect(fsm.state()).toBe('traveling');
+  });
+
+  it('invited -> traveling on MIGRATE', () => {
+    const fsm = createFSM();
+    fsm.send('POINTER_NEAR'); // idle -> curious
+    fsm.tickTimers(2500); // curious -> invited
+    expect(fsm.state()).toBe('invited');
+
+    fsm.send('MIGRATE');
+    expect(fsm.state()).toBe('traveling');
+  });
+
+  it('traveling -> idle on ARRIVED', () => {
+    const fsm = enterTraveling();
+    fsm.send('ARRIVED');
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it(
+    'feed-while-traveling: traveling --FEED--> dashing --REACHED--> eating --ATE--> traveling ' +
+      '(back to traveling, NOT retyping)',
+    () => {
+      const fsm = enterTraveling();
+
+      fsm.send('FEED');
+      expect(fsm.state()).toBe('dashing');
+
+      fsm.send('REACHED');
+      expect(fsm.state()).toBe('eating');
+
+      fsm.send('ATE'); // feedFromTraveling routes back to traveling, no retype
+      expect(fsm.state()).toBe('traveling');
+    },
+  );
+
+  it('regression: a normal hero feed still routes eating --ATE--> retyping (flag defaults false)', () => {
+    const fsm = createFSM();
+    fsm.send('FEED'); // idle -> dashing
+    fsm.send('REACHED'); // -> eating
+    fsm.send('ATE'); // -> retyping (NOT traveling)
+    expect(fsm.state()).toBe('retyping');
+  });
+
+  it('flag clears after a traveling feed: the next post-ARRIVED idle feed routes eating --ATE--> retyping', () => {
+    const fsm = enterTraveling();
+
+    // A full feed-while-traveling cycle returns to traveling and clears the flag.
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+    expect(fsm.state()).toBe('traveling');
+
+    // Arrive home, then feed normally: must route to retyping, not back to traveling.
+    fsm.send('ARRIVED');
+    expect(fsm.state()).toBe('idle');
+
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+    expect(fsm.state()).toBe('retyping');
+  });
+
+  it('traveling is NOT sleep-eligible and has no timed auto-exit: tickTimers(40000) stays traveling', () => {
+    const fsm = enterTraveling();
+    fsm.tickTimers(40000); // > idleToSleepMs (30000); traveling never sleeps and has no state timer
+    expect(fsm.state()).toBe('traveling');
+  });
+
+  it('POINTER_NEAR/POINTER_FAR/POINTER_DOWN in traveling cause no transition (Byte follows the visitor)', () => {
+    const fsm = enterTraveling();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.send('POINTER_NEAR');
+    fsm.send('POINTER_FAR');
+    fsm.send('POINTER_DOWN');
+
+    expect(fsm.state()).toBe('traveling');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('ignores PEEK/SHOWN/ENTERED/RETYPED/another MIGRATE while traveling (no transition, no onEnter)', () => {
+    const fsm = enterTraveling();
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    for (const event of ['PEEK', 'SHOWN', 'ENTERED', 'RETYPED', 'MIGRATE'] as const) {
+      fsm.send(event);
+    }
+
+    expect(fsm.state()).toBe('traveling');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('safety-cap path (dashing -> idle) clears the flag: a subsequent idle feed routes to retyping', () => {
+    const fsm = createFSM({ dashMs: 100 });
+    fsm.send('MIGRATE'); // idle -> traveling
+    fsm.send('FEED'); // traveling -> dashing (feedFromTraveling = true)
+    expect(fsm.state()).toBe('dashing');
+
+    fsm.tickTimers(100); // dash safety cap -> idle; must clear feedFromTraveling
+    expect(fsm.state()).toBe('idle');
+
+    // If the cap had stranded the flag true, this feed would route back to
+    // traveling on ATE instead of retyping.
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+    expect(fsm.state()).toBe('retyping');
+  });
+
+  it('safety-cap path (eating -> idle) also clears the flag', () => {
+    const fsm = createFSM({ eatMs: 100 });
+    fsm.send('MIGRATE'); // idle -> traveling
+    fsm.send('FEED'); // -> dashing (feedFromTraveling = true)
+    fsm.send('REACHED'); // -> eating (flag still true)
+    expect(fsm.state()).toBe('eating');
+
+    fsm.tickTimers(100); // eat safety cap -> idle; must clear feedFromTraveling
+    expect(fsm.state()).toBe('idle');
+
+    fsm.send('FEED');
+    fsm.send('REACHED');
+    fsm.send('ATE');
+    expect(fsm.state()).toBe('retyping');
+  });
+
+  it('MIGRATE is ignored from a non-resting state (dashing)', () => {
+    const fsm = createFSM();
+    fsm.send('FEED'); // idle -> dashing
+    expect(fsm.state()).toBe('dashing');
+
+    fsm.send('MIGRATE'); // ignored — dashing is not a resting home state
+    expect(fsm.state()).toBe('dashing');
+  });
+
+  it('MIGRATE is ignored from a non-resting state (sleeping)', () => {
+    const fsm = createFSM();
+    fsm.tickTimers(30000); // idle -> sleeping
+    expect(fsm.state()).toBe('sleeping');
+
+    fsm.send('MIGRATE'); // ignored
+    expect(fsm.state()).toBe('sleeping');
+  });
+
+  it('onEnter walks traveling -> dashing -> eating -> traveling on a feed-while-traveling (no retyping)', () => {
+    const fsm = enterTraveling(); // idle -> traveling fires before we subscribe
+    const seen: Array<[PetState, PetState]> = [];
+    fsm.onEnter((next, prev) => seen.push([next, prev]));
+
+    fsm.send('FEED'); // traveling -> dashing
+    fsm.send('REACHED'); // dashing -> eating
+    fsm.send('ATE'); // eating -> traveling (NOT retyping)
+
+    expect(seen).toEqual([
+      ['dashing', 'traveling'],
+      ['eating', 'dashing'],
+      ['traveling', 'eating'],
+    ]);
+  });
+});

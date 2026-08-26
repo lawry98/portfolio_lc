@@ -6,8 +6,12 @@
  * completion into the retype reward (eating -> retyping -> idle, driven by
  * the retype-driver's RETYPED event); T6b adds the entrance drop-in
  * (hidden -> entering -> idle, driven by the entrance driver's SHOWN/ENTERED
- * events and started via `initialState: 'hidden'`) — traveling remains for a
- * later ticket (R-T4-9).
+ * events and started via `initialState: 'hidden'`); T8 makes `traveling`
+ * reachable — the scroll-driven hero<->footer migration (a resting home state
+ * --MIGRATE--> traveling --ARRIVED--> idle, both controller-fired), plus a feed
+ * begun mid-trip that eats and returns to `traveling` (a happy spin, no retype)
+ * instead of retyping — see the `feedFromTraveling` flag and the `eating`/ATE
+ * fork below.
  *
  * Purity is the whole point (and the ticket's central requirement): this
  * file imports neither `gsap` nor `three`, and never reads the wall clock
@@ -82,8 +86,9 @@ const DEFAULTS: ResolvedFSMConfig = {
  *  - `hidden`/`entering` ARE reachable now (T6b's entrance drop-in) but are
  *    still excluded — the mid-entrance beats are not "resting" states, so Byte
  *    can't drift to sleep before phrase #1 has even finished typing;
- *    `traveling` isn't reachable by any transition yet but is excluded on the
- *    same principle — none is a "resting" state.
+ *  - `traveling` IS reachable now (T8's MIGRATE/ARRIVED migration) but is
+ *    excluded on the same principle — Byte never sleeps mid-trip; it's
+ *    following the visitor's scroll until the controller fires `ARRIVED`.
  */
 function isSleepEligible(state: PetState): boolean {
   return state === 'idle' || state === 'curious' || state === 'invited' || state === 'peeking';
@@ -92,8 +97,12 @@ function isSleepEligible(state: PetState): boolean {
 /**
  * This state's own timer-driven exit, or `null` if `stateTimerMs` hasn't
  * crossed its threshold (or this state has no timer-driven exit at all —
- * `idle`/`invited`/`sleeping` only ever change on events). Checked before
- * the sleep overlay in `tickTimers` (see module doc comment on ordering).
+ * `idle`/`invited`/`sleeping`/`traveling` only ever change on events, falling
+ * through to the `default` below). `traveling` in particular is
+ * controller-driven: it exits solely on the migration driver's `ARRIVED` (T8),
+ * never on a timer — no timed auto-exit, mirroring how `idle`/`invited` have
+ * none. Checked before the sleep overlay in `tickTimers` (see module doc
+ * comment on ordering).
  */
 function specificTimerTarget(
   state: PetState,
@@ -146,6 +155,16 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
   let sleepAccumMs = 0;
   /** Set by sleeping's POINTER_DOWN; consumed when waking's timer elapses. */
   let pendingFeed = false;
+  /**
+   * T8: set true when a FEED begins while `traveling` (traveling --FEED-->
+   * dashing); it makes the eventual `eating`--ATE--> route back to `traveling`
+   * (a happy spin, no retype) instead of `retyping`. Mirrors `pendingFeed` — a
+   * pure bit of state, not an event. Cleared on EVERY exit from a
+   * traveling-origin feed: consumed in the `eating`/ATE handler, wiped by
+   * `traveling`--ARRIVED-->idle, and cleared by the dashing/eating safety cap in
+   * `tickTimers` — so it can never strand true past a capped trip-feed.
+   */
+  let feedFromTraveling = false;
   const listeners: Array<(state: PetState, prev: PetState) => void> = [];
 
   /** Perform an ACTUAL state change: reset the state timer and notify
@@ -189,6 +208,13 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             // Feeding-click routing is T5; for now this just proves liveness.
             resetSleepAccum();
             return;
+          case 'MIGRATE':
+            // T8: a scroll pulled Byte away from a resting home state into the
+            // hero<->footer trip. Controller-driven from here on — `traveling`
+            // exits only on `ARRIVED` (no timed auto-exit; not sleep-eligible).
+            resetSleepAccum();
+            enter('traveling');
+            return;
           default:
             return;
         }
@@ -212,6 +238,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             // only (real feeding-click routing is T5).
             resetSleepAccum();
             return;
+          case 'MIGRATE':
+            // T8 migration — see idle's MIGRATE.
+            resetSleepAccum();
+            enter('traveling');
+            return;
           default:
             return;
         }
@@ -234,6 +265,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             // Stay invited: matches idle/curious's POINTER_DOWN — reset
             // sleep accum only.
             resetSleepAccum();
+            return;
+          case 'MIGRATE':
+            // T8 migration — see idle's MIGRATE.
+            resetSleepAccum();
+            enter('traveling');
             return;
           default:
             return;
@@ -277,12 +313,22 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         // Only ATE (the feeder marking eat-animation-complete) is legal;
         // eating is NOT sleep-eligible (see `isSleepEligible`), so — unlike
         // every other real transition above — there's no sleep accumulator
-        // that needs protecting by a reset here. Eat-complete now hands off
-        // to the retype reward (eating -> retyping); the eatMs safety cap
-        // still exits straight to idle as an emergency path (see
-        // `specificTimerTarget`), deliberately skipping the reward.
+        // that needs protecting by a reset here. Eat-complete FORKS on
+        // `feedFromTraveling` (T8): a feed begun mid-trip returns to
+        // `traveling` (clearing the flag; NO retype — the executor plays a
+        // happy spin), while a normal hero feed hands off to the retype reward
+        // (eating -> retyping) exactly as before. The eatMs safety cap still
+        // exits straight to idle as an emergency path (see
+        // `specificTimerTarget`), deliberately skipping either payoff — and
+        // that path ALSO clears `feedFromTraveling` (in `tickTimers`) so a
+        // capped trip-feed can't strand the flag.
         if (event === 'ATE') {
-          enter('retyping');
+          if (feedFromTraveling) {
+            feedFromTraveling = false;
+            enter('traveling');
+          } else {
+            enter('retyping');
+          }
         }
         return;
 
@@ -319,10 +365,45 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         }
         return;
 
+      case 'traveling':
+        // T8 migration (SPEC §6): Byte is following the visitor's scroll on a
+        // hero<->footer trip. Controller-driven — it exits only on the
+        // migration driver's `ARRIVED` (no timed auto-exit; see
+        // `specificTimerTarget`) — and is deliberately NOT sleep-eligible (see
+        // `isSleepEligible`): Byte never sleeps or drifts curious/invited
+        // mid-trip. A FEED begun mid-travel routes through the dash/eat beats
+        // and back to `traveling` (NOT retyping) via `feedFromTraveling`, so the
+        // executor can play a happy spin. POINTER_* only reset the sleep
+        // accumulator (matching the resting states); everything else ignored.
+        switch (event) {
+          case 'ARRIVED':
+            resetSleepAccum();
+            // Belt-and-suspenders: the flag is already false here on every
+            // normal path (ATE clears it before re-entering `traveling`), but
+            // clear it on arrival too so nothing survives the trip.
+            feedFromTraveling = false;
+            enter('idle');
+            return;
+          case 'FEED':
+            resetSleepAccum();
+            feedFromTraveling = true;
+            enter('dashing');
+            return;
+          case 'POINTER_NEAR':
+          case 'POINTER_FAR':
+          case 'POINTER_DOWN':
+            // Reset the sleep accumulator only — no curious/invited/sleep
+            // mid-trip. (Moot for sleep since `traveling` isn't sleep-eligible,
+            // but kept for consistency with the resting states' POINTER_*.)
+            resetSleepAccum();
+            return;
+          default:
+            return;
+        }
+
       // `waking` ignores every event — it runs to completion solely via its
-      // own state timer (see `specificTimerTarget`). (`traveling` falls through
-      // here too; it isn't reachable by any transition yet — the entrance's
-      // `hidden`/`entering` now have their own cases above.)
+      // own state timer (see `specificTimerTarget`). `traveling` now has its own
+      // case above (T8), so only `waking` reaches this default.
       default:
         return;
     }
@@ -336,6 +417,14 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
     if (specific) {
       if (current === 'waking') {
         pendingFeed = false;
+      } else if (current === 'dashing' || current === 'eating') {
+        // The dash/eat safety cap fires straight to idle, deliberately skipping
+        // the retype/travel payoff. Clear `feedFromTraveling` here so a capped
+        // traveling-origin feed can't strand the flag past this emergency exit
+        // (a no-op for a normal hero feed — the flag is already false). This is
+        // the ONE cap path that could otherwise leave the flag set, since the
+        // normal `eating`/ATE route clears it itself.
+        feedFromTraveling = false;
       }
       enter(specific);
       return;
