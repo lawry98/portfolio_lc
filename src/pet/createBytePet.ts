@@ -43,19 +43,6 @@ import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
 
-/**
- * T8 Style Lab wiring (SPEC §7 "preview & lock variants live" / §11): the
- * CURRENT dark-mode phosphor Glow accent, defaulting to `DEFAULT_GLOW_ACCENT`
- * (scene.ts) until the public `setGlowAccent()` handle method (below)
- * overrides it — `main.ts` drives that from the Style Lab's `data-glow`
- * axis. Module-level (mirrors `main.ts`'s own module-scope `bytePet`
- * handle) rather than per-instance so BOTH of `applyTheme`'s `rig.setGlow`
- * call sites (the instant + animate branches, below) read the SAME live
- * value instead of the constant directly — a lab-selected accent survives
- * every subsequent theme toggle.
- */
-let currentGlowAccent: THREE.ColorRepresentation = DEFAULT_GLOW_ACCENT;
-
 // --- Tunables (all hand-picked, free to retune visually — same spirit as
 // rig.ts/shadow.ts's own constants). Grouped by the behaviour they drive. ---
 
@@ -303,6 +290,26 @@ function lastLineTextRect(el: HTMLElement): DOMRect {
  */
 export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHandle {
   let theme: Theme = opts.theme ?? 'light';
+  /**
+   * T8 Style Lab wiring (SPEC §7 "preview & lock variants live" / §11):
+   * per-instance state for the CURRENT dark-mode phosphor Glow accent,
+   * defaulting to `DEFAULT_GLOW_ACCENT` (scene.ts) until the public
+   * `setGlowAccent()` handle method (below) overrides it — `main.ts` drives
+   * that from the Style Lab's `data-glow` axis. A per-instance `let` (NOT
+   * module scope) is all that's needed here: both of `applyTheme`'s
+   * `rig.setGlow` call sites (the instant + animate branches, below) and
+   * `setGlowAccent` itself are already inside THIS SAME `createBytePet`
+   * closure, so they read the same live value regardless of where in the
+   * closure it's declared. Module scope would instead leak a lab-selected
+   * accent across separate `createBytePet()` instances — and survive a
+   * `destroy()` + recreate, handing a brand-new Byte a stale accent from
+   * whichever instance set it last — a latent factory bug this per-instance
+   * placement avoids (no observable difference today, with exactly one
+   * Byte on the page). A lab-selected accent still survives every
+   * subsequent theme toggle, since nothing here ever resets it back to the
+   * default.
+   */
+  let currentGlowAccent: THREE.ColorRepresentation = DEFAULT_GLOW_ACCENT;
   // T7 sound seam (R7-1): every cue this module or its feeder fires goes through
   // this one `SoundEngine`. Defaults to the exported `silentSoundEngine` no-op
   // when `main.ts` injects no engine, so all `sound.play(...)` calls become
@@ -1388,6 +1395,23 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         handleEnterRetyping();
         break;
       case 'traveling':
+        // T8 final review, finding 1: kill any still-in-flight `onTick`
+        // "no-snap reacquire" glide (R-T5-6) the instant `traveling` is
+        // (re-)entered — mirrors the defensive kill the `dashing`/`eating`
+        // cases run just above, for the same single-writer reason. A
+        // reacquire glide (`REACQUIRE_DURATION_S` = 0.3s) can still be in
+        // flight here: it starts the moment Byte lands back in a HOME
+        // state (e.g. right after `ATE`, or right after a PRIOR
+        // migration's own `ARRIVED`), and a fast scroll can re-fire
+        // `MIGRATE` within that same window — either the first migration
+        // out of that home, or, since `ARRIVED` re-enters `idle` and
+        // `enterIdleBehaviour` re-arms `wasActiveInBand`, a near-immediate
+        // reversal back out. Without this kill, that lingering glide and
+        // `runMigrationFull`'s own lane `quickTo` (`byteToLaneX/Y`, below)
+        // would both write `rig.object3d.position` on the same frame.
+        // Safe/idempotent when there's nothing to kill (the common case)
+        // — `killTracked(null)` is a no-op.
+        reacquireTween = killTracked(reacquireTween);
         // T8 migration: beyond the shared per-state resets above
         // (`setBehind(false)`, pause the micro scheduler + clear any
         // glance, hide the hint, clear the curious lean), Byte just keeps
@@ -1631,8 +1655,29 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * item 1 — "target the live pick", not mechanically "the other home":
    * the two usually agree, but a home leaving ITS OWN band doesn't
    * guarantee the other one is actually more visible yet — e.g. a scroll
-   * that leaves both hero and footer off-screen mid-page — and
-   * `pickAnchor`'s own tie-break-to-hero is the more correct call there).
+   * that leaves both hero and footer off-screen mid-page).
+   *
+   * T8 final review, finding 2: that mid-page case is exactly where an
+   * unconditional snap broke down. `pickAnchor`'s tie-break-to-hero always
+   * returns SOME winner, even when BOTH homes are out of band — snapping to
+   * it unconditionally (as this used to) parked Byte at an equally
+   * off-screen anchor, and since the snap synchronously fires
+   * `MIGRATE`, then (next tick) `ARRIVED` back to `idle`,
+   * `enterIdleBehaviour`'s own `wasActiveInBand = true` re-arm made the
+   * VERY NEXT idle tick see that (still out-of-band) active home as a
+   * fresh "just left the band" edge again — an infinite migrate/arrive
+   * churn, parked off-screen the whole time. This now mirrors
+   * `runMigrationFull`'s own `pickInBand` arrival gate: the live pick's
+   * OWN anchor must actually be in-band before this snaps to it. When it
+   * isn't, this returns WITHOUT touching `wasActiveInBand` — leaving the
+   * edge armed (still `true`) rather than consuming it — so Byte simply
+   * stays at its CURRENT home, re-checking every tick with no FSM traffic
+   * and no position write, until a home genuinely re-enters the band, at
+   * which point the still-armed edge fires the snap immediately (no extra
+   * idle re-entry needed). Normal (non-mid-page) migrations — where the
+   * live pick lands in-band on the very first check — are byte-identical
+   * to before.
+   *
    * `fsm.send('MIGRATE')`, then `setHomeAnchor`, then the instant
    * `rig.object3d.position` placement all happen synchronously here —
    * before `onTick`'s generic anchor computation runs, the same seam the
@@ -1662,8 +1707,17 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       const target = pick === 'hero' ? heroHome : footer;
       const targetRect = pick === 'hero' ? heroRect : footerRect;
       const targetAnchorY = pick === 'hero' ? heroAnchorY : footerAnchorY;
-      const targetWorld = scene.worldFromScreen(targetRect.right, targetAnchorY);
 
+      if (!inMigrationBand(targetAnchorY)) {
+        // No in-band target yet (e.g. mid-page, with BOTH homes out of
+        // band) — hold: leave `wasActiveInBand` at `true` (do NOT consume
+        // the edge) so every subsequent tick keeps re-checking, with no
+        // MIGRATE/ARRIVED FSM traffic and no position write, until a home
+        // genuinely re-enters the band.
+        return;
+      }
+
+      const targetWorld = scene.worldFromScreen(targetRect.right, targetAnchorY);
       fsm.send('MIGRATE');
       setHomeAnchor(target.el);
       rig.object3d.position.set(targetWorld.x, targetWorld.y - unitPx / 2, 0);
@@ -1890,7 +1944,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * Style Lab wiring (T8, SPEC §7 "preview & lock variants live" / §11):
    * swap the dark-mode phosphor Glow's accent color live — `main.ts` drives
    * this from the `data-glow` axis's live `--glow` CSS token. Stores the new
-   * accent in the module-level `currentGlowAccent` (so every LATER
+   * accent in this instance's own `currentGlowAccent` (so every LATER
    * `applyTheme` call — including a subsequent theme toggle — keeps
    * painting it, not just this one call) and re-applies it immediately via
    * `rig.setGlow`, reading the CURRENT theme rather than assuming dark. In
