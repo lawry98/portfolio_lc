@@ -164,11 +164,19 @@ const ENTRANCE_SCALE_FROM = 0.6;
  * "right-margin travel lane following scroll"). Exactly TWO homes, so
  * migration is unambiguous: when the ACTIVE home's own text-end anchor
  * scrolls out of the comfortable on-screen band (`MIGRATE_BAND_*` below),
- * Byte travels the right-margin lane to the OTHER home and re-homes once
- * THAT home scrolls back into the band — see `runMigrationFull`/
+ * Byte starts traveling the right-margin lane — see `runMigrationFull`/
  * `runMigrationReduced` (declared just above `onTick`) for the full state
  * machine. All hand-picked, free to retune visually — same spirit as the
  * `PEEK_*`/`RETYPE_*`/`ENTRANCE_*` constants above.
+ *
+ * REVERSIBLE by design (fix round 1): while `traveling`, both the lane
+ * point and the arrival decision are driven every tick by the LIVE
+ * `pickAnchor` result, never a target captured once when `MIGRATE` fired.
+ * A visitor who leaves the hero's band (triggering `MIGRATE`) and then
+ * scrolls back up before the footer ever enters the band simply keeps
+ * seeing `pickAnchor` favor the hero, so the lane point and the arrival
+ * check both stay pinned there — Byte can never be stranded in the lane;
+ * it always re-homes onto whichever block is actually in view.
  */
 /** The RESTING subset of `HOME_STATES` eligible to trigger a `MIGRATE` —
  *  mirrors the FSM's own idle/curious/invited MIGRATE-accepting cases
@@ -201,9 +209,11 @@ const MIGRATE_LANE_MARGIN_PX = 56;
  *  trails a multi-second scroll, not a snappy per-character caret chase. */
 const MIGRATE_LANE_FOLLOW_DURATION_S = 0.5;
 /** World-px "close enough" distance between Byte and the lane point — one
- *  of three independent conditions (with `pickAnchor` + the target's own
- *  band membership) `runMigrationFull` requires before calling
- *  `setHomeAnchor`. */
+ *  of two independent conditions (with the live pick's own band
+ *  membership) `runMigrationFull` requires before calling
+ *  `setHomeAnchor`. `pickAnchor` itself is no longer a separate THIRD
+ *  condition here (fix round 1): since the lane point IS the live pick's
+ *  own anchor, the two are the same thing by construction. */
 const MIGRATE_ARRIVE_DIST_PX = 40;
 
 /**
@@ -563,18 +573,20 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     ease: 'power2',
   });
   // T8 migration lane-follow (mirrors byteToCaretX/Y exactly, same
-  // reasoning): a dedicated quickTo pair, created ONCE here (not per-trip),
-  // so it is provably the SECOND-oldest tween of `rig.object3d.position`
-  // (right after byteToCaretX/Y) — any LATER-created tween (a fresh
-  // reacquire glide; the steady-state hard-pin's direct `.set()`, which
-  // runs from this module's own ticker callback and so always applies
-  // after gsap's own tween pass for the frame) renders/applies after it and
-  // wins, so handing the root back over on arrival needs no explicit kill
-  // of this pair — exactly the "oldest tween loses the race" guarantee the
-  // `byteToCaretX/Y` doc comment (`onTick`, below) already relies on. Drives
-  // `rig.object3d.position` ONLY while `traveling` (`runMigrationFull`,
-  // below) — nothing else pins the root then, `traveling` isn't a
-  // HOME_STATE. Also covered by `destroy()`'s existing
+  // reasoning): a dedicated quickTo pair, created ONCE here (not per-trip).
+  // Drives `rig.object3d.position` ONLY while `traveling`
+  // (`runMigrationFull`, below) — nothing else pins the root then,
+  // `traveling` isn't a HOME_STATE. Unlike `byteToCaretX/Y`'s own
+  // end-of-retype handoff (which relies solely on tween-creation-order —
+  // see its doc comment above), `runMigrationFull`'s arrival branch
+  // (fix round 1, hardening) EXPLICITLY `gsap.killTweensOf`s
+  // `rig.object3d.position` before handing off to the reacquire glide, so
+  // this pair's own in-flight ease can never still be writing the SAME
+  // tick that glide starts. Confirmed (empirically, against the installed
+  // gsap version) that killing a `quickTo`'s underlying tween this way
+  // does NOT break its returned setter for a LATER migration — `resetTo()`
+  // re-attaches a killed tween to the root timeline on its next call.
+  // Also covered by `destroy()`'s existing
   // `gsap.killTweensOf(rig.object3d.position)`.
   const byteToLaneX = gsap.quickTo(rig.object3d.position, 'x', {
     duration: MIGRATE_LANE_FOLLOW_DURATION_S,
@@ -640,13 +652,6 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // silently stranded off-screen forever. Starts `true`: Byte boots home,
   // on-screen (mirrors `wasHome`'s own starting assumption).
   let wasActiveInBand = true;
-  // T8: which `Home` Byte is currently traveling TOWARD — set the instant
-  // `MIGRATE` is sent (the trigger, in `runMigrationFull`/
-  // `runMigrationReduced`), consumed and cleared at arrival when
-  // `setHomeAnchor`/`ARRIVED` fire. `null` whenever Byte isn't traveling
-  // (including the entire hero-only lifetime with no footer home). A plain
-  // data field, not a tween/timer — nothing to kill in `destroy()`.
-  let migrationTarget: Home | null = null;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
   // Hard-step squash of `source.eye.scale.y` — an infinite-repeat timeline
@@ -1180,12 +1185,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // T8 migration: nothing to trigger here beyond the shared per-state
         // resets above (`setBehind(false)`, pause the micro scheduler +
         // clear any glance, hide the hint, clear the curious lean) — Byte
-        // just keeps blinking while it travels. `migrationTarget` is set by
-        // the trigger BEFORE `MIGRATE` is sent (`runMigrationFull`/
-        // `runMigrationReduced`, above `onTick`), not here; the lane
-        // `quickTo` (`byteToLaneX/Y`) is the sole writer of
-        // `rig.object3d.position` for this state, driven per-tick from
-        // `onTick` rather than once on entry.
+        // just keeps blinking while it travels. The lane `quickTo`
+        // (`byteToLaneX/Y`) is the sole writer of `rig.object3d.position`
+        // for this state, driven per-tick from `onTick`'s
+        // `runMigrationFull` off the LIVE `pickAnchor` result (never a
+        // target decided once on entry) — that's what makes a mid-trip
+        // reversal turn Byte around instead of stranding it in the lane.
         break;
       case 'hidden':
       case 'entering':
@@ -1279,6 +1284,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // called from the arrival branch, which only runs while
   // `fsm.state() === 'traveling'`. Neither path can run mid-`entering` or
   // mid-`retyping`.
+  //
+  // REVERSIBLE (fix round 1): neither function locks in a destination when
+  // `MIGRATE` fires. `runMigrationFull` re-derives the live `pickAnchor`
+  // result every tick of `traveling` and drives both the lane point and
+  // the arrival check off THAT, so a visitor who reverses course before
+  // the other home ever enters the band turns Byte around instead of
+  // stranding it in the lane — see `runMigrationFull`'s own doc comment.
 
   /** Whether `anchorY` (screen-space, top-left-origin px) sits comfortably
    *  inside the viewport — inset by `MIGRATE_BAND_TOP_PX`/`_BOTTOM_PX` on
@@ -1291,68 +1303,85 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   /**
    * Full-motion migration driver — called every tick from `onTick`, BEFORE
    * its generic anchor computation reads `activeHome.el`, whenever a
-   * footer home exists and reduced motion is off. Reads BOTH homes' live
-   * rects fresh every call (never cached — cheap `Range`-based reads,
-   * matching `onTick`'s own "never snapshot" anchor philosophy) and:
-   *  - while RESTING (`MIGRATE_ELIGIBLE_STATES`): fires `MIGRATE` + records
-   *    `migrationTarget` on the tick the ACTIVE home's own anchor crosses
-   *    OUT of the comfortable band — the `wasActiveInBand` edge guard
-   *    (mirrors `wasNear`/`wasHome`) makes this a once-per-crossing event,
-   *    not a per-tick spam (see its own doc comment for the full
-   *    reasoning);
-   *  - while TRAVELING toward a recorded `migrationTarget`: eases Byte
-   *    (`byteToLaneX/Y`) toward the right-margin lane point trailing that
-   *    target, and re-homes (`setHomeAnchor` + `ARRIVED`) once `pickAnchor`
-   *    agrees the target has won, the target's own anchor is back in the
-   *    comfortable band, AND Byte itself has caught up to within
-   *    `MIGRATE_ARRIVE_DIST_PX` of the lane point — three independent
-   *    confirmations so Byte never re-homes onto a target that's still
-   *    mostly off-screen or while still visibly mid-flight toward it.
-   *    `setHomeAnchor` runs here, BEFORE `onTick`'s own generic anchor
-   *    computation reads `activeHome.el` this same tick, so the existing
-   *    `wasHome` no-snap reacquire seam picks up the NEW anchor immediately
-   *    — no new home-handoff code, exactly as the brief asks;
-   *  - while traveling with no recorded target (defensive — shouldn't
-   *    happen, since every path into `traveling` here sets one first):
-   *    no-op, leaving the root exactly where it last was rather than
-   *    guessing.
+   * footer home exists and reduced motion is off.
+   *
+   * Checks state eligibility FIRST (fix round 1, item 3): the 8 states
+   * that are neither resting nor `traveling` return immediately, before
+   * either home's rect is ever measured — those two `Range`-based reads
+   * only happen when this function is actually going to use them. When it
+   * does, it reads BOTH homes' live rects fresh (never cached, matching
+   * `onTick`'s own "never snapshot" anchor philosophy) and:
+   *  - while RESTING (`MIGRATE_ELIGIBLE_STATES`): fires `MIGRATE` on the
+   *    tick the ACTIVE home's own anchor crosses OUT of the comfortable
+   *    band — the `wasActiveInBand` edge guard (mirrors `wasNear`/
+   *    `wasHome`) makes this a once-per-crossing event, not a per-tick
+   *    spam (see its own doc comment for the full reasoning). No
+   *    destination is recorded here (fix round 1, item 1 — see below).
+   *  - while TRAVELING: REVERSIBLE. Every tick recomputes
+   *    `pick = pickAnchor(heroRect, footerRect, { height })` LIVE and
+   *    drives BOTH the lane point (X = a right-margin lane trailing the
+   *    PICKED home's own text-end; Y = the picked home's own anchor Y
+   *    clamped into the comfortable band) AND the arrival decision off
+   *    that live pick — never off a destination captured once when
+   *    `MIGRATE` fired. This is what makes a mid-trip reversal turn Byte
+   *    around: if the visitor scrolls back before the other home ever
+   *    enters the band, `pick` simply keeps returning the ORIGINAL home
+   *    the whole time, so the lane point and the arrival check both stay
+   *    pinned there. Re-homes (`setHomeAnchor` + `ARRIVED`) once the live
+   *    pick's own (unclamped) anchor is back in the comfortable band AND
+   *    Byte has caught up to within `MIGRATE_ARRIVE_DIST_PX` of the (
+   *    clamped) lane point — direction-agnostic, so this fires identically
+   *    for a completed hero->footer trip and for a hero->(partway)->hero
+   *    reversal. `setHomeAnchor` runs here, BEFORE `onTick`'s own generic
+   *    anchor computation reads `activeHome.el` this same tick, so the
+   *    existing `wasHome` no-snap reacquire seam picks up the anchor
+   *    immediately — no new home-handoff code. On a reversal back to the
+   *    still-active home, `setHomeAnchor` simply no-ops (the brief's own
+   *    documented behavior: `el === activeHome.el`), and `ARRIVED` +
+   *    the reacquire glide alone bring Byte back onto it. Before handing
+   *    off, this branch also explicitly kills this module's own lane
+   *    tween (fix round 1, item 2 — see `byteToLaneX/Y`'s own doc comment
+   *    above for why that's safe to do and still leaves the pair usable
+   *    for a LATER migration).
    */
   function runMigrationFull(footer: Home): void {
+    const state = fsm.state();
+    const resting = MIGRATE_ELIGIBLE_STATES.has(state);
+    if (!resting && state !== 'traveling') {
+      return;
+    }
+
     const heroRect = lastLineTextRect(heroHome.el);
     const footerRect = lastLineTextRect(footer.el);
     const heroAnchorY = heroRect.top + heroRect.height / 2;
     const footerAnchorY = footerRect.top + footerRect.height / 2;
 
-    const state = fsm.state();
-
-    if (MIGRATE_ELIGIBLE_STATES.has(state)) {
+    if (resting) {
       const activeAnchorY = activeHome === heroHome ? heroAnchorY : footerAnchorY;
       const activeInBand = inMigrationBand(activeAnchorY);
       if (!activeInBand && wasActiveInBand) {
-        migrationTarget = activeHome === heroHome ? footer : heroHome;
         fsm.send('MIGRATE');
       }
       wasActiveInBand = activeInBand;
       return;
     }
 
-    if (state !== 'traveling' || !migrationTarget) {
-      return;
-    }
-    const target = migrationTarget;
-
-    const targetRect = target === heroHome ? heroRect : footerRect;
-    const targetAnchorY = target === heroHome ? heroAnchorY : footerAnchorY;
-    const targetInBand = inMigrationBand(targetAnchorY);
+    // state === 'traveling': the live pick IS the destination — recomputed
+    // fresh every tick, never a target locked in back when MIGRATE fired.
+    const pick = pickAnchor(heroRect, footerRect, { height: window.innerHeight });
+    const pickHome = pick === 'hero' ? heroHome : footer;
+    const pickRect = pick === 'hero' ? heroRect : footerRect;
+    const pickAnchorY = pick === 'hero' ? heroAnchorY : footerAnchorY;
+    const pickInBand = inMigrationBand(pickAnchorY);
 
     const laneScreenX = Math.min(
-      targetRect.right + MIGRATE_LANE_GAP_PX,
+      pickRect.right + MIGRATE_LANE_GAP_PX,
       window.innerWidth - MIGRATE_LANE_MARGIN_PX,
     );
     const laneScreenY = gsap.utils.clamp(
       MIGRATE_BAND_TOP_PX,
       window.innerHeight - MIGRATE_BAND_BOTTOM_PX,
-      targetAnchorY,
+      pickAnchorY,
     );
     const laneWorld = scene.worldFromScreen(laneScreenX, laneScreenY);
     const laneRootY = laneWorld.y - unitPx / 2;
@@ -1361,13 +1390,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       rig.object3d.position.x - laneWorld.x,
       rig.object3d.position.y - laneRootY,
     );
-    const pick = pickAnchor(heroRect, footerRect, { height: window.innerHeight });
-    const targetKey: 'hero' | 'footer' = target === heroHome ? 'hero' : 'footer';
-    const arrived = pick === targetKey && targetInBand && dist <= MIGRATE_ARRIVE_DIST_PX;
+    const arrived = pickInBand && dist <= MIGRATE_ARRIVE_DIST_PX;
 
     if (arrived) {
-      migrationTarget = null;
-      setHomeAnchor(target.el);
+      // Fix round 1, item 2: explicitly hand the root back over — never
+      // rely solely on tween-creation-order to keep this pair from racing
+      // the reacquire glide that starts moments later in this same tick.
+      gsap.killTweensOf(rig.object3d.position);
+      setHomeAnchor(pickHome.el);
       fsm.send('ARRIVED');
       return;
     }
@@ -1381,15 +1411,21 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * SAME band-leave trigger as `runMigrationFull` (so the two stay in
    * lockstep conceptually), but no lane and no arrival distance: the
    * instant Byte's active home leaves the comfortable band, it snaps
-   * straight to the OTHER home's anchor. `fsm.send('MIGRATE')`, then
-   * `setHomeAnchor`, then the instant `rig.object3d.position` placement all
-   * happen synchronously here — before `onTick`'s generic anchor
-   * computation runs, the same seam the full-motion path uses — so the
-   * shadow (which reads the root's position later in the SAME tick) never
-   * renders one stale frame at the old home. `fsm.send('ARRIVED')` is
-   * deferred via `fireOnNextTick` — never a synchronous send back-to-back
-   * with `MIGRATE` — mirroring every other instant-completion beat in this
-   * module (the reduced-motion entrance, the reduced-motion retype).
+   * straight to whichever home `pickAnchor` currently favors (fix round 1,
+   * item 1 — "target the live pick", not mechanically "the other home":
+   * the two usually agree, but a home leaving ITS OWN band doesn't
+   * guarantee the other one is actually more visible yet — e.g. a scroll
+   * that leaves both hero and footer off-screen mid-page — and
+   * `pickAnchor`'s own tie-break-to-hero is the more correct call there).
+   * `fsm.send('MIGRATE')`, then `setHomeAnchor`, then the instant
+   * `rig.object3d.position` placement all happen synchronously here —
+   * before `onTick`'s generic anchor computation runs, the same seam the
+   * full-motion path uses — so the shadow (which reads the root's position
+   * later in the SAME tick) never renders one stale frame at the old home.
+   * `fsm.send('ARRIVED')` is deferred via `fireOnNextTick` — never a
+   * synchronous send back-to-back with `MIGRATE` — mirroring every other
+   * instant-completion beat in this module (the reduced-motion entrance,
+   * the reduced-motion retype).
    */
   function runMigrationReduced(footer: Home): void {
     const state = fsm.state();
@@ -1406,9 +1442,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const activeInBand = inMigrationBand(activeAnchorY);
 
     if (!activeInBand && wasActiveInBand) {
-      const target = activeHome === heroHome ? footer : heroHome;
-      const targetRect = target === heroHome ? heroRect : footerRect;
-      const targetAnchorY = target === heroHome ? heroAnchorY : footerAnchorY;
+      const pick = pickAnchor(heroRect, footerRect, { height: window.innerHeight });
+      const target = pick === 'hero' ? heroHome : footer;
+      const targetRect = pick === 'hero' ? heroRect : footerRect;
+      const targetAnchorY = pick === 'hero' ? heroAnchorY : footerAnchorY;
       const targetWorld = scene.worldFromScreen(targetRect.right, targetAnchorY);
 
       fsm.send('MIGRATE');
@@ -1812,10 +1849,6 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // entrance leaves the `enterAndType()` Promise unresolved — intentional:
     // the page is going away, and nothing awaits it past teardown.
     entranceResolve = null;
-    // T8 hygiene only (not a leak): no in-flight tween/timer references this,
-    // so there's nothing to kill — just drop the reference like the other
-    // plain-data resets above.
-    migrationTarget = null;
     // The Byte→caret follow (`byteToCaretX/Y`) AND the migration lane-follow
     // (`byteToLaneX/Y`) are both `quickTo`s — their reused tweens are NOT in
     // `liveTweens`, so kill them explicitly here (one call: both target the
