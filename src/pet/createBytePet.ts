@@ -43,6 +43,19 @@ import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
 
+/**
+ * T8 Style Lab wiring (SPEC §7 "preview & lock variants live" / §11): the
+ * CURRENT dark-mode phosphor Glow accent, defaulting to `DEFAULT_GLOW_ACCENT`
+ * (scene.ts) until the public `setGlowAccent()` handle method (below)
+ * overrides it — `main.ts` drives that from the Style Lab's `data-glow`
+ * axis. Module-level (mirrors `main.ts`'s own module-scope `bytePet`
+ * handle) rather than per-instance so BOTH of `applyTheme`'s `rig.setGlow`
+ * call sites (the instant + animate branches, below) read the SAME live
+ * value instead of the constant directly — a lab-selected accent survives
+ * every subsequent theme toggle.
+ */
+let currentGlowAccent: THREE.ColorRepresentation = DEFAULT_GLOW_ACCENT;
+
 // --- Tunables (all hand-picked, free to retune visually — same spirit as
 // rig.ts/shadow.ts's own constants). Grouped by the behaviour they drive. ---
 
@@ -217,7 +230,7 @@ const MIGRATE_LANE_FOLLOW_DURATION_S = 0.5;
 const MIGRATE_ARRIVE_DIST_PX = 40;
 
 /**
- * T5 task 5 "happy 360° spin" — the ONLY reward for a feed that begins while
+ * T8 task 5 "happy 360° spin" — the ONLY reward for a feed that begins while
  * `traveling` (SPEC §6: no retype for a trip-feed — fsm.ts's own
  * `feedFromTraveling` fork already routes `eating --ATE--> traveling`
  * instead of `retyping` for that edge). `SPIN_DURATION_S`/`SPIN_EASE` tune
@@ -594,7 +607,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let hintTween: ReturnType<typeof gsap.to> | null = null;
   /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
   let reacquireTween: ReturnType<typeof gsap.to> | null = null;
-  /** T5 task 5's happy-spin tween (`playHappySpin`, declared just above
+  /** T8 task 5's happy-spin tween (`playHappySpin`, declared just above
    *  `dispatch` below) — a named slot mirroring `dashTween`/`eatTween`/
    *  `reacquireTween` so a hypothetical rapid re-entry into `traveling` from
    *  `eating` can defensively kill a still-in-flight predecessor before
@@ -844,7 +857,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       rig.object3d.scale.y = unitPx;
 
       scene.setTheme(t, 0);
-      rig.setGlow(t === 'dark', DEFAULT_GLOW_ACCENT);
+      rig.setGlow(t === 'dark', currentGlowAccent);
       setDimmed(fsm.state() === 'sleeping');
       return;
     }
@@ -859,12 +872,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // intensity it jumps to as the lerp's target — this decouples this
     // module from rig.ts's own private `GLOW_ON_INTENSITY` constant, which
     // isn't exported. `rig.setGlow` also sets the emissive accent color
-    // here (constant across themes — `DEFAULT_GLOW_ACCENT` — so it needs no
-    // lerp of its own); restoring `emissiveIntensity` to the start value
-    // right after undoes only the instant intensity jump, so the tween
-    // below can ease between the two.
+    // here (constant across a single theme lerp — `currentGlowAccent`, T8's
+    // lab-switchable accent, defaulting to `DEFAULT_GLOW_ACCENT` — so it
+    // needs no lerp of its own); restoring `emissiveIntensity` to the start
+    // value right after undoes only the instant intensity jump, so the
+    // tween below can ease between the two.
     const fromGlowIntensity = source.glow?.emissiveIntensity ?? 0;
-    rig.setGlow(t === 'dark', DEFAULT_GLOW_ACCENT);
+    rig.setGlow(t === 'dark', currentGlowAccent);
     const toGlowIntensity = source.glow?.emissiveIntensity ?? 0;
     if (source.glow) {
       source.glow.emissiveIntensity = fromGlowIntensity;
@@ -1248,7 +1262,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     retypeActive = true;
   }
 
-  // --- T5 task 5: feed-while-traveling happy spin ----------------------------
+  // --- T8 task 5: feed-while-traveling happy spin ----------------------------
   /**
    * Plays once, on the `eating`->`traveling` edge only (a feed that began
    * mid-trip; fsm.ts's `feedFromTraveling` fork) — see `dispatch`'s
@@ -1384,7 +1398,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // that's what makes a mid-trip reversal turn Byte around instead
         // of stranding it in the lane.
         //
-        // T5 task 5: the ONE exception — entering `traveling` FROM
+        // T8 task 5: the ONE exception — entering `traveling` FROM
         // `eating` (a feed that began mid-trip; fsm.ts's
         // `feedFromTraveling` fork) is the happy-spin reward, no retype.
         // A MIGRATE-driven entry into `traveling` from a home state
@@ -1872,6 +1886,23 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     applyTheme(t, { animate: true });
   }
 
+  /**
+   * Style Lab wiring (T8, SPEC §7 "preview & lock variants live" / §11):
+   * swap the dark-mode phosphor Glow's accent color live — `main.ts` drives
+   * this from the `data-glow` axis's live `--glow` CSS token. Stores the new
+   * accent in the module-level `currentGlowAccent` (so every LATER
+   * `applyTheme` call — including a subsequent theme toggle — keeps
+   * painting it, not just this one call) and re-applies it immediately via
+   * `rig.setGlow`, reading the CURRENT theme rather than assuming dark. In
+   * light mode the glow is off (`rig.setGlow(false, ...)` — see rig.ts), so
+   * switching the accent has no visible effect until dark mode is active;
+   * that is correct per SPEC §11 (the glow is a dark-mode-only effect).
+   */
+  function setGlowAccent(color: THREE.ColorRepresentation): void {
+    currentGlowAccent = color;
+    rig.setGlow(theme === 'dark', currentGlowAccent);
+  }
+
   function onEat(cb: (total: number) => void): void {
     feeder.onEat(cb);
   }
@@ -1910,6 +1941,29 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     activeHome = next;
     setCaretVisible(activeHome, true);
     retype.reset(currentTextOf(next));
+  }
+
+  /**
+   * Style Lab wiring (T8, SPEC §7): replace the HERO home's retype cycle
+   * live — `main.ts` drives this from the `data-phrase-set` axis. Mirrors
+   * `setHomeAnchor`'s "one engine, both homes" spirit but only ever touches
+   * the hero: the footer's own cycle (its fixed CTA phrases) is never a lab
+   * axis and is left untouched. Resets `heroHome.phraseIndex` to 0 so the
+   * next hero feed starts the new cycle from its first entry — the exact
+   * next-phrase index isn't spec-critical, this just guarantees it's a valid
+   * index into the NEW cycle rather than a stale one from the old — and,
+   * only if the hero is CURRENTLY the active home, re-seeds the shared
+   * retype engine to the hero's on-screen text (`currentTextOf`) so the very
+   * next retype deletes what's actually shown instead of a schedule built
+   * against the old cycle. A no-op on the engine when the footer is active:
+   * it already points at the footer's own text, which this never touches.
+   */
+  function setPhrases(cycle: readonly Phrase[]): void {
+    heroHome.cycle = cycle;
+    heroHome.phraseIndex = 0;
+    if (activeHome === heroHome) {
+      retype.reset(currentTextOf(heroHome));
+    }
   }
 
   // --- Entrance choreography (T6b, SPEC §8.1) -------------------------------
@@ -2081,5 +2135,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     scene.dispose();
   }
 
-  return { feed, setTheme, onEat, enterAndType, setHomeAnchor, destroy };
+  return {
+    feed,
+    setTheme,
+    onEat,
+    enterAndType,
+    setHomeAnchor,
+    setGlowAccent,
+    setPhrases,
+    destroy,
+  };
 }

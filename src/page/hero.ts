@@ -272,16 +272,14 @@ function matchesMedia(query: string): boolean {
  * Every DOM lookup is guarded: with the nav EQ button absent (a stripped page, a
  * test fixture without it) the whole function is a silent no-op.
  *
- * `cursor` (an optional custom-cursor handle) is accepted so a later task
- * (T7 Task 6, the zone→label wiring) can pass it without changing this
- * signature; it is intentionally NOT consumed here.
+ * Takes only `engine` — an earlier draft also accepted an optional
+ * custom-cursor handle for a later task's zone→label wiring, but that
+ * wiring landed directly in `main.ts` instead (R7-4), leaving the param
+ * unused here; T8 dropped it (its own `cursor` handle still drives the
+ * `pointermove` zone resolver in `main.ts`, just never passed into this
+ * function).
  */
-export function initSoundControls({
-  engine,
-}: {
-  engine: SoundEngine;
-  cursor?: { setLabel(l: 'FEED' | 'TOGGLE' | 'OPEN' | null): void; destroy(): void };
-}): void {
+export function initSoundControls({ engine }: { engine: SoundEngine }): void {
   const button = document.querySelector<HTMLButtonElement>('[data-eq-toggle]');
   if (!button) {
     return;

@@ -10,7 +10,7 @@ import { createGlyphQueue, GLYPH_KINDS, makeGlyph, MAX_LIVE_GLYPHS } from './gly
  * three) and is tested with trivial numeric stand-ins for the glyph handle,
  * exactly as the feeder will instantiate it with `THREE.Mesh` later.
  *
- * `GLYPH_KINDS` is imported from `glyphs.ts` itself (T5 task-5 fold) rather
+ * `GLYPH_KINDS` is imported from `glyphs.ts` itself (T8 task-5 fold) rather
  * than re-declared as a local literal — this file, `feed.ts`, and
  * `glyphs.ts`'s own `GlyphKind` union used to each keep an independent copy
  * of the same six kinds.

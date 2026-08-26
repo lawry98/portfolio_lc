@@ -238,6 +238,23 @@ export interface BytePetHandle {
    * called manually (browser QA) to point Byte at the footer.
    */
   setHomeAnchor(el: HTMLElement): void;
+  /**
+   * Style Lab wiring (T8, SPEC §7/§11): swap the dark-mode phosphor Glow's
+   * accent color live and re-apply it immediately against the CURRENT theme
+   * (light mode stays off — the glow is a dark-mode-only effect, so this is
+   * a no-op-looking call until dark mode is active). `main.ts` drives this
+   * from the `data-glow` axis's live `--glow` CSS token.
+   */
+  setGlowAccent(color: THREE.ColorRepresentation): void;
+  /**
+   * Style Lab wiring (T8, SPEC §7): replace the HERO home's retype cycle
+   * live (the footer's own cycle is untouched — it isn't a lab axis) and
+   * reset its position to the cycle's first entry; if the hero is currently
+   * the active home, re-seeds the retype engine to the on-screen text so the
+   * next retype deletes correctly. `main.ts` drives this from the
+   * `data-phrase-set` axis.
+   */
+  setPhrases(cycle: readonly Phrase[]): void;
   /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
   destroy(): void;
 }

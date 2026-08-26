@@ -15,7 +15,7 @@ import { hasWebGL } from './pet/scene';
 import { createBytePet } from './pet/createBytePet';
 import { createWebAudioSynth } from './pet/sound/webAudioSynth';
 import type { BytePetHandle } from './pet/types';
-import { phrases } from './phrases';
+import { phrases, type Phrase } from './phrases';
 
 /**
  * Byte demo entry point.
@@ -124,6 +124,44 @@ function resolveCursorLabel(target: EventTarget | null): CursorLabel {
     return 'FEED';
   }
   return null;
+}
+
+/**
+ * Style Lab wiring (T8, SPEC §7 "preview & lock variants live"): Byte's glow
+ * accent tracks the lab's `data-glow` axis via the live `--glow` CSS custom
+ * property `tokens.css`'s `[data-glow]` rules already set (`page/lab.ts`) —
+ * reading the token here, rather than re-deriving a preset→hex map, keeps
+ * this bridge in lockstep with `tokens.css` even if the lab ever adds or
+ * retunes a preset. A trimmed hex string is a valid
+ * `THREE.ColorRepresentation`, so the result goes straight into
+ * `bytePet.setGlowAccent()`. Reading a page CSS var HERE (not inside `pet/`)
+ * is the intended seam — `main.ts` is the page↔pet bridge, so `pet/` stays
+ * portable.
+ */
+function resolveGlowHex(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--glow').trim();
+}
+
+/**
+ * Style Lab wiring (T8): resolves Byte's HERO retype cycle from
+ * `<html data-phrase-set>` (`page/lab.ts`'s axis) — `identity`/`punchy` map
+ * straight to their matching `phrases` set, `combined` concatenates both
+ * (`combined[0] === phrases.identity[0]`, the static hero headline, so the
+ * very first retype after switching TO `combined` still deletes coherent
+ * on-screen text). Absent or unrecognized — production, where the lab never
+ * runs, and the panel's own pre-selection default — falls back to
+ * `phrases.identity`, byte-identical to the phrase cycle `createBytePet` is
+ * constructed with below.
+ */
+function resolvePhraseSet(): readonly Phrase[] {
+  const pref = document.documentElement.dataset.phraseSet;
+  if (pref === 'punchy') {
+    return phrases.punchy;
+  }
+  if (pref === 'combined') {
+    return [...phrases.identity, ...phrases.punchy];
+  }
+  return phrases.identity;
 }
 
 /**
@@ -278,10 +316,22 @@ function bootstrap(): void {
   // harmless no-op there (no touch-branching needed).
   const sound = createWebAudioSynth();
   const cursor = initCursor();
-  initSoundControls({ engine: sound, cursor });
+  initSoundControls({ engine: sound });
+  // T7 cleanup: memoize the resolved zone label so a `pointermove` — which
+  // fires far more often than the label actually changes — only calls
+  // `setLabel` (and so only repaints the pill's text/visibility) on an
+  // actual crossing between zones, mirroring `createBytePet.ts`'s own
+  // edge-triggered proximity pattern instead of rewriting every move.
+  let lastCursorLabel: CursorLabel = null;
   document.addEventListener(
     'pointermove',
-    (event) => cursor.setLabel(resolveCursorLabel(event.target)),
+    (event) => {
+      const label = resolveCursorLabel(event.target);
+      if (label !== lastCursorLabel) {
+        lastCursorLabel = label;
+        cursor.setLabel(label);
+      }
+    },
     { passive: true },
   );
 
@@ -337,6 +387,32 @@ function bootstrap(): void {
     // above. `createBytePet` speaks only the `SoundEngine` interface — this is
     // its single injection point; omitting it would fall back to silence.
     sound,
+  });
+
+  // Style Lab wiring (T8, SPEC §7 "preview & lock variants live") — WebGL-only
+  // (no Byte otherwise), so this lives inside the `bytePet` block, mirroring
+  // the `still hungry` tooltip's own `data-tooltip` `MutationObserver`
+  // pattern (`createHungryTooltip`, ruling R7-8, above). Apply once on boot
+  // — a page that loads with either attribute already set (e.g. a lab
+  // session surviving a reload) must reflect it immediately, not just on the
+  // next flip — then keep watching `<html>` for live changes. Branches per
+  // `mutation.attributeName` rather than re-applying both axes on any
+  // change: `setPhrases` resets the hero's `phraseIndex`, which a
+  // glow-only flip must not trigger.
+  bytePet.setGlowAccent(resolveGlowHex());
+  bytePet.setPhrases(resolvePhraseSet());
+  const labAxesObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.attributeName === 'data-glow') {
+        bytePet?.setGlowAccent(resolveGlowHex());
+      } else if (mutation.attributeName === 'data-phrase-set') {
+        bytePet?.setPhrases(resolvePhraseSet());
+      }
+    }
+  });
+  labAxesObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-glow', 'data-phrase-set'],
   });
 
   // Footer FED counter (T5, SPEC §8.6) — lives in the footer (`index.html`),
