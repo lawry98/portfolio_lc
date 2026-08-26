@@ -12,6 +12,7 @@
  * origin at the screen center and world-y increasing upward (screen-y
  * increases downward) — see `worldFromScreen`/`screenFromWorld` below.
  */
+import gsap from 'gsap';
 import * as THREE from 'three';
 import type { SceneHandle, SceneOptions } from './types';
 
@@ -412,18 +413,77 @@ export function createScene(opts: SceneOptions): SceneHandle {
   keyLight.layers.enableAll();
   scene.add(keyLight);
 
-  // Re-lerps only the hemisphere/key lights (instant set is acceptable — the
-  // 400ms choreography lands in T8). Byte's own Body/Glow materials are
-  // deliberately NOT repainted here: the rig owns them via
-  // `setBodyColor`/`setGlow` (`createBytePet` calls these on theme change
-  // using `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT` above) — R-T4-5.
-  function setTheme(theme: Theme): void {
+  // T8 ("theme reaction"): the one in-flight light lerp, if any — killed
+  // before every call (instant or animated) so a rapid re-toggle never
+  // leaves two writers on the same light properties (mirrors the rest of
+  // the codebase's kill-before-restart idiom, e.g. `createBytePet.ts`'s
+  // named tween slots).
+  let themeTween: ReturnType<typeof gsap.timeline> | null = null;
+
+  /**
+   * Re-lerps only the hemisphere/key lights — NOT Byte's own Body/Glow
+   * materials, which the rig owns instead via `setBodyColor`/`setGlow`
+   * (`createBytePet` calls these on theme change using
+   * `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT` above) — R-T4-5.
+   *
+   * `durationS` (default `0`, the construction path via `setTheme(opts.
+   * theme)` below): `0` sets every light property to `THEME_PRESETS[theme]`
+   * instantly, exactly as before T8. `> 0` instead GSAP-tweens each
+   * property from its CURRENT live value to that same target over
+   * `durationS` seconds — colors via `gsap.to(color, { r, g, b })` (three.js
+   * `Color`s expose plain numeric `.r/.g/.b`, so gsap can tween them
+   * directly with no manual lerp math) and intensities directly on the
+   * light objects, all in one timeline so every channel arrives together.
+   * Reading the "current live value" rather than snapshotting fixed "from"
+   * colors up front is what makes the kill-before-restart idiom below
+   * correct: killing an in-flight lerp freezes each property wherever it
+   * was, and the next `setTheme` call's fresh tweens simply pick up from
+   * there — never a snap back to the previous theme's start point.
+   */
+  function setTheme(theme: Theme, durationS = 0): void {
     const preset = THEME_PRESETS[theme];
-    hemisphereLight.color.set(preset.hemisphereSky);
-    hemisphereLight.groundColor.set(preset.hemisphereGround);
-    hemisphereLight.intensity = preset.hemisphereIntensity;
-    keyLight.color.set(preset.keyColor);
-    keyLight.intensity = preset.keyIntensity;
+
+    themeTween?.kill();
+    themeTween = null;
+
+    if (durationS <= 0) {
+      hemisphereLight.color.set(preset.hemisphereSky);
+      hemisphereLight.groundColor.set(preset.hemisphereGround);
+      hemisphereLight.intensity = preset.hemisphereIntensity;
+      keyLight.color.set(preset.keyColor);
+      keyLight.intensity = preset.keyIntensity;
+      return;
+    }
+
+    const toHemiSky = new THREE.Color(preset.hemisphereSky);
+    const toHemiGround = new THREE.Color(preset.hemisphereGround);
+    const toKeyColor = new THREE.Color(preset.keyColor);
+    const ease = 'power2.inOut';
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        themeTween = null;
+      },
+    });
+    tl.to(
+      hemisphereLight.color,
+      { r: toHemiSky.r, g: toHemiSky.g, b: toHemiSky.b, duration: durationS, ease },
+      0,
+    );
+    tl.to(
+      hemisphereLight.groundColor,
+      { r: toHemiGround.r, g: toHemiGround.g, b: toHemiGround.b, duration: durationS, ease },
+      0,
+    );
+    tl.to(hemisphereLight, { intensity: preset.hemisphereIntensity, duration: durationS, ease }, 0);
+    tl.to(
+      keyLight.color,
+      { r: toKeyColor.r, g: toKeyColor.g, b: toKeyColor.b, duration: durationS, ease },
+      0,
+    );
+    tl.to(keyLight, { intensity: preset.keyIntensity, duration: durationS, ease }, 0);
+
+    themeTween = tl;
   }
 
   setTheme(opts.theme);
@@ -471,6 +531,9 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Teardown ------------------------------------------------------------
   function dispose(): void {
     window.removeEventListener('resize', resize);
+
+    themeTween?.kill();
+    themeTween = null;
 
     disposeObject3D(scene);
 

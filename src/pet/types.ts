@@ -52,8 +52,11 @@ export interface SceneHandle {
   addToFront(object: THREE.Object3D): void;
   /** Re-lerp the scene's hemisphere/key lights for a theme change. Byte's own Body/Glow
    *  materials are themed by the rig instead (see `bodyColorForTheme`/`DEFAULT_GLOW_ACCENT`
-   *  in `scene.ts`, consumed by `createBytePet` via `rig.setBodyColor`/`rig.setGlow`). */
-  setTheme(t: 'light' | 'dark'): void;
+   *  in `scene.ts`, consumed by `createBytePet` via `rig.setBodyColor`/`rig.setGlow`).
+   *  `durationS` (T8, "theme reaction"): omitted/`0` sets the lights instantly (construction
+   *  path); `> 0` GSAP-lerps from their current values to the target theme's preset over that
+   *  many seconds instead — see `scene.ts`'s own `setTheme` doc comment for the mechanism. */
+  setTheme(t: 'light' | 'dark', durationS?: number): void;
   /** Pixel-space screen coords → world coords at z=0 (wraps `scene.ts`'s pure fn). */
   worldFromScreen(x: number, y: number): { x: number; y: number };
   /** A DOM element's `getBoundingClientRect()`, expressed in the same pixel-space as `worldFromScreen`. */

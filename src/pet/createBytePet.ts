@@ -230,6 +230,29 @@ const SPIN_DURATION_S = 0.6;
 const SPIN_EASE = 'back.out(1.4)';
 
 /**
+ * T8 ("theme reaction" ticket): `setTheme`'s full-motion crossfade. Byte's
+ * Body colour lerps `bodyColorForTheme(prev)` -> `bodyColorForTheme(next)`
+ * and the dark phosphor Glow's emissive intensity lerps alongside it, both
+ * over `THEME_LERP_DURATION_S` — matching `scene.ts`'s own light lerp
+ * (`scene.setTheme(t, THEME_LERP_DURATION_S)`, SPEC §11 "material/light
+ * state per theme lerps on toggle"), so lights and Body/Glow crossfade in
+ * lockstep. `THEME_STRETCH_*` size the accompanying full-height
+ * squash-and-stretch (`playThemeStretch`, below) — a MULTIPLIER of `unitPx`
+ * applied to the ROOT's `scale.y` only (x/z stay at `unitPx`), mirroring
+ * `feed.ts`'s `SATISFIED_WIGGLE_SCALE` exactly (`rig.object3d.scale` rests
+ * at `unitPx` on every axis; nothing else writes it outside a transient
+ * pulse like this one or `playSatisfiedWiggle`). Both the lerp and the
+ * stretch are skipped entirely under `reducedActive` (R-T4-7) — reduced
+ * motion sets the theme instantly, with no lerp and no stretch. Hand-picked,
+ * free to retune visually — same spirit as every other tunable in this
+ * section.
+ */
+const THEME_LERP_DURATION_S = 0.4;
+const THEME_STRETCH_SCALE = 1.18;
+const THEME_STRETCH_UP_DURATION_S = 0.14;
+const THEME_STRETCH_DOWN_DURATION_S = 0.21;
+
+/**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
  * `Range` over its last non-empty text node — deliberately NOT
  * `el.getBoundingClientRect()`. This project's `.hero__line` spans are
@@ -579,6 +602,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    *  slower than this spin's own duration, so the two should never actually
    *  overlap — belt-and-suspenders, same reasoning as those three). */
   let spinTween: ReturnType<typeof gsap.to> | null = null;
+  /** T8 "theme reaction" — the Body-colour/Glow-intensity crossfade tween (`applyTheme`'s
+   *  animate path, below). Named (not just `liveTweens` membership) so a rapid re-toggle
+   *  kills the previous lerp before starting a fresh one — the codebase's usual
+   *  kill-before-restart idiom, mirroring `scene.ts`'s own `themeTween` for the light lerp. */
+  let themeLerpTween: ReturnType<typeof gsap.to> | null = null;
+  /** T8 "theme reaction" — the full-height squash-and-stretch pulse (`playThemeStretch`,
+   *  below). Named for the same kill-before-restart reason as `themeLerpTween`. */
+  let themeStretchTween: ReturnType<typeof gsap.timeline> | null = null;
   // Per-frame Byte→caret follow (T6): `quickTo` so the per-tick target update
   // during a retype reuses ONE tween per axis instead of spawning a fresh
   // tween each frame (CLAUDE.md GSAP conventions). Created once here; drives
@@ -752,11 +783,116 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     rig.setBodyColor(on ? new THREE.Color(base).multiplyScalar(DIM_FACTOR) : base);
   }
 
-  function applyTheme(t: Theme): void {
+  /**
+   * T8 "theme reaction": full-height squash-and-stretch pulse on the ROOT's
+   * `scale.y` only (x/z stay at `unitPx` — see `THEME_STRETCH_*`'s doc
+   * comment). Deliberately the ROOT (`rig.object3d`), never the clip-owned
+   * `pose` node, so this can never fight an active clip — `rig.play()` only
+   * ever touches `pose` (see the module doc comment's "Root vs. pose split"
+   * reference), and the dash tween (`feed.ts`) only ever touches `position`/
+   * `rotation.z` on the root, never `scale`. `overwrite: 'auto'` guards the
+   * one OTHER tween that also pulses ROOT scale — `feed.ts`'s
+   * `playSatisfiedWiggle`, private to that module's own `liveTweens`
+   * registry and so not reachable/killable by name from here — so a
+   * same-instant race between the two can't strand `scale.y` off `unitPx`.
+   */
+  function playThemeStretch(): void {
+    themeStretchTween = killTracked(themeStretchTween);
+    const peak = unitPx * THEME_STRETCH_SCALE;
+    const tl = gsap.timeline({
+      onComplete: () => {
+        themeStretchTween = null;
+      },
+    });
+    tl.to(rig.object3d.scale, {
+      y: peak,
+      duration: THEME_STRETCH_UP_DURATION_S,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    });
+    tl.to(rig.object3d.scale, {
+      y: unitPx,
+      duration: THEME_STRETCH_DOWN_DURATION_S,
+      ease: 'power2.inOut',
+      overwrite: 'auto',
+    });
+    themeStretchTween = track(tl);
+  }
+
+  /**
+   * Re-themes the scene + rig (R-T4-5). `opts.animate` (set by the public
+   * `setTheme` wrapper, below) requests the ~400ms crossfade + Byte's
+   * stretch; construction (`applyTheme(theme, { animate: false })`, further
+   * down) always takes the instant path, and `reducedActive` forces it too
+   * regardless of what the caller asked for (R-T4-7 — reduced motion sets
+   * the theme instantly, with no lerp and no stretch).
+   */
+  function applyTheme(t: Theme, opts: { animate?: boolean } = {}): void {
+    const prevTheme = theme;
+    const animate = (opts.animate ?? false) && !reducedActive;
     theme = t;
-    scene.setTheme(t);
+
+    themeLerpTween = killTracked(themeLerpTween);
+
+    if (!animate) {
+      // Belt-and-suspenders: undo any in-flight stretch left mid-pulse by a
+      // PRIOR animated toggle (e.g. reduced-motion flipping on live, mid-
+      // stretch) so the instant path really does leave `scale.y` at exactly
+      // `unitPx`, never a stray interpolated value — "no stretch" means none
+      // lingers either.
+      themeStretchTween = killTracked(themeStretchTween);
+      rig.object3d.scale.y = unitPx;
+
+      scene.setTheme(t, 0);
+      rig.setGlow(t === 'dark', DEFAULT_GLOW_ACCENT);
+      setDimmed(fsm.state() === 'sleeping');
+      return;
+    }
+
+    scene.setTheme(t, THEME_LERP_DURATION_S);
+
+    const fromBody = bodyColorForTheme(prevTheme);
+    const toBody = bodyColorForTheme(t);
+
+    // Snapshot the Glow's CURRENT emissive intensity as the lerp's start
+    // value, then call `rig.setGlow` itself (instant) purely to read the
+    // intensity it jumps to as the lerp's target — this decouples this
+    // module from rig.ts's own private `GLOW_ON_INTENSITY` constant, which
+    // isn't exported. `rig.setGlow` also sets the emissive accent color
+    // here (constant across themes — `DEFAULT_GLOW_ACCENT` — so it needs no
+    // lerp of its own); restoring `emissiveIntensity` to the start value
+    // right after undoes only the instant intensity jump, so the tween
+    // below can ease between the two.
+    const fromGlowIntensity = source.glow?.emissiveIntensity ?? 0;
     rig.setGlow(t === 'dark', DEFAULT_GLOW_ACCENT);
-    setDimmed(fsm.state() === 'sleeping');
+    const toGlowIntensity = source.glow?.emissiveIntensity ?? 0;
+    if (source.glow) {
+      source.glow.emissiveIntensity = fromGlowIntensity;
+    }
+
+    const proxy = { p: 0 };
+    themeLerpTween = track(
+      gsap.to(proxy, {
+        p: 1,
+        duration: THEME_LERP_DURATION_S,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          rig.setBodyColor(new THREE.Color(fromBody).lerp(new THREE.Color(toBody), proxy.p));
+          if (source.glow) {
+            source.glow.emissiveIntensity =
+              fromGlowIntensity + (toGlowIntensity - fromGlowIntensity) * proxy.p;
+          }
+        },
+        onComplete: () => {
+          themeLerpTween = null;
+          // Re-apply the sleeping dim on top of the now-settled theme body
+          // color, exactly as the instant path's own `setDimmed` call does.
+          setDimmed(fsm.state() === 'sleeping');
+        },
+      }),
+    );
+
+    playThemeStretch();
   }
 
   // --- Invited hint ------------------------------------------------------------
@@ -1294,8 +1430,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   });
 
   // onEnter never fires for the FSM's initial state, so the initial choreography
-  // is invoked explicitly here. `applyTheme(theme)` runs either way. Then, per
-  // the initial state:
+  // is invoked explicitly here. `applyTheme(theme, { animate: false })` runs
+  // either way (instant — construction never animates). Then, per the initial
+  // state:
   //  - `hidden` (entrance): hidden-prep — keep Byte + shadow invisible until
   //    `enterAndType()` reveals them, and (full motion only) clear the headline
   //    to empty so the type-from-empty has no first-frame flash of phrase #1.
@@ -1303,7 +1440,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   //    entrance sets phrase #1 "directly" by simply leaving it). Runs AFTER the
   //    `mm.matchMedia` block above, so `reducedActive` is already final here.
   //  - `idle` (default, no entrance): appear idle immediately, exactly as before.
-  applyTheme(theme);
+  applyTheme(theme, { animate: false });
   if (fsm.state() === 'hidden') {
     rig.object3d.visible = false;
     shadow.mesh.visible = false;
@@ -1727,9 +1864,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   function setTheme(t: Theme): void {
     // T7 (R7-1): whoosh on an EXPLICIT theme change only. Fired here in the
     // public wrapper — NOT in `applyTheme`, which also runs once at construction
-    // (`applyTheme(theme)` below), where it would whoosh on page load.
+    // (`applyTheme(theme, { animate: false })` above), where it would whoosh on
+    // page load. `{ animate: true }` is what turns on T8's ~400ms crossfade +
+    // stretch below (instant instead, whenever `reducedActive` is true —
+    // `applyTheme` itself is what checks that flag, not this wrapper).
     sound.play('themeWhoosh');
-    applyTheme(t);
+    applyTheme(t, { animate: true });
   }
 
   function onEat(cb: (total: number) => void): void {
@@ -1910,6 +2050,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     reacquireTween = null;
     spinTween = null;
     sparkTween = null;
+    themeLerpTween = null;
+    themeStretchTween = null;
     // Drop any in-flight entrance resolver (the drop-in tween itself is in
     // `liveTweens`, already killed by the bulk kill above). A destroy mid-
     // entrance leaves the `enterAndType()` Promise unresolved — intentional:
