@@ -302,7 +302,13 @@ function bootstrap(): void {
   initManifesto();
   initWork();
   initFooter();
-  initLab();
+  // SPEC §7: the Style Lab is a dev-only preview/lock tool. Production hides
+  // the panel — and since the release build ships only the locked font (T10),
+  // a prod `?lab` must not be able to switch to a family whose woff2 was
+  // dropped. The boot-time setGlowAccent/setPhrases below stay OUTSIDE this
+  // guard so the locked glow (mint) + phrases (identity) still apply in the
+  // release.
+  if (import.meta.env.DEV) initLab();
 
   // Sound + custom cursor (T7, SPEC §8.3/§8.7) — pure garnish: it must never
   // block first paint or throw into boot. ONE engine is constructed here (the
