@@ -1508,7 +1508,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   function onPointerDown(e: PointerEvent): void {
-    fsm.send('POINTER_DOWN'); // wakes Byte when sleeping; harmless/no-op elsewhere.
+    // The wake now lives in `feed()` (T9), so pointer and the keyboard "Feed
+    // Byte" button share it — no double-send here.
     feed(e.clientX, e.clientY);
   }
 
@@ -1929,6 +1930,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   // --- Public handle (brief 4a/4e) ------------------------------------------------
   function feed(x: number, y: number): void {
+    // Wake a sleeping Byte, then feed (SPEC §6 "Click → waking, then the click
+    // counts as a feed"). Harmless/no-op when already awake — matches the prior
+    // onPointerDown behavior, so the pointer path AND the reveal-on-focus
+    // "Feed Byte" button (T9) share one wake-then-feed entry.
+    fsm.send('POINTER_DOWN');
     // T5: the feeder owns the FEED send now (via its own
     // `maybeStartProcessing`, fired once the tossed glyph is actually
     // queued) — sending it again here would double-send into the FSM.

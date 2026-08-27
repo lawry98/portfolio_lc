@@ -347,6 +347,10 @@ function bootstrap(): void {
   // handled upstream by index.html's `<noscript>` (this module never runs).
   if (!webgl) {
     console.info('[byte] WebGL unavailable — static headline only, pet scene skipped.');
+    // No Byte to feed on this floor, so hide the keyboard "Feed Byte" button
+    // (T9): a [hidden] button is dropped from the tab order and the a11y tree,
+    // so it is never an inert focus stop when there is nothing to activate.
+    document.querySelector<HTMLElement>('[data-feed-byte]')?.setAttribute('hidden', '');
     void runEntrance({ reducedMotion, root }).catch(() => {});
     return;
   }
@@ -438,6 +442,20 @@ function bootstrap(): void {
     }
     hungryTooltip?.setCount(total);
   });
+
+  // Keyboard feed path (T9, SPEC §12): the reveal-on-focus "Feed Byte" button.
+  // Its native `click` fires for Enter/Space AND AT activation; route it through
+  // the same `feed()` entry the pointer uses (wake-then-feed). Spawn the glyph at
+  // the button's own on-screen point (it is visible whenever activated via
+  // keyboard), falling back to the headline's box centre.
+  const feedButton = root.querySelector<HTMLButtonElement>('[data-feed-byte]');
+  if (feedButton) {
+    feedButton.addEventListener('click', () => {
+      const r = feedButton.getBoundingClientRect();
+      const rect = r.width > 0 && r.height > 0 ? r : headlineEl.getBoundingClientRect();
+      bytePet?.feed(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+  }
 
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
   // to exist beyond the theme-toggle callback above: tear it down (kills

@@ -134,6 +134,15 @@
               <span class="hero__line">FULL-STACK</span>
               <span class="hero__line">+AI</span>
             </h1>
+            <!--
+              Keyboard/AT feed affordance (T9, SPEC §12). A real <button>, so
+              SRs announce "Feed Byte, button" and Enter/Space/AT all fire its
+              native click. Visually hidden until keyboard-focused (skip-link
+              pattern in global.css), then revealed with a focus ring. Placed
+              right after the headline so it lands early in the hero tab order.
+              main.ts wires the click and hides it on the no-WebGL floor.
+            -->
+            <button type="button" class="hero__feed-key" data-feed-byte>Feed Byte</button>
             <p class="hero__micro-label eyebrow" data-parallax data-parallax-speed="0.25">
               PORTFOLIO — 2026
             </p>

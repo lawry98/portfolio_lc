@@ -343,6 +343,48 @@ small,
   }
 }
 
+/* Keyboard-only "Feed Byte" affordance (SPEC §12). Visually hidden until keyboard-focused,
+   then revealed as a real ≥44px target with a visible focus ring. position: fixed → out of
+   flow, so revealing it never shifts layout (CLS 0) and cannot cause horizontal overflow.
+   Reveal uses :focus-visible only, matching every other focus rule in this file (nav 245,
+   work 483, footer 595, lab 664) — no :focus fallback needed. */
+.hero__feed-key {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.hero__feed-key:focus-visible {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 50; /* above #gl-front (40, scene.ts), below grain (9999) */
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  min-width: 44px;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--accent);
+  border-radius: 0.375rem;
+  font: inherit;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Drifting micro-label — parallax speed hook consumed by a later ticket;
    right-anchored to the hero section so it never competes with the
    centered headline. Kept well inside the container's own gutter
