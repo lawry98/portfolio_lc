@@ -277,7 +277,9 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ---
 
-## T10 — Perf & release
+## T10 — Perf & release  ✅ DONE
+
+> **DONE** (2026-08-27; T10 range `1a2028c..c7995dd` + the DONE-docs commit; **D-18**). Release-ready: a build-time `lockFontsPlugin` ships **one type system** (Space Grotesk only, ~26 KB) while dev keeps all 3 for `?lab` (dev-gated out of prod); `vite.config.ts` pins ports, accepts the raw-chunk exception (**R10-3**), and emits source maps; `README.md` + `docs/INTEGRATION.md` + `docs/qa/README.md` written. Budgets JS **206.4** / CSS **3.34** / fonts **26.15** KB gz (≪ 280/20/120). **Lighthouse mobile: Perf 96 / A11y 100 / BP 100 / CLS 0** after the a11y+BP fix wave (SplitText `aria:'none'`, AA-contrast `--muted`, favicon, source maps); **LCP 2.3 s accepted** (eager `three` — lazy-load is a noted future perf ticket). GIF + true-60fps/heap/reduced-motion/migration-2nd-leg + a screen-reader spot-check are on-device residuals recorded in `docs/qa/`. No `src/pet/*` change; **250 tests** green. **Branch stays OPEN (no merge — owner's call, for the late T-GLB / T-Audio swap-ins).** Audit trail: `.superpowers/sdd/t10-plan/`.
 
 **Goal:** Budgets enforced, documented, and a recorded loop — ready to show.
 
