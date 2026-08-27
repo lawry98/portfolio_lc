@@ -28,7 +28,7 @@ export function lockFontsPlugin(keepFamilies: string[]): Plugin {
     apply: 'build',
     enforce: 'pre',
     transform(code, id) {
-      if (!id.replace(/\?.*$/, '').endsWith('tokens.css')) return null;
+      if (!id.replace(/\?.*$/, '').endsWith('/styles/tokens.css')) return null;
       return { code: stripUnlockedFontFaces(code, keepFamilies), map: null };
     },
   };
