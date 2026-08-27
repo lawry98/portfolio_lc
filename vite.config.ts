@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { lockFontsPlugin } from './vite.plugins';
+import { lockFontsPlugin } from './vite.plugins.js';
 
 // Root is the worktree root; dev + preview ports are pinned so local QA and
 // screenshots hit reproducible URLs.
