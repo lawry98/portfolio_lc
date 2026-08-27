@@ -29,7 +29,11 @@ export function lockFontsPlugin(keepFamilies: string[]): Plugin {
     enforce: 'pre',
     transform(code, id) {
       if (!id.replace(/\?.*$/, '').endsWith('/styles/tokens.css')) return null;
-      return { code: stripUnlockedFontFaces(code, keepFamilies), map: null };
+      // `build.sourcemap` is on, so a `null` map here would make Rollup warn
+      // "sourcemap is likely to be incorrect" for this file. Return a valid
+      // *empty* map instead — the stripped `@font-face` lines aren't source-
+      // debugged, but this satisfies the sourcemap contract with no warning.
+      return { code: stripUnlockedFontFaces(code, keepFamilies), map: { mappings: '' } };
     },
   };
 }

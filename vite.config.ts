@@ -15,5 +15,8 @@ export default defineConfig({
     // (currently 209.90/280) — accept the raw-size warning rather than
     // code-split a tiny single-page demo (ruling R10-3).
     chunkSizeWarningLimit: 750,
+    // Lighthouse BP `valid-source-maps`. Emitted `.map` files are separate
+    // assets (not counted in the JS gz budget).
+    sourcemap: true,
   },
 });

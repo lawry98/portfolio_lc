@@ -97,6 +97,14 @@ export function revealLines(el: HTMLElement, opts: RevealOptions = {}): () => vo
       mask: 'lines',
       linesClass: 'reveal-line',
       autoSplit: true,
+      // SplitText defaults to `aria: 'auto'`, which stamps an `aria-label`
+      // (the element's own text) onto the split element. That's invalid on
+      // a role-less element — e.g. the manifesto's `.manifesto__line` <span>
+      // (WCAG `aria-prohibited-attr`). `aria: 'none'` stops SplitText from
+      // touching ARIA at all: the visible line text stays the accessible
+      // name, and since the split is line-level (not chars/words), a screen
+      // reader still reads each line normally.
+      aria: 'none',
       onSplit(self) {
         if (revealed) {
           // Re-split from a resize/orientation/font-swap, not the first
