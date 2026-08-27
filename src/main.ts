@@ -369,7 +369,12 @@ function bootstrap(): void {
   bytePet = createBytePet(document.body, {
     headlineEl,
     theme: theme.current(),
-    reducedMotion,
+    // T9 reduced-motion audit: do NOT freeze Byte's motion mode to this boot-time boolean.
+    // Omitting `reducedMotion` makes createBytePet self-detect prefers-reduced-motion LIVE via
+    // its own gsap.matchMedia() (createBytePet.ts:787–794) — matching every page module
+    // (hero/manifesto/reveals) and honoring the blink/peek "survives a live OS flip" design
+    // (R-T4-7). main's own `reducedMotion` (above) still keys the one-time entrance/reveal
+    // branch (`willByteType`, `runEntrance`), which cannot flip live after boot.
     // Byte participates in the entrance whenever WebGL exists (R-T6b-9):
     // `entrance: webgl`, NOT `willByteType`. `enterAndType()` branches full
     // vs reduced INTERNALLY (drop-in + live-type under full motion; instant
