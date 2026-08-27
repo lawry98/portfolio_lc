@@ -36,6 +36,7 @@ import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
 import { createRetype, renderRetype } from './retype';
+import { announcePhrase } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
@@ -1253,6 +1254,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
     home.phraseIndex = (home.phraseIndex + 1) % home.cycle.length;
     const next = home.cycle[home.phraseIndex];
+
+    // SPEC §12: announce the retyped phrase to a throttled polite live region.
+    // Placed here (not the entrance) so hero + footer, full + reduced all announce
+    // through this one seam; the entrance types `entering` (never handleEnterRetyping),
+    // and its phrase #1 is already the static headline the SR read on load.
+    announcePhrase(next.join(' '));
 
     if (reducedActive) {
       retype.enqueue(next);
