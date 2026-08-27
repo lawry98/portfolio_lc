@@ -628,6 +628,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    *  kills the previous lerp before starting a fresh one — the codebase's usual
    *  kill-before-restart idiom, mirroring `scene.ts`'s own `themeTween` for the light lerp. */
   let themeLerpTween: ReturnType<typeof gsap.to> | null = null;
+  /** Reused scratch Colors for the two theme paths, so neither allocates on its hot path.
+   *  `themeLerpColor` is rewritten every frame of the lerp below (`copy` the start, then
+   *  `lerp` toward the end) — safe to reuse because `rig.setBodyColor` COPIES its argument
+   *  into the material (`color.set()`, rig.ts), never stores the reference, so one scratch
+   *  can't corrupt the material. `dimColor` is rewritten per `setDimmed` call (state/theme
+   *  changes, NOT per tick) — a low-value but trivial hoist off the same contract. */
+  const themeLerpColor = new THREE.Color();
+  const dimColor = new THREE.Color();
   /** T8 "theme reaction" — the full-height squash-and-stretch pulse (`playThemeStretch`,
    *  below). Named for the same kill-before-restart reason as `themeLerpTween`. */
   let themeStretchTween: ReturnType<typeof gsap.timeline> | null = null;
@@ -801,7 +809,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
   function setDimmed(on: boolean): void {
     const base = bodyColorForTheme(theme);
-    rig.setBodyColor(on ? new THREE.Color(base).multiplyScalar(DIM_FACTOR) : base);
+    // Reuse the `dimColor` scratch instead of allocating a fresh Color each call.
+    // `rig.setBodyColor` copies it into the material, so reuse is safe (see the scratch
+    // declaration). The `off` branch passes the raw `base` hex straight through unchanged.
+    rig.setBodyColor(on ? dimColor.set(base).multiplyScalar(DIM_FACTOR) : base);
   }
 
   /**
@@ -892,6 +903,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       source.glow.emissiveIntensity = fromGlowIntensity;
     }
 
+    const fromColor = new THREE.Color(fromBody);
+    const toColor = new THREE.Color(toBody);
     const proxy = { p: 0 };
     themeLerpTween = track(
       gsap.to(proxy, {
@@ -899,7 +912,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         duration: THEME_LERP_DURATION_S,
         ease: 'power2.inOut',
         onUpdate: () => {
-          rig.setBodyColor(new THREE.Color(fromBody).lerp(new THREE.Color(toBody), proxy.p));
+          // Reuse ONE scratch Color per frame (no per-tick allocation). `copy` resets it to the
+          // start each frame before lerping toward `toColor` by the eased progress.
+          rig.setBodyColor(themeLerpColor.copy(fromColor).lerp(toColor, proxy.p));
           if (source.glow) {
             source.glow.emissiveIntensity =
               fromGlowIntensity + (toGlowIntensity - fromGlowIntensity) * proxy.p;
