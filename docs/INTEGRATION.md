@@ -155,7 +155,11 @@ import { useEffect, useRef } from 'react';
 
 export function BytePet({ theme }: { theme: 'light' | 'dark' }) {
   const headlineRef = useRef<HTMLHeadingElement>(null);
-  const handleRef = useRef<{ setTheme: (t: 'light' | 'dark') => void; destroy: () => void } | null>(null);
+  const handleRef = useRef<{
+    setTheme: (t: 'light' | 'dark') => void;
+    enterAndType: () => Promise<void>;
+    destroy: () => void;
+  } | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -170,9 +174,10 @@ export function BytePet({ theme }: { theme: 'light' | 'dark' }) {
         headlineEl: headlineRef.current,
         theme,
         phrases: phrases.identity, // phrases[0] === the static headline #1 already rendered
-        entrance: true,            // drop-in + live-type phrase #1 (reduced-motion → instant)
+        entrance: true,            // starts hidden — enterAndType() below reveals it
         // footerEl / footerPhrases / sound are optional — wire them like src/main.ts if wanted.
       });
+      await handleRef.current.enterAndType(); // drop-in + live-type phrase #1 (reduced-motion → instant)
     })();
     return () => {
       disposed = true;
@@ -195,18 +200,15 @@ export function BytePet({ theme }: { theme: 'light' | 'dark' }) {
 }
 ```
 
-**One correction to wire in before you ship this:** passing `entrance: true` only parks the FSM
-in a `hidden` state at construction — under full motion it *also* immediately blanks the headline
-to empty text — and hides Byte and its shadow. Nothing reveals them until you separately call
-`await handle.enterAndType()`. `main.ts`'s own reference wiring does exactly this, from its
-preloader (`src/page/preloader.ts`'s `runEntrance`, which `await`s `bytePet.enterAndType()` once
-the page is ready to reveal). Add that call somewhere in your own boot sequence — e.g. right after
-construction if you have no preloader gate:
-
-```tsx
-handleRef.current = createBytePet(document.body, { /* ...as above... */ });
-await handleRef.current.enterAndType();
-```
+**Why the `enterAndType()` call is there:** passing `entrance: true` only parks the FSM in a
+`hidden` state at construction — under full motion it *also* immediately blanks the headline to
+empty text — and hides Byte and its shadow. `enterAndType()` is what actually drives the reveal:
+the drop-in bounce, then a live-type of phrase #1 (an instant, un-animated reveal under reduced
+motion), resolving once the entrance settles into `idle`. This demo's own reference wiring calls
+it the same way, just from a different trigger — `src/page/preloader.ts`'s `runEntrance` `await`s
+`bytePet.enterAndType()` once the page's preloader is ready to lift, rather than right after
+construction as above. Gate it behind your own loading signal if you have one; calling it
+immediately after construction, as above, is the simplest option if you don't.
 
 If you skip both `entrance` and `enterAndType()`, Byte boots straight into `idle`, immediately
 visible, and the headline's static server-rendered text is left alone — the simpler path if you
