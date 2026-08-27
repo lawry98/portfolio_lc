@@ -226,8 +226,14 @@ small,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
+  /* ≥44px touch target (WCAG 2.5.5 / T9 mobile pass). The min box IS the hit
+     area, not the icon: the theme glyph (`font-size` below) and the EQ bars
+     (their own `inline-size`/`block-size` further down) are untouched — only
+     the round chrome grows 40→44px. `align-items`/`justify-content` above keep
+     that same icon centered in the slightly larger box. Content is well under
+     44px, so each button renders exactly 44×44. */
+  min-inline-size: 44px;
+  min-block-size: 44px;
   border: 1px solid var(--line);
   border-radius: 999px;
   font-size: 1rem;
@@ -627,6 +633,13 @@ small,
 .footer__email {
   font-family: var(--font-display);
   font-size: clamp(1.1rem, 1rem + 0.5vw, 1.5rem);
+  /* ≥44px tap target (WCAG 2.5.5 / T9 mobile pass). This link is a flex item of
+     `.footer__meta` (blockified, so it honors block padding), so symmetric
+     block padding grows the hit box to ~46px tall at 390px (line-box ~27px +
+     2×0.6rem) while the text keeps its baseline — the counter beside it stays
+     baseline-aligned. Vertical only: adds no horizontal extent, so it can't
+     overflow the footer at 390px. */
+  padding-block: 0.6rem;
   border-bottom: 1px solid var(--line);
   transition:
     color 0.2s ease,
