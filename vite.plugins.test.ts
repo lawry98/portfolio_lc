@@ -52,7 +52,10 @@ describe('lockFontsPlugin', () => {
   // always returns the plain-function form (see `vite.plugins.ts`), so this
   // narrows just enough to call it directly in tests, without changing the
   // plugin's own shape.
-  type TransformFn = (code: string, id: string) => { code: string; map: { mappings: string } } | null;
+  type TransformFn = (
+    code: string,
+    id: string,
+  ) => { code: string; map: { mappings: string } } | null;
 
   it('transforms tokens.css: only the locked family survives', () => {
     const plugin = lockFontsPlugin(['Space Grotesk']);
