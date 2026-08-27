@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { announcePhrase, createPhraseThrottle } from './a11y';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  announcePhrase,
+  createPhraseThrottle,
+  ensureAnnouncerRegion,
+  teardownAnnouncer,
+} from './a11y';
 
 /**
  * `createPhraseThrottle` is the pure decision-core (no gsap, no three, no DOM,
@@ -71,5 +76,45 @@ describe('announcePhrase (executor smoke)', () => {
     // visible region text stays put — the leading announcement is not clobbered.
     announcePhrase('SAY GOODBYE');
     expect(region?.textContent).toBe('SAY HELLO');
+  });
+});
+
+/**
+ * Region-lifecycle tests for the pre-create + teardown counterpart added in the
+ * T9 final-review fix wave. `ensureAnnouncerRegion()` pre-creates the EMPTY
+ * polite region at `createBytePet` construction so the AT registers it as "live"
+ * before the first phrase is ever written (some SRs drop an announcement that is
+ * injected AND populated in one tick); `teardownAnnouncer()` is its `destroy()`
+ * counterpart. `beforeEach` resets the module-singleton region/timer — and
+ * clears any trailing flush the executor smoke test above left scheduled — so
+ * each case starts from a known-empty DOM regardless of test order.
+ */
+describe('announcer region lifecycle', () => {
+  beforeEach(() => {
+    teardownAnnouncer();
+  });
+
+  it('ensureAnnouncerRegion() pre-creates the polite region with NO text', () => {
+    ensureAnnouncerRegion();
+    const region = document.body.querySelector('[data-byte-live]');
+    expect(region).not.toBeNull();
+    expect(region?.getAttribute('aria-live')).toBe('polite');
+    expect(region?.getAttribute('aria-atomic')).toBe('true');
+    // The whole point of pre-creating: it registers with the AT while EMPTY,
+    // ahead of the first population by `announcePhrase`.
+    expect(region?.textContent).toBe('');
+  });
+
+  it('ensureAnnouncerRegion() is idempotent — repeat calls yield ONE region', () => {
+    ensureAnnouncerRegion();
+    ensureAnnouncerRegion();
+    expect(document.body.querySelectorAll('[data-byte-live]')).toHaveLength(1);
+  });
+
+  it('teardownAnnouncer() removes the region from the DOM', () => {
+    ensureAnnouncerRegion();
+    expect(document.body.querySelector('[data-byte-live]')).not.toBeNull();
+    teardownAnnouncer();
+    expect(document.body.querySelector('[data-byte-live]')).toBeNull();
   });
 });

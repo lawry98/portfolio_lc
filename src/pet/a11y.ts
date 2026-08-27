@@ -17,9 +17,14 @@
  *   deterministic under test.
  * - `announcePhrase(text)` — the executor half: a module-singleton that reads
  *   `performance.now()`, lazily builds one visually-hidden live region on
- *   `document.body`, and schedules the trailing flush via `setTimeout`. Being
- *   the DOM/clock half, it is exempt from the core's purity rules — it is the
- *   only thing here that touches either.
+ *   `document.body`, and schedules the trailing flush via `setTimeout`. Its
+ *   region lifecycle is bracketed by `ensureAnnouncerRegion()` (pre-create the
+ *   EMPTY region at construction, so the AT registers it as "live" before the
+ *   first phrase is written — some SRs drop an announcement injected AND
+ *   populated in one tick) and `teardownAnnouncer()` (clear the trailing timer
+ *   and remove the region on `destroy()`). Being the DOM/clock half, these are
+ *   exempt from the core's purity rules — they are the only things here that
+ *   touch either.
  */
 
 /**
@@ -123,6 +128,21 @@ function ensureRegion(): HTMLElement {
 }
 
 /**
+ * Pre-create the EMPTY polite live region once, idempotently, so the assistive
+ * technology registers it as "live" BEFORE the first phrase is ever written
+ * into it. Some screen readers (NVDA/JAWS/VoiceOver) drop an announcement when
+ * a live region is injected AND populated in the SAME synchronous tick — and
+ * the first retype (this announcer's whole reason to exist) is exactly that
+ * at-risk case. `createBytePet` calls this at construction (there is always
+ * ≫1s before the first feed), leaving `announcePhrase` to populate the region
+ * lazily later. A thin wrapper over the private `ensureRegion()` that discards
+ * its return, so the executor's lazy cached-region reuse is left unchanged.
+ */
+export function ensureAnnouncerRegion(): void {
+  ensureRegion();
+}
+
+/**
  * Announce `text` to the polite live region, throttled. A leading push writes
  * immediately; a push within the interval is deferred and a single trailing
  * flush is scheduled a full `ANNOUNCE_INTERVAL_MS` later. Scheduling the flush
@@ -144,4 +164,24 @@ export function announcePhrase(text: string): void {
       if (due !== null) ensureRegion().textContent = due;
     }, ANNOUNCE_INTERVAL_MS);
   }
+}
+
+/**
+ * Teardown counterpart to `ensureAnnouncerRegion`/`announcePhrase`, called from
+ * `createBytePet`'s `destroy()`. Clears any pending trailing-flush timer and
+ * removes the cached live region from the DOM, nulling the ref so a later
+ * `ensureAnnouncerRegion()`/`announcePhrase()` transparently rebuilds a fresh
+ * one. The pure throttle's in-memory decision state (`lastEmitMs`/`pendingText`)
+ * is intentionally left as-is: it is a module singleton, inert once the timer
+ * is cleared and the region is gone, and `destroy()` only ever runs on real
+ * page unload in this single-page app.
+ */
+export function teardownAnnouncer(): void {
+  // Clear the trailing flush so it can never fire into a removed/rebuilt region.
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  region?.remove();
+  region = null;
 }

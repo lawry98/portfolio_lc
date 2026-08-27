@@ -36,7 +36,7 @@ import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
 import { createRetype, renderRetype } from './retype';
-import { announcePhrase } from './a11y';
+import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
@@ -393,6 +393,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     willChange: 'transform, opacity',
   } satisfies Partial<CSSStyleDeclaration>);
   mount.appendChild(hintEl);
+
+  // Pre-create the EMPTY polite live-region announcer NOW, at construction, so
+  // the assistive technology has registered it as "live" long before the first
+  // feed writes into it — some screen readers drop an announcement injected AND
+  // populated in one tick, and the first retype is exactly that at-risk case.
+  // Population stays lazy in `announcePhrase` (fired from `handleEnterRetyping`);
+  // `destroy()` tears this back down via `teardownAnnouncer()`.
+  ensureAnnouncerRegion();
 
   function isHintPermanentlyDismissed(): boolean {
     try {
@@ -2210,6 +2218,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       home.el.querySelector('[data-byte-caret]')?.remove();
       home.caret.remove();
     }
+    // Teardown counterpart to the construction-time `ensureAnnouncerRegion()`:
+    // clears any pending trailing-flush timer and removes the `[data-byte-live]`
+    // region from `document.body` (symmetry with `hintEl.remove()` / the caret
+    // removal above). Inert in this single-page app — `destroy()` runs only on
+    // real unload — but keeps the announcer's region lifecycle self-contained.
+    teardownAnnouncer();
 
     feeder.dispose();
     rig.dispose();
