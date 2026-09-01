@@ -248,6 +248,8 @@ const SOUND_GATE_OFFSET_X = 16;
 const SOUND_GATE_OFFSET_Y = 18;
 /** Follow smoothing — a hair softer than the cursor dot, nearer the hero's parallax feel. */
 const SOUND_GATE_FOLLOW_VARS = { duration: 0.3, ease: 'power3' };
+/** Marker class carrying the muted slash on the nav EQ button (see `global.css`). */
+const MUTED_CLASS = 'is-muted';
 
 /**
  * `window.matchMedia` guard, treated as "does not match" when the API is absent
@@ -258,62 +260,25 @@ function matchesMedia(query: string): boolean {
 }
 
 /**
- * Nav sound controls (T7, SPEC §8.3): the EQ mute/unmute toggle, the
- * `(click to enable sound)` gate hint, and the one-time first-gesture unlock.
+ * Builds the `(click to enable sound)` hint and returns its teardown.
  *
- * State it reconciles: the engine owns `enabled()` (the persisted mute
- * preference, default on) but NOT whether audio has been unlocked — WebAudio is
- * silent until a user gesture resumes it (see `pet/sound/webAudioSynth.ts`), and
- * the `SoundEngine` interface exposes no `unlocked()`, so this function tracks
- * `unlocked` itself (starts false, flips on the first `pointerdown`). Sound is
- * AUDIBLE only when both are true — which is exactly when the equalizer animates
- * (`.is-on`); `aria-pressed` tracks the mute preference the button toggles.
+ * Split out of `initSoundControls` because the hint is CONDITIONAL (D-19) — it
+ * exists only while sound is enabled — and ~30 lines of follow/reveal wiring
+ * should not sit inline behind an `if` in the middle of the controls.
  *
- * Every DOM lookup is guarded: with the nav EQ button absent (a stripped page, a
- * test fixture without it) the whole function is a silent no-op.
- *
- * Takes only `engine` — an earlier draft also accepted an optional
- * custom-cursor handle for a later task's zone→label wiring, but that
- * wiring landed directly in `main.ts` instead (R7-4), leaving the param
- * unused here; T8 dropped it (its own `cursor` handle still drives the
- * `pointermove` zone resolver in `main.ts`, just never passed into this
- * function).
+ * On a fine pointer the hint trails the cursor via `gsap.quickTo`, or snaps
+ * instantly under reduced motion (mirroring `lib/cursor.ts`); on touch/coarse
+ * there is nothing to follow, so it rests statically in the corner. The
+ * returned teardown drops the `pointermove` listener, kills the tweens, and
+ * removes the node.
  */
-export function initSoundControls({ engine }: { engine: SoundEngine }): void {
-  const button = document.querySelector<HTMLButtonElement>('[data-eq-toggle]');
-  if (!button) {
-    return;
-  }
-
-  // The engine owns `enabled()`; `unlocked` is this module's own gate flag —
-  // nothing is audible until the first gesture resumes the AudioContext.
-  let unlocked = false;
-
-  // Audible — and the equalizer animates — only when the user hasn't muted AND
-  // the first-gesture gate has opened.
-  const isAudible = (): boolean => engine.enabled() && unlocked;
-
-  const syncButton = (): void => {
-    // `aria-pressed` reflects the mute preference the button toggles; the
-    // `is-on` class (the animated/accent look) reflects actual audibility.
-    button.setAttribute('aria-pressed', String(engine.enabled()));
-    button.classList.toggle('is-on', isAudible());
-  };
-
-  syncButton();
-
-  button.addEventListener('click', () => {
-    engine.setEnabled(!engine.enabled());
-    syncButton();
-  });
-
-  // ---- Gate hint: `(click to enable sound)` until the first gesture. ----
+function buildGateLabel(): () => void {
   const label = document.createElement('div');
   label.className = 'sound-gate-label';
   label.textContent = SOUND_GATE_TEXT;
   label.setAttribute('aria-hidden', 'true');
 
-  // Set only on the fine-pointer path; the unlock cleanup calls it to drop the
+  // Set only on the fine-pointer path; the teardown calls it to drop the
   // `pointermove` follow listener + kill the hint's tweens.
   let removeFollow: (() => void) | null = null;
 
@@ -355,10 +320,84 @@ export function initSoundControls({ engine }: { engine: SoundEngine }): void {
     document.body.appendChild(label);
   }
 
-  const removeGateLabel = (): void => {
+  return (): void => {
     removeFollow?.();
     label.remove();
   };
+}
+
+/**
+ * Nav sound controls (T7, SPEC §8.3): the EQ mute/unmute toggle, the
+ * `(click to enable sound)` gate hint, and the one-time first-gesture unlock.
+ *
+ * State it reconciles: the engine owns `enabled()` (the persisted mute
+ * preference, default on) but NOT whether audio has been unlocked — WebAudio is
+ * silent until a user gesture resumes it (see `pet/sound/webAudioSynth.ts`), and
+ * the `SoundEngine` interface exposes no `unlocked()`, so this function tracks
+ * `unlocked` itself (starts false, flips on the first `pointerdown`). Sound is
+ * AUDIBLE only when both are true — which is exactly when the equalizer animates
+ * (`.is-on`); `aria-pressed` tracks the mute preference the button toggles.
+ *
+ * Those two pieces of state have DIFFERENT lifetimes, and conflating them was
+ * the D-19 bug: `enabled` is persisted to `localStorage`, `unlocked` resets on
+ * every load. A user who muted and then reloaded was shown
+ * `(click to enable sound)` again — and the click opened the AudioContext on an
+ * engine that stayed muted, so the hint promised what the click could not
+ * deliver. Hence the hint is gated on `enabled()` and a muted load gets none at
+ * all. The EQ button is that user's control instead, carrying `MUTED_CLASS` —
+ * which likewise tracks the PREFERENCE, not audibility, so a first-time
+ * enabled-but-locked visitor is silent yet never slashed.
+ *
+ * The unlock listener still runs while muted, so a later unmute is audible
+ * immediately rather than needing a second gesture.
+ *
+ * Every DOM lookup is guarded: with the nav EQ button absent (a stripped page, a
+ * test fixture without it) the whole function is a silent no-op.
+ *
+ * Takes only `engine` — an earlier draft also accepted an optional
+ * custom-cursor handle for a later task's zone→label wiring, but that
+ * wiring landed directly in `main.ts` instead (R7-4), leaving the param
+ * unused here; T8 dropped it (its own `cursor` handle still drives the
+ * `pointermove` zone resolver in `main.ts`, just never passed into this
+ * function).
+ */
+export function initSoundControls({ engine }: { engine: SoundEngine }): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-eq-toggle]');
+  if (!button) {
+    return;
+  }
+
+  // The engine owns `enabled()`; `unlocked` is this module's own gate flag —
+  // nothing is audible until the first gesture resumes the AudioContext.
+  let unlocked = false;
+
+  // Audible — and the equalizer animates — only when the user hasn't muted AND
+  // the first-gesture gate has opened.
+  const isAudible = (): boolean => engine.enabled() && unlocked;
+
+  const syncButton = (): void => {
+    // Three signals, two different pieces of state: `aria-pressed` and the
+    // muted slash both reflect the PREFERENCE the button toggles, while the
+    // `is-on` class (the animated/accent look) reflects actual audibility.
+    // Keying the slash to audibility instead would slash a first-time
+    // visitor's button before their first gesture — telling them they had
+    // muted something they never touched.
+    button.setAttribute('aria-pressed', String(engine.enabled()));
+    button.classList.toggle('is-on', isAudible());
+    button.classList.toggle(MUTED_CLASS, !engine.enabled());
+  };
+
+  syncButton();
+
+  button.addEventListener('click', () => {
+    engine.setEnabled(!engine.enabled());
+    syncButton();
+  });
+
+  // ---- Gate hint: `(click to enable sound)`, only while sound is enabled. ----
+  // `null` when the user arrived muted — no promise made, so nothing to tear
+  // down either (see the D-19 note in this function's doc comment).
+  const removeGateLabel = engine.enabled() ? buildGateLabel() : null;
 
   // ---- First-gesture unlock (SPEC §8.3): one-shot, capture-phase, on window. ----
   // Listen for BOTH `pointerdown` and `keydown`: a keyboard-only user never
@@ -377,7 +416,7 @@ export function initSoundControls({ engine }: { engine: SoundEngine }): void {
     window.removeEventListener('keydown', handleFirstGesture, { capture: true });
     unlocked = true;
     engine.unlock();
-    removeGateLabel();
+    removeGateLabel?.();
     syncButton();
   };
   window.addEventListener('pointerdown', handleFirstGesture, { capture: true, once: true });

@@ -954,6 +954,8 @@ small,
    only adds the inter-bar gap that base doesn't set. */
 .nav__eq-toggle {
   gap: 0.18rem;
+  /* Positioning context for the muted slash (`.is-muted::after`, below). */
+  position: relative;
 }
 
 /* One equalizer bar. Default (muted / not yet audible) = short, low-contrast,
@@ -989,6 +991,25 @@ small,
 
 .nav__eq-toggle.is-on span:nth-child(3) {
   transform: scaleY(0.72);
+}
+
+/* Muted marker (D-19): a diagonal rule across the bars whenever the PERSISTED
+   preference is off. Gated on `engine.enabled()` and NOT on audibility, so a
+   first-time visitor -- enabled but not yet unlocked, and therefore silent --
+   is never slashed for a choice they did not make (`page/hero.ts`'s
+   `syncButton`). Decorative only: the button's `aria-pressed` already announces
+   the state, so this is a `::after` rather than a real element, and it is
+   absolutely positioned so it never becomes a fourth flex child beside the
+   three bars. Static, so reduced motion needs no branch here. */
+.nav__eq-toggle.is-muted::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  top: 50%;
+  block-size: 1px;
+  background: var(--muted);
+  transform: translateY(-50%) rotate(-45deg);
 }
 
 /* Full-motion only: the bars bounce. Wrapping the animation in `no-preference`

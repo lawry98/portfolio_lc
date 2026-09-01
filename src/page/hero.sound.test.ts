@@ -24,6 +24,8 @@ vi.hoisted(() => {
 
 const FINE_POINTER_QUERY = '(hover: hover) and (pointer: fine)';
 const GATE_LABEL_SELECTOR = '.sound-gate-label';
+/** Marker class carrying the muted slash on the nav EQ button. */
+const MUTED_CLASS = 'is-muted';
 
 const EQ_BUTTON_MARKUP = `
   <button
@@ -190,5 +192,66 @@ describe('initSoundControls', () => {
 
     expect(engine.unlock).toHaveBeenCalledTimes(1);
     expect(document.querySelector(GATE_LABEL_SELECTOR)).toBeNull();
+  });
+
+  it('creates no gate hint when the stored preference is muted', () => {
+    // The reported bug: `enabled()` is persisted but `unlocked` is not, so a
+    // muted user who reloaded got `(click to enable sound)` back — and the click
+    // opened the gate on an engine that stayed muted. A hint that cannot keep
+    // its promise must not be made: no label at all while the preference is off.
+    mockMatchMedia((query) => query === FINE_POINTER_QUERY);
+    const engine = createMockEngine(false);
+
+    initSoundControls({ engine });
+
+    expect(document.querySelector(GATE_LABEL_SELECTOR)).toBeNull();
+  });
+
+  it('still unlocks on the first gesture while muted, with no hint to remove', () => {
+    // Suppressing the hint must not disturb the gate itself — the AudioContext
+    // still opens on the first gesture, so a later unmute is audible at once.
+    const engine = createMockEngine(false);
+    initSoundControls({ engine });
+    const button = eqButton();
+
+    expect(() => window.dispatchEvent(new Event('pointerdown'))).not.toThrow();
+
+    expect(engine.unlock).toHaveBeenCalledTimes(1);
+    // Unlocked but still muted → not audible: dark equalizer, slash still shown.
+    expect(button.classList.contains('is-on')).toBe(false);
+    expect(button.classList.contains(MUTED_CLASS)).toBe(true);
+  });
+
+  it('marks the EQ muted from the persisted preference, not from audibility', () => {
+    // A first-time visitor is enabled-but-locked — silent, but they never muted
+    // anything, so the slash must stay off until the preference itself says so.
+    const engine = createMockEngine(true);
+    initSoundControls({ engine });
+    const button = eqButton();
+
+    expect(button.classList.contains(MUTED_CLASS)).toBe(false);
+
+    button.click();
+    expect(button.classList.contains(MUTED_CLASS)).toBe(true);
+
+    button.click();
+    expect(button.classList.contains(MUTED_CLASS)).toBe(false);
+  });
+
+  it('clears the muted marker and lights the EQ when a muted reload is unmuted', () => {
+    const engine = createMockEngine(false);
+    initSoundControls({ engine });
+    const button = eqButton();
+
+    expect(button.classList.contains(MUTED_CLASS)).toBe(true);
+
+    // jsdom's `.click()` fires only `click`, so send the `pointerdown` a real
+    // browser would have delivered first — that capture-phase gesture is what
+    // opens the gate before the button's own handler unmutes.
+    window.dispatchEvent(new Event('pointerdown'));
+    button.click();
+
+    expect(button.classList.contains(MUTED_CLASS)).toBe(false);
+    expect(button.classList.contains('is-on')).toBe(true);
   });
 });
