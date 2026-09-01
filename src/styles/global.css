@@ -931,6 +931,25 @@ small,
   display: none;
 }
 
+/* T11 (SPEC §8.3/§8.7): while the sound gate is shut, `page/hero.ts` carries
+   `.byte-sound-locked` on `<html>`, and every zone pill stays hidden — so a
+   first-time visitor's cursor carries exactly ONE message (the
+   `(click to enable sound)` hint) instead of that hint stacked ~18px from a
+   `FEED`/`TOGGLE`/`OPEN` pill describing the same single click. This gate
+   lives here, in CSS, precisely so `lib/cursor.ts` and `main.ts`'s zone→label
+   resolver both stay unaware of it (R7-4 preserved).
+
+   ALL pills, not just `FEED`: CSS cannot know which label the pill currently
+   holds, and suppressing `FEED` alone would only relocate the collision to
+   the `OPEN` and `TOGGLE` zones. Specificity (0,2,0) beats the
+   `display: inline-flex` on `.byte-cursor__pill` (0,1,0) above; it merely TIES
+   `.byte-cursor__pill[hidden]` (also (0,2,0)), which is harmless — both
+   declare `display: none` — and sitting after it makes source order moot
+   either way. Inert on touch/coarse, where no pill DOM is ever built. */
+.byte-sound-locked .byte-cursor__pill {
+  display: none;
+}
+
 /* ==========================================================================
    Nav EQ toggle + sound gate hint — T7 (SPEC §8.3). The nav's mute/unmute
    control is a 3-bar equalizer button whose bars bounce ONLY while sound is

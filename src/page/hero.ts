@@ -243,6 +243,15 @@ const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
 /** Pre-unlock hint copy (SPEC §8.3's first-gesture sound gate). */
 const SOUND_GATE_TEXT = '(click to enable sound)';
+/**
+ * Root-state class carried on `<html>` while the audio gate is shut (T11, SPEC
+ * §8.3/§8.7). A boolean state class on the document element, exactly like
+ * `lib/cursor.ts`'s `.byte-cursor-active` — `global.css` hangs the cursor-pill
+ * suppression rule off it, which is the whole point: the cursor mechanism and
+ * `main.ts`'s zone→label resolver both stay zone-blind (R7-4), and the gate is
+ * serialized ahead of the pills purely in CSS.
+ */
+const SOUND_LOCKED_CLASS = 'byte-sound-locked';
 /** Offset (px) so the hint trails below-right of the pointer, never under it. */
 const SOUND_GATE_OFFSET_X = 16;
 const SOUND_GATE_OFFSET_Y = 18;
@@ -308,6 +317,21 @@ export function initSoundControls({ engine }: { engine: SoundEngine }): void {
   });
 
   // ---- Gate hint: `(click to enable sound)` until the first gesture. ----
+
+  // Flag the document as sound-locked so `global.css` can suppress EVERY
+  // cursor pill until the gate opens (T11). Without this, a first visit shows
+  // two cursor messages ~18px apart — the zone pill and the hint below — both
+  // describing the same single click, since the unlock is a capture-phase
+  // `pointerdown` on `window` and a first click in the hero also feeds Byte.
+  // ALL pills, not just `FEED`: suppressing `FEED` alone merely relocates the
+  // collision to the `OPEN` and `TOGGLE` zones, and CSS cannot know which
+  // label the pill currently holds. Deliberately AFTER the `!button` guard
+  // above — a page with no EQ button never builds the hint and never attaches
+  // an unlock listener, so setting this there would suppress the pills
+  // permanently. Inert on touch/coarse, where `initCursor()` builds no pill
+  // DOM at all.
+  document.documentElement.classList.add(SOUND_LOCKED_CLASS);
+
   const label = document.createElement('div');
   label.className = 'sound-gate-label';
   label.textContent = SOUND_GATE_TEXT;
@@ -358,6 +382,10 @@ export function initSoundControls({ engine }: { engine: SoundEngine }): void {
   const removeGateLabel = (): void => {
     removeFollow?.();
     label.remove();
+    // The pills' turn: the page now carries no cursor message, so drop the
+    // suppression flag in the same breath as the hint it was serializing
+    // ahead of (T11).
+    document.documentElement.classList.remove(SOUND_LOCKED_CLASS);
   };
 
   // ---- First-gesture unlock (SPEC §8.3): one-shot, capture-phase, on window. ----

@@ -132,11 +132,11 @@ A query-param-gated control panel to preview & lock variants live in the real pa
 ## 8. Page structure
 1. **Preloader** — blinking caret + % (`document.fonts.ready` + min duration), then choreographed entrance: overlay lifts, **Byte drops in with a bounce and types the initial headline live** (reuses the retype engine), hint + nav + micro-labels stagger in. Zero CLS.
 2. **Hero** — nav (name / role / links + sound EQ toggle + theme toggle), giant 2-line headline (Byte's home), drifting micro-labels (`PORTFOLIO — 2026`), hint, scroll indicator.
-3. **Sound gate** — muted until first click; `(click to enable sound)` label follows cursor until then; EQ icon animates when on.
+3. **Sound gate** — muted until first click; `(click to enable sound)` label follows cursor until then; the cursor's zone pills stay suppressed until that gate opens, so a first-time visitor sees exactly one cursor message. EQ icon animates when on.
 4. **Manifesto** — 3 big masked line reveals on scroll (SplitText) + short paragraph + parallax micro-labels at different speeds (Lenis + ScrollTrigger).
 5. **Selected work** — 3 fake rows (nr / name / tag / year / arrow) with tasteful hover (shift + arrow slide + line highlight).
 6. **Footer CTA** — big 2-line phrase (Byte's second home) + email + live **`FED N GLYPHS`** counter + © line.
-7. **Global garnish** — CSS film grain (runtime noise tile, opacity ≤ 0.06/0.08, stepped), custom cursor dot → labeled pills (`FEED` / `TOGGLE` / `OPEN`), Lenis smooth scroll, styled `::selection`, blinking favicon, hero mouse-parallax (few px, inverse on labels).
+7. **Global garnish** — CSS film grain (runtime noise tile, opacity ≤ 0.06/0.08, stepped), custom cursor dot → labeled pills (`FEED` / `TOGGLE` / `OPEN`, post-unlock only — see §8.3), Lenis smooth scroll, styled `::selection`, blinking favicon, hero mouse-parallax (few px, inverse on labels).
 
 ---
 

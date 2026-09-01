@@ -24,6 +24,13 @@ vi.hoisted(() => {
 
 const FINE_POINTER_QUERY = '(hover: hover) and (pointer: fine)';
 const GATE_LABEL_SELECTOR = '.sound-gate-label';
+/**
+ * The T11 root-state flag `initSoundControls` carries on `<html>` while the
+ * audio gate is shut — re-declared here (not imported) exactly like
+ * `FINE_POINTER_QUERY` above, so the test pins the literal contract
+ * `global.css`'s pill-suppression rule is written against.
+ */
+const SOUND_LOCKED_CLASS = 'byte-sound-locked';
 
 const EQ_BUTTON_MARKUP = `
   <button
@@ -78,6 +85,10 @@ function createMockEngine(initialEnabled = true): SoundEngine {
   };
 }
 
+function rootIsSoundLocked(): boolean {
+  return document.documentElement.classList.contains(SOUND_LOCKED_CLASS);
+}
+
 function eqButton(): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>('[data-eq-toggle]');
   if (!button) {
@@ -102,6 +113,10 @@ afterEach(() => {
   window.dispatchEvent(new Event('pointerdown'));
   document.body.innerHTML = '';
   document.querySelectorAll(GATE_LABEL_SELECTOR).forEach((node) => node.remove());
+  // Same defensive sweep for the root flag: `<html>` outlives `document.body`
+  // between tests, so a test that asserted mid-lifecycle can't be allowed to
+  // leak a stuck `.byte-sound-locked` into the next one.
+  document.documentElement.classList.remove(SOUND_LOCKED_CLASS);
 });
 
 describe('initSoundControls', () => {
@@ -190,5 +205,63 @@ describe('initSoundControls', () => {
 
     expect(engine.unlock).toHaveBeenCalledTimes(1);
     expect(document.querySelector(GATE_LABEL_SELECTOR)).toBeNull();
+  });
+});
+
+/* --------------------------------------------------------------------------
+   T11 — first-visit cursor messaging (SPEC §8.3/§8.7, D-19).
+
+   On a first visit the cursor used to carry TWO messages ~18px apart — the
+   `FEED`/`TOGGLE`/`OPEN` zone pill and this module's `(click to enable sound)`
+   gate hint — both describing the same single click, since the unlock is a
+   capture-phase `pointerdown` on `window`. The fix serializes them: while the
+   gate is shut, `initSoundControls` carries a `.byte-sound-locked` root-state
+   class on `<html>` (mirroring `lib/cursor.ts`'s `.byte-cursor-active`), and
+   `global.css` uses it to hide EVERY `.byte-cursor__pill`. The cursor itself
+   stays zone-blind (R7-4), so the whole contract on this side is the flag's
+   lifecycle — which is what these four tests pin.
+   -------------------------------------------------------------------------- */
+describe('initSoundControls — .byte-sound-locked root flag (T11)', () => {
+  it('marks <html> sound-locked on init, so the zone pills stay suppressed pre-unlock', () => {
+    const engine = createMockEngine(true);
+
+    initSoundControls({ engine });
+
+    expect(rootIsSoundLocked()).toBe(true);
+  });
+
+  it('clears the sound-locked flag on the first pointerdown, so the pills resume', () => {
+    const engine = createMockEngine(true);
+    initSoundControls({ engine });
+    expect(rootIsSoundLocked()).toBe(true);
+
+    window.dispatchEvent(new Event('pointerdown'));
+
+    expect(rootIsSoundLocked()).toBe(false);
+  });
+
+  it('clears the sound-locked flag on the first keydown, so keyboard-only visitors get pills too', () => {
+    // Parity with the unlock itself (SPEC §12): a keyboard-only user never
+    // fires `pointerdown`, and must not be left with every cursor pill
+    // suppressed for the rest of the session.
+    const engine = createMockEngine(true);
+    initSoundControls({ engine });
+    expect(rootIsSoundLocked()).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+
+    expect(rootIsSoundLocked()).toBe(false);
+  });
+
+  it('never sets the sound-locked flag when the nav EQ button is absent', () => {
+    // The early-return no-op path: with no EQ button there is no gate hint and
+    // no unlock listener to ever clear the flag, so setting it here would
+    // suppress every cursor pill permanently on a stripped page.
+    document.body.innerHTML = '';
+    const engine = createMockEngine();
+
+    initSoundControls({ engine });
+
+    expect(rootIsSoundLocked()).toBe(false);
   });
 });
