@@ -32,6 +32,7 @@ import { createPlaceholderBot, POSE_GROUP_NAME } from './placeholderBot';
 import { createFSM } from './fsm';
 import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
+import { feedZoneFor } from './feedZone';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
@@ -361,12 +362,18 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const pose = source.scene.getObjectByName(POSE_GROUP_NAME);
 
   // --- Feed zone (brief 4c "the feed zone (hero area)") --------------------
-  // `PetOptions` only hands us the headline, so the feed zone is derived via
-  // generic DOM traversal (never a hardcoded page class name) — keeps `pet/`
-  // portable. Falls back gracefully if the headline has no `<section>`
-  // ancestor at all.
-  const feedZone: HTMLElement =
-    opts.headlineEl.closest('section') ?? opts.headlineEl.parentElement ?? opts.headlineEl;
+  // `PetOptions` only hands us the home headlines, so each home's zone is
+  // derived via generic DOM traversal (`feedZoneFor` — HTML region TAGS, never
+  // a hardcoded page class name), keeping `pet/` portable and falling back
+  // gracefully when a headline has no region ancestor at all.
+  //
+  // The zone FOLLOWS the active home rather than being captured once here:
+  // `bindFeedZone` (below) re-points the single `pointerdown` listener on every
+  // `setHomeAnchor` switch. Pinning it to the hero for the page's whole life
+  // left a migrated Byte unfeedable by pointer — a page's footer is a SIBLING
+  // of its hero, so a footer pointerdown never bubbles through a hero-pinned
+  // listener, and the keyboard "Feed Byte" button lives in the hero too.
+  let feedZone: HTMLElement | null = null;
 
   // --- Hint DOM element (brief 4d "invited" hint) ---------------------------
   // Inline-styled (not a page CSS class) so `pet/` stays portable, matching
@@ -1536,8 +1543,33 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     feed(e.clientX, e.clientY);
   }
 
+  /**
+   * Point the ONE `pointerdown` feed listener at the region owning home `el`,
+   * releasing whichever region held it before — so exactly one zone is live at
+   * a time, always the active home's (R8-1's "one caret at Byte's home" rule,
+   * applied to the clickable area). Idempotent: re-binding the same zone is a
+   * no-op, so a host page whose two homes share one region (or a redundant
+   * `setHomeAnchor` call) never churns listeners.
+   */
+  function bindFeedZone(el: HTMLElement): void {
+    const next = feedZoneFor(el);
+    if (next === feedZone) {
+      return;
+    }
+    unbindFeedZone();
+    feedZone = next;
+    feedZone.addEventListener('pointerdown', onPointerDown, { passive: true });
+  }
+
+  /** Release the currently-bound feed zone, if any (switch + teardown share
+   *  this, so `destroy()` can never leak a listener on a stale zone). */
+  function unbindFeedZone(): void {
+    feedZone?.removeEventListener('pointerdown', onPointerDown);
+    feedZone = null;
+  }
+
   window.addEventListener('pointermove', onPointerMove, { passive: true });
-  feedZone.addEventListener('pointerdown', onPointerDown, { passive: true });
+  bindFeedZone(activeHome.el);
 
   // --- T8 migration (SPEC §6 "traveling & footer migration") ---------------
   // Only meaningful when a footer home exists — `onTick` (below) never
@@ -2030,6 +2062,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     setCaretVisible(activeHome, false);
     activeHome = next;
     setCaretVisible(activeHome, true);
+    // Move the clickable feed area with Byte — otherwise a visitor reading the
+    // home Byte just migrated to can see it, and the FED counter, but cannot
+    // click/tap to feed it (the zone would still be the home it LEFT).
+    bindFeedZone(activeHome.el);
     retype.reset(currentTextOf(next));
   }
 
@@ -2178,7 +2214,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
 
     ticker.stop();
     window.removeEventListener('pointermove', onPointerMove);
-    feedZone.removeEventListener('pointerdown', onPointerDown);
+    unbindFeedZone();
 
     // Every named ref (blink/micro/glance/peek) is already inside
     // `liveTweens` (each was created via `track()`), so this bulk kill+clear
