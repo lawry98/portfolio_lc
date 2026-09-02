@@ -14,7 +14,7 @@
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
-import type { SceneHandle, SceneOptions } from './types';
+import type { SceneHandle, SceneOptions, StageRect } from './types';
 
 /** Vertical field of view (degrees) for the shared perspective camera. */
 export const FOV_DEG = 30;
@@ -491,12 +491,82 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Render loop --------------------------------------------------------
   const tickCallbacks: Array<(dt: number) => void> = [];
 
+  // T11 stage clip (R11-4). Tri-state: `undefined` until the first
+  // `setStage()` call — renders unclipped, byte-identical to pre-T11
+  // behaviour; `null` once set means no stage is on screen anywhere
+  // (render-skip, R11-3); a `StageRect` is the active hero/footer stage
+  // both renderers scissor-clip to. `createBytePet`'s `onTick` callback is
+  // what calls `setStage()` each frame, and `render(dt)` below runs tick
+  // callbacks before `renderBack()`/`renderFront()`, so `stage` is always
+  // current for the frame by the time those two read it.
+  let stage: StageRect | null | undefined = undefined;
+
+  /**
+   * T11 scissor clip + render-skip (R11-1/R11-2/R11-3), shared by
+   * `renderFront()`/`renderBack()` so both canvases always agree on
+   * whether — and where — to draw. Returns whether the caller should still
+   * call `renderer.render(scene, camera)` this frame.
+   *
+   * Every branch clears `renderer` first, with the scissor test forced
+   * OFF: `clear()` is itself subject to the scissor test (WebGL spec), and
+   * the scissor-test flag is NOT reset per render — three.js restores
+   * whatever `setScissorTest()` last set on every `render()` call — so
+   * leaving a prior frame's scissor box enabled here would clear only
+   * inside that box and strand last frame's pixels outside it: a stale
+   * hero-region Byte ghosting on screen once the active stage moves to the
+   * footer.
+   *
+   * `stage === null` clears and returns `false` (R11-3) rather than
+   * skipping the clear too — an un-cleared skip would leave the compositor
+   * showing the last presented frame, freezing Byte mid-page, which is the
+   * exact bug T11 exists to fix.
+   */
+  function prepareRenderer(renderer: THREE.WebGLRenderer): boolean {
+    renderer.setScissorTest(false);
+    renderer.clear();
+
+    if (stage === null) {
+      return false;
+    }
+    if (stage === undefined) {
+      return true;
+    }
+
+    const h = window.innerHeight; // CSS px, matches applyViewport's setSize
+    const sx = stage.x;
+    const sy = h - (stage.y + stage.height); // DOM top-left origin → GL bottom-left
+    const sw = stage.width;
+    const sh = stage.height;
+    // `setScissor` takes CSS px, NOT device px — three multiplies by the
+    // renderer's own pixel ratio internally (three@0.185.1,
+    // `node_modules/three/build/three.cjs:76805`: `setScissor` stores the
+    // rect then calls `.multiplyScalar(_pixelRatio)` before handing it to
+    // GL). Pre-multiplying by devicePixelRatio here would double-apply the
+    // ratio and clip to a quarter-size box on any retina display — do not
+    // "fix" this back.
+    renderer.setScissor(sx, sy, sw, sh);
+    renderer.setScissorTest(true);
+    return true;
+  }
+
+  /** T11 stage clip setter (Task 2) — see `SceneHandle.setStage`'s doc comment in `types.ts`
+   *  for the tri-state contract; this just records it for `prepareRenderer()` to read. */
+  function setStage(rect: StageRect | null): void {
+    stage = rect;
+  }
+
   function renderFront(): void {
+    if (!prepareRenderer(frontRenderer)) {
+      return;
+    }
     camera.layers.set(FRONT_RENDER_LAYER);
     frontRenderer.render(scene, camera);
   }
 
   function renderBack(): void {
+    if (!prepareRenderer(backRenderer)) {
+      return;
+    }
     camera.layers.set(BACK_RENDER_LAYER);
     backRenderer.render(scene, camera);
   }
@@ -511,6 +581,14 @@ export function createScene(opts: SceneOptions): SceneHandle {
 
   function onTick(cb: (dt: number) => void): void {
     tickCallbacks.push(cb);
+  }
+
+  /** T11 hero/footer hand-off fade (Task 2, R11-5): sets CSS `opacity` directly on both
+   *  canvas elements. No tween lives here — `createBytePet`'s migration driver owns the
+   *  GSAP tween across a hero/footer trip and calls this setter on every tick of it. */
+  function setOpacity(a: number): void {
+    backCanvas.style.opacity = String(a);
+    frontCanvas.style.opacity = String(a);
   }
 
   // --- Pixel-space helpers -------------------------------------------------
@@ -531,6 +609,14 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Teardown ------------------------------------------------------------
   function dispose(): void {
     window.removeEventListener('resize', resize);
+
+    // T11: `setScissorTest`'s flag is plain renderer state, not tied to the
+    // GL context lifecycle, so reset it (and this module's own `stage`)
+    // explicitly for a clean teardown — mirrors nulling `themeTween` and
+    // zeroing `tickCallbacks.length` below.
+    backRenderer.setScissorTest(false);
+    frontRenderer.setScissorTest(false);
+    stage = undefined;
 
     themeTween?.kill();
     themeTween = null;
@@ -558,6 +644,8 @@ export function createScene(opts: SceneOptions): SceneHandle {
     render,
     onTick,
     setBehind,
+    setStage,
+    setOpacity,
     addToPet,
     addToFront,
     setTheme,

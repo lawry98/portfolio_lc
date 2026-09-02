@@ -7,6 +7,18 @@
 import type * as THREE from 'three';
 import type { Phrase } from '../phrases';
 import type { SoundEngine } from './sound/SoundEngine';
+import type { StageRect } from './stage';
+
+/**
+ * Re-exported (an `import ... from`, above, is not by itself visible to
+ * importers — the two are separate statements) so `SceneHandle.setStage`
+ * callers can pull the stage shape from this file alongside the rest of
+ * the pet-module type surface, without a second import from `./stage`
+ * (Task 1's pure geometry core; T11). Type-only on both sides — `stage.ts`
+ * has zero runtime imports of its own and this file shouldn't gain one
+ * just to move a shape through.
+ */
+export type { StageRect } from './stage';
 
 /**
  * Inputs to `createScene()` (Task 2). `headlineEl` sizes/positions the rig
@@ -43,6 +55,25 @@ export interface SceneHandle {
   onTick(cb: (dt: number) => void): void;
   /** Flip whether Byte draws behind or in front of the DOM headline. */
   setBehind(b: boolean): void;
+  /**
+   * T11 stage clip (Task 2): confines `render()`/`renderFront()`/
+   * `renderBack()` to `rect` via the WebGL scissor test, so Byte and the
+   * front layer never paint outside the active hero/footer stage.
+   * Tri-state, mirroring `stage.ts`'s `intersectViewport` contract: passing
+   * a `StageRect` clips both renderers to it; passing `null` means no
+   * stage is on screen anywhere, so the next render clears both canvases
+   * and skips drawing entirely (R11-3) instead of freezing the last frame
+   * on screen. Never calling this at all renders unclipped, byte-identical
+   * to pre-T11 behaviour.
+   */
+  setStage(rect: StageRect | null): void;
+  /**
+   * T11 hero/footer hand-off fade (Task 2, R11-5): sets CSS `opacity`
+   * directly on both `#gl-back`/`#gl-front` canvas elements. No tween
+   * lives here — `createBytePet`'s migration driver owns the GSAP tween
+   * across a trip and calls this setter on every tick of it.
+   */
+  setOpacity(a: number): void;
   /** Add an object to the pet layer (Byte) and immediately (re)apply the current behind/front
    *  render layer to it + its descendants — so it is never stranded on layer 0 (rendered on neither
    *  canvas). Use this instead of scene.petLayer.add(...) + a manual setBehind(...). */
