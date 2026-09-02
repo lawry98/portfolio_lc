@@ -63,6 +63,14 @@ export interface Point {
  * bottom), and furniture above the section's top floors the height at 0
  * rather than letting it go negative. An empty `furniture` array is a
  * no-op: the section comes back unchanged.
+ *
+ * Trap for callers: the bottom-inset-only rule means a `data-byte-furniture`
+ * element placed ABOVE the section's own content — a sticky sub-nav, an
+ * eyebrow row — becomes the topmost rect, floors `height` at 0, and sends
+ * `intersectViewport` to `null` from then on. There's no error or warning;
+ * it just reads downstream as Byte silently never drawing in that stage.
+ * Only tag furniture that trails the section's content (a scroll cue, a
+ * footer meta row), never furniture above it.
  */
 export function stageFromSection(section: Rect, furniture: readonly Rect[]): StageRect {
   const sectionBottom = section.y + section.height;

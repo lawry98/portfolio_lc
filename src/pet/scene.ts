@@ -357,6 +357,11 @@ function getOrCreateCanvas(id: string, mount: HTMLElement, zIndex: number): HTML
   canvas.style.inset = '0';
   canvas.style.zIndex = String(zIndex);
   canvas.style.pointerEvents = 'none';
+  // Reset on every reuse, not just at creation: T11's hand-off fade (`setOpacity`,
+  // below) writes this property on both canvases, so a canvas recycled by a second
+  // `createScene()` call must not inherit whatever opacity a prior instance's
+  // in-flight fade left behind.
+  canvas.style.opacity = '1';
   canvas.setAttribute('aria-hidden', 'true');
   if (canvas.parentElement !== mount) {
     mount.appendChild(canvas);
