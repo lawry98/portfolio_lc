@@ -34,17 +34,16 @@ import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
-import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT, screenFromWorld } from './scene';
+import {
+  bodyColorForTheme,
+  clampFeetToStage as clampFeetToStagePure,
+  createScene,
+  DEFAULT_GLOW_ACCENT,
+} from './scene';
 import { createRetype, renderRetype } from './retype';
 import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
-import {
-  clampToStage,
-  intersectViewport,
-  stageFromSection,
-  type Point,
-  type StageRect,
-} from './stage';
+import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
 import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
@@ -1632,6 +1631,19 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // later (`fadeStageOpacity`'s own kill-before-restart), producing a brief
   // dip rather than a full fade — intentional (brief), not special-cased;
   // the guaranteed end state is still opacity 1.
+  //
+  // NOT a containment mechanism (fix round 1 correction): a mid-trip feed
+  // sends `traveling --FEED--> dashing` (fsm.ts), which is a `prev ===
+  // 'traveling'` edge — opacity fades straight back to 1 for the whole
+  // dash+eat, potentially seconds, while `activeHome`/`activeStage` (above,
+  // in `onTick`) are STILL the pre-arrival home (`setHomeAnchor` only runs
+  // in the migration drivers' own `arrived` branch). So this fade is purely
+  // a cosmetic smoothing device for the hand-off, never load-bearing for
+  // containment — the WebGL scissor clip (`scene.setStage`, fed
+  // unconditionally every tick above, independent of this fade's current
+  // opacity or of FSM state) is what actually guarantees Byte can never
+  // paint outside a real section's stage. Do not remove the clip on the
+  // assumption this fade already covers it.
   fsm.onEnter((next, prev) => {
     if (next === 'traveling') {
       fadeStageOpacity(0);
@@ -1901,23 +1913,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   /**
-   * T11 containment (R11-7): clamps a proposed FEET position (world px —
-   * `onTick`'s own `rootX`/`rootY`: `anchorWorld.x + drift.x`, `anchorWorld.y
-   * - unitPx / 2`) into `stage` and returns the clamped FEET position, also
-   * in world px. Two conversions make this a round trip through `stage.ts`'s
-   * `clampToStage`, which works in SCREEN px on the box CENTRE:
-   *  - world <-> screen: `screenFromWorld` (scene.ts's pure export — NOT on
-   *    `SceneHandle`, see that module's own doc comment for why) going in;
-   *    `scene.worldFromScreen` (the handle method, which already closes over
-   *    the live viewport size) coming back;
-   *  - feet <-> centre: world-y grows UP, and `rootY` sits `unitPx / 2`
-   *    BELOW the anchor (the anchor IS Byte's vertical centre by
-   *    construction — `rootY = anchorWorld.y - unitPx / 2`), so centre =
-   *    feet + `unitPx / 2` going in, and the inverse coming back.
-   * Byte's body is treated as `unitPx` square (Task 4's placeholder
-   * proportions — `unitPx` is the only live size measure this module keeps
-   * for the rig), so that same value sizes BOTH the box `clampToStage` fits
-   * and the feet/centre offset above.
+   * T11 containment (R11-7) — thin wrapper. The actual math (world<->screen
+   * + feet<->centre round trip through `clampToStage`) is `scene.ts`'s pure,
+   * exported `clampFeetToStage` (Task 3 fix round 1: extracted so the
+   * highest-risk arithmetic in this ticket has unit coverage — see
+   * `scene.test.ts` — mirroring how `scissorFromStage` was extracted for
+   * the same reason in Task 2's own fix round). This wrapper's only job is
+   * supplying the two live values the pure function can't know about
+   * itself: `unitPx` (this instance's own size measure) and the CURRENT
+   * viewport — mirrors how `scene.ts`'s own `worldFromScreenAtViewport`
+   * wraps `worldFromScreen` with the live viewport.
    *
    * Called only from the steady-state hard-pin and the no-snap reacquire
    * target (`onTick`, below) — never from the migration lane
@@ -1925,21 +1930,13 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * the brief does not require this to cover.
    */
   function clampFeetToStage(feetWorldX: number, feetWorldY: number, stage: StageRect): Point {
-    const centreWorldY = feetWorldY + unitPx / 2;
-    const centreScreen = screenFromWorld(
-      feetWorldX,
-      centreWorldY,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    const clampedCentreScreen = clampToStage(
-      centreScreen,
-      { width: unitPx, height: unitPx },
+    return clampFeetToStagePure(
+      { x: feetWorldX, y: feetWorldY },
+      unitPx,
       stage,
+      { width: window.innerWidth, height: window.innerHeight },
       STAGE_CLAMP_PAD_PX,
     );
-    const clampedCentreWorld = scene.worldFromScreen(clampedCentreScreen.x, clampedCentreScreen.y);
-    return { x: clampedCentreWorld.x, y: clampedCentreWorld.y - unitPx / 2 };
   }
 
   // --- Per-tick update (brief 4b) -----------------------------------------------------

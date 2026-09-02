@@ -14,7 +14,8 @@
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
-import type { SceneHandle, SceneOptions, StageRect } from './types';
+import { clampToStage, type Point, type Size, type StageRect } from './stage';
+import type { SceneHandle, SceneOptions } from './types';
 
 /** Vertical field of view (degrees) for the shared perspective camera. */
 export const FOV_DEG = 30;
@@ -84,6 +85,72 @@ export function scissorFromStage(
     width: stage.width,
     height: stage.height,
   };
+}
+
+/**
+ * T11 containment (R11-7; Task 3 fix round 1 — "the highest-risk math was
+ * not extracted as a pure, testable helper"). Clamps a proposed FEET
+ * position (world px — `createBytePet.ts`'s own `rootX`/`rootY`, i.e.
+ * `anchorWorld.x + drift.x`, `anchorWorld.y - unitPx / 2`) into `stage` and
+ * returns the clamped FEET position, also in world px. Pure — composed
+ * entirely of already-pure pieces (`screenFromWorld`/`worldFromScreen`
+ * above, `clampToStage` from `stage.ts`), with `unitPx`/`viewport` taken as
+ * plain parameters rather than read from `window` or a caller's closure —
+ * the same shape as `scissorFromStage` above, so both can be exercised the
+ * same way in `scene.test.ts`, asserting exact numbers.
+ *
+ * Two conversions make this a round trip through `clampToStage`, which
+ * works in SCREEN px on the box CENTRE:
+ *  - world <-> screen: `screenFromWorld` going in, `worldFromScreen` coming
+ *    back — both defined just above;
+ *  - feet <-> centre: world-y grows UP, and a FEET position sits
+ *    `unitPx / 2` BELOW its box's own centre (`createBytePet.ts` places
+ *    Byte's feet at `anchorWorld.y - unitPx / 2`, where `anchorWorld.y` IS
+ *    the box's vertical centre by construction — see that module's own
+ *    root-placement comment), so centre = feet + `unitPx / 2` going in, and
+ *    the inverse coming back.
+ * Byte's body is treated as `unitPx` square (the only live size measure
+ * `createBytePet.ts` keeps for the placeholder rig), so that same value
+ * sizes BOTH the box `clampToStage` fits and the feet/centre offset above.
+ *
+ * `createBytePet.ts` wraps this with its own live `unitPx` and
+ * `window.innerWidth`/`innerHeight` — mirrors how `worldFromScreenAtViewport`
+ * (below) wraps `worldFromScreen` — see that module's own (now-thin)
+ * `clampFeetToStage` wrapper.
+ *
+ * NOTE on containment: this function bounds Byte's *wander*, not the
+ * page's containment guarantee. That guarantee is the WebGL scissor clip
+ * (`scissorFromStage` above, driven by `SceneHandle.setStage`) — it is fed
+ * `activeStage` unconditionally, every tick, regardless of FSM state or the
+ * hand-off fade's current opacity, so nothing this module draws can ever
+ * paint outside a real section's stage. This function is a *second*,
+ * independent safeguard (keeps Byte's own root visually inside the stage
+ * rather than merely invisible-because-clipped at its edge) — removing it
+ * would look wrong, but would not by itself let Byte paint over another
+ * section.
+ */
+export function clampFeetToStage(
+  feet: Point,
+  unitPx: number,
+  stage: StageRect,
+  viewport: Size,
+  pad: number,
+): Point {
+  const centreWorldY = feet.y + unitPx / 2;
+  const centreScreen = screenFromWorld(feet.x, centreWorldY, viewport.width, viewport.height);
+  const clampedCentreScreen = clampToStage(
+    centreScreen,
+    { width: unitPx, height: unitPx },
+    stage,
+    pad,
+  );
+  const clampedCentreWorld = worldFromScreen(
+    clampedCentreScreen.x,
+    clampedCentreScreen.y,
+    viewport.width,
+    viewport.height,
+  );
+  return { x: clampedCentreWorld.x, y: clampedCentreWorld.y - unitPx / 2 };
 }
 
 /**
