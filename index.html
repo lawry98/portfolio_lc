@@ -147,8 +147,16 @@
             <p class="hero__micro-label eyebrow" data-parallax data-parallax-speed="0.25">
               PORTFOLIO — 2026
             </p>
-            <!-- Decorative scroll cue: SVG chevron, never the subsetted woff2's glyphs. -->
-            <div class="hero__scroll">
+            <!--
+              Decorative scroll cue: SVG chevron, never the subsetted woff2's
+              glyphs. `data-byte-furniture` (T11, src/pet/stage.ts): marks page
+              chrome the pet module must never draw over — it insets its
+              stage to clear the top of anything tagged with this attribute,
+              so Byte's wander/hard-pin and the scene's own scissor clip stay
+              clear of this cue. An attribute, never a page class, so `pet/`
+              reads it without depending on this file's CSS.
+            -->
+            <div class="hero__scroll" data-byte-furniture>
               <span class="hero__scroll-label eyebrow">SCROLL</span>
               <svg
                 class="hero__scroll-chevron"
@@ -292,11 +300,11 @@
             <span class="footer__line">LET'S</span>
             <span class="footer__line">BUILD</span>
           </h2>
-          <div class="footer__meta">
+          <div class="footer__meta" data-byte-furniture>
             <a href="mailto:hello@lawrence.dev" class="footer__email">hello@lawrence.dev</a>
             <p class="footer__counter eyebrow" data-fed-counter>FED 0 GLYPHS</p>
           </div>
-          <p class="footer__copyright">© 2026 Lawrence Crasto</p>
+          <p class="footer__copyright" data-byte-furniture>© 2026 Lawrence Crasto</p>
         </div>
       </footer>
     </div>
