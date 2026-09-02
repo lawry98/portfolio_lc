@@ -293,6 +293,68 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ---
 
+## T11 — Scroll bounds: stage clip, containment & hand-off fade  ✅ DONE
+
+> **DONE (2026-09-01, commits `4288559..b9d7506`, 5 code commits + this docs commit; branch `lc/byte-pet-scroll-bounds-25b3c2`, base `4288559`).** Byte and everything the pet module draws are now confined to two bounded **stages**, so nothing paints over `#manifesto` or `#selected-work` at any scroll position — **supersedes SPEC §6's right-margin travel lane**. New **pure** `src/pet/stage.ts` (136 lines, **zero imports**, like `anchor.ts`/`fsm.ts`): `stageFromSection(section, furniture)` (the section box, bottom-inset to the topmost furniture rect — **one rule generates both stages**, design rows 2–3), `intersectViewport(stage, viewport)` (`null` = the render-skip signal, design row 8), `clampToStage(point, size, stage, pad)` (the point is the box **centre**) + `stage.test.ts` (**24 tests**). `scene.ts`: `SceneHandle.setStage(rect | null)` + `setOpacity(a)` — per frame both renderers take a **full clear with the scissor test OFF**, then the scissor box, then render; `null` clears both and skips the draws (**R11-3**: skipping `render()` alone freezes the last frame on the compositor). `setStage` is **tri-state** (`undefined` = unconfigured → unclipped, so `createScene` stays non-breaking — **R11-4**). The scissor takes **CSS px, not device px** (**R11-1** — three@0.185.1 multiplies by pixel ratio internally at `three.cjs:76805`; device px would clip to a quarter-size region on retina), Y-flipped `glY = viewportHeight - (stage.y + stage.height)`; the arithmetic was extracted in review fix rounds into exported pure **`scissorFromStage`** (+5 tests) and **`clampFeetToStage`** (+6 tests) beside `worldFromScreen`. `createBytePet.ts`: measures both sections + their furniture in `onTick`'s **existing** read batch (no second scroll listener), feeds the active stage (following `activeHome`) to `scene.setStage`, clamps Byte's root into it (`STAGE_CLAMP_PAD_PX` = 12, **R11-7** — at the home-pin seam, not `feed.ts`), and tweens opacity **1→0→1** across the hero↔footer hand-off over `STAGE_FADE_DURATION_S` (0.3s) via `fsm.onEnter` (**subscription only**, **R11-5**). `index.html`: three `data-byte-furniture` tags (`.hero__scroll`, `.footer__meta`, `.footer__copyright`) so `pet/` never names page CSS classes (**R11-6**); the footer lookup is `closest('section, footer')` (**R11-9** — `<footer id="footer">` is a `<footer>` tag and a sibling of `<main>`, so the bare selector returns `null` and the footer stage would silently never exist). **`fsm.ts` and all T8 migration logic UNTOUCHED** (design row 4; `fsm.test.ts`, 1103 lines, passes unchanged) — the lane still runs, clipped away for its whole traverse. **The fade is not the guarantee; the scissor is** (the "opacity is ~0 throughout traveling" rationale was ruled FALSE — `fsm.ts:388`'s `traveling --FEED--> dashing` restores opacity to 1 mid-trip — and corrected in the code comments). **Owner-visible:** the containment clamp is a **no-op at 1440×900** at both homes and the footer never clamps anywhere, but on narrower viewports it pulls the **hero** anchor left (**−23px @768×1024, −14px @390×844**) because the bound is the **section** box (scrollbar-excluded), not the viewport — required by the chosen edge behaviour (design demo option **C**, "the clip stays as a backstop that never fires"): unclamped, Byte's right edge overflows the section by 11px @768 and the scissor would visibly slice it. `STAGE_CLAMP_PAD_PX` (12) is the single tunable. **No new deps; no `src/` file outside `pet/` changed.** 928 insertions across 7 files. Budgets: JS **209.55KB gz** (T10 206.40; +3.15) / CSS **3.33KB gz** / fonts **26.15KB** unchanged (≪ 280/20). `npm test` (**285/285**, +35 vs T10's 250), `npm run lint`, `npm run format:check`, `npm run build` all clean. Via `subagent-driven-development`: **3 tasks + per-task reviews (Task 2 +1 fix round; Task 3 +1 fix round) + scoped re-reviews (all ADDRESSED) + controller geometry/scissor QA — 78 scroll positions × 3 viewports, ZERO overlaps, run against the real shipped `stage.ts`, plus an empirical DPR-2 WebGL scissor proof** (Y-flip exact to the pixel; R11-2's ghosting confirmed real). The 5 untracked `byte-bounds-*.html` design demos were deleted per the DoD. The **animated** DoD rows (hand-off fade on screen, mid-trip feed, occlusion weave, FED counter, reduced-motion on device) are **owner/on-device residuals** — the Browser pane's `visibilityState` is permanently `'hidden'` so rAF never fires and Byte never draws, and no real Chrome was connected; same limitation T10 recorded in `docs/qa/README.md` §4. DECISIONS **D-19**; rulings **R11-1..R11-9**. Branch stays **OPEN** — merging is the owner's call. Audit trail: `.superpowers/sdd/t11-plan/`.
+
+**Goal:** Byte and everything the pet module draws stay inside the section they
+belong to. Nothing ever paints over the APPROACH (`#manifesto`) or SELECTED WORK
+sections — at any scroll position, in either theme, on any viewport.
+
+**Depends on:** T8 (migration), T10 (release baseline).
+
+**Why:** The two canvases are full-viewport `position: fixed` (`scene.ts:253–266`),
+so nothing bounds them today. While `traveling`, Byte follows the visitor down a
+right-margin lane (`MIGRATE_LANE_*`, `createBytePet.ts:201–218`) straight across
+APPROACH. This ticket **supersedes** SPEC §6's "Between them it follows the
+visitor down a right-margin lane."
+
+**Settled design** (grilled with the owner 2026-09-01 — do not re-open a row
+without asking):
+
+1. Two bounded stages (hero + footer) with a fade hand-off; Byte is never visible between them.
+2. Hero stage = `#hero`'s box, inset at the bottom to clear `.hero__scroll`.
+3. Footer stage = `#footer`'s box, inset at the bottom to clear `.footer__meta` + `.footer__copyright`.
+   One rule generates both: **the section box, inset to clear its furniture.**
+4. `fsm.ts` and all T8 migration logic stay **untouched** — lane travel becomes invisible for free once the clip exists.
+5. Clamp Byte's wander/dash targets into the active stage (containment); keep the hard clip underneath as a backstop.
+6. Opacity is 1 whenever Byte is homed; a GSAP tween runs 1→0→1 **only** across the hero↔footer hand-off. No per-frame opacity math.
+7. Clip via the **WebGL scissor test** on both renderers.
+8. Skip both renderers entirely when neither stage intersects the viewport.
+
+**Files — Create:** `src/pet/stage.ts`, `src/pet/stage.test.ts` (PURE).
+**Modify:** `src/pet/scene.ts` (scissor + render skip), `src/pet/createBytePet.ts`
+(stage tracking, target clamping, hand-off fade), `src/pet/types.ts`
+(`StageRect` + `SceneHandle.setStage`), `docs/SPEC.md` (§6 travel lane),
+`docs/DECISIONS.md` (**D-19**), `docs/PROGRESS.md` (QA log).
+
+**Produces** — `pet/stage.ts`, pure like `anchor.ts`/`fsm.ts` (imports neither
+gsap nor three; no DOM, no `window`, no clock, no `Math.random`):
+
+- `interface StageRect { x: number; y: number; width: number; height: number }`
+- `stageFromSection(section: Rect, furniture: readonly Rect[]): StageRect` — the section box inset at the bottom to clear the topmost furniture rect.
+- `intersectViewport(stage: StageRect, viewport: Size): StageRect | null` — `null` when empty; that is the render-skip signal.
+- `clampToStage(point: Point, size: Size, stage: StageRect, pad: number): Point` — containment.
+
+**Key work:**
+
+- `scene.ts`: add `setStage(rect: StageRect | null)` to `SceneHandle`. Per frame, when non-null set `setScissor`/`setScissorTest(true)` on **both** renderers (device px, Y flipped — GL's origin is bottom-left, the DOM's is top-left); when null, skip both `render()` calls.
+- `createBytePet.ts`: measure both section boxes + their furniture on scroll/resize via the **existing** `onTick` measurement seam (do not add a second scroll listener); feed the active stage to `scene.setStage`; clamp wander/dash targets; tween opacity across the hand-off.
+- Reduced motion: keep both the clip and the fade — opacity-only is the reduced-motion-safe idiom, and `runMigrationReduced` (`createBytePet.ts:1722`) already snaps without a lane.
+
+**DoD / QA:**
+
+- Full-page scroll in both themes at 1440×900 / 768×1024 / 390×844: Byte, its shadow, tossed glyphs and particles are **never** visible over `#manifesto` or `#selected-work`. Screenshots → `docs/PROGRESS.md`.
+- Byte still retypes the hero headline, still migrates, still retypes the footer CTA; the FED counter still increments.
+- Occlusion weave intact (Byte passes behind a letterform) — SPEC §15's occlusion screenshot.
+- Reduced-motion pass: no lane, clip still holds.
+- `npm test` green (250 baseline + new `stage.test.ts`); `npm run lint`, `npm run format:check`, `npm run build` clean.
+- Delete the five untracked `byte-bounds-*.html` design demos from the repo root before the final commit.
+
+Commits: `feat(pet): bound Byte to hero/footer stages via scissor clip + hand-off fade`, then `docs(t11): supersede SPEC §6 travel lane, add D-19`.
+
+---
+
 ## T-GLB — Byte GLB swap-in _(when Lawrence delivers the model)_
 
 **Depends on:** T4 (rig interface). **Trigger:** `public/models/byte.glb` delivered per `ASSET_SPEC.md`.
