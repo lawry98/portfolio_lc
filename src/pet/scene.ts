@@ -56,6 +56,37 @@ export function screenFromWorld(
 }
 
 /**
+ * T11 (Task 2, R11-1): converts a `StageRect` (screen px, DOM top-left
+ * origin — `stage.ts`'s coordinate convention) into the box
+ * `WebGLRenderer.setScissor`/`prepareRenderer` below expect: CSS px, GL's
+ * bottom-left origin. Only `y` needs to change — DOM `x` already grows
+ * rightward same as GL `x`, and a rect's `width`/`height` don't depend on
+ * which corner is the origin — so the flip is `viewportHeight - (stage.y +
+ * stage.height)`: the distance from the viewport's bottom edge up to the
+ * stage's own bottom edge becomes the new box's distance up from GL's
+ * bottom-left origin.
+ *
+ * Returns CSS px, NOT device px — three multiplies by the renderer's own
+ * pixel ratio internally (three@0.185.1,
+ * `node_modules/three/build/three.cjs:76805`: `setScissor` stores the rect
+ * then calls `.multiplyScalar(_pixelRatio)` before handing it to GL).
+ * Pre-multiplying by devicePixelRatio before calling `setScissor` would
+ * double-apply the ratio and clip to a quarter-size box on any retina
+ * display — do not "fix" this back.
+ */
+export function scissorFromStage(
+  stage: StageRect,
+  viewportHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: stage.x,
+    y: viewportHeight - (stage.y + stage.height),
+    width: stage.width,
+    height: stage.height,
+  };
+}
+
+/**
  * Best-effort WebGL capability probe via a throwaway canvas. Always returns
  * a boolean and never throws — some browsers/extensions/jsdom throw instead
  * of returning `null` from `getContext`, so both paths are guarded. Callers
@@ -532,19 +563,10 @@ export function createScene(opts: SceneOptions): SceneHandle {
       return true;
     }
 
-    const h = window.innerHeight; // CSS px, matches applyViewport's setSize
-    const sx = stage.x;
-    const sy = h - (stage.y + stage.height); // DOM top-left origin → GL bottom-left
-    const sw = stage.width;
-    const sh = stage.height;
-    // `setScissor` takes CSS px, NOT device px — three multiplies by the
-    // renderer's own pixel ratio internally (three@0.185.1,
-    // `node_modules/three/build/three.cjs:76805`: `setScissor` stores the
-    // rect then calls `.multiplyScalar(_pixelRatio)` before handing it to
-    // GL). Pre-multiplying by devicePixelRatio here would double-apply the
-    // ratio and clip to a quarter-size box on any retina display — do not
-    // "fix" this back.
-    renderer.setScissor(sx, sy, sw, sh);
+    // CSS px, matching `applyViewport`'s `setSize` — see `scissorFromStage`
+    // for why (it takes/returns CSS px throughout, on purpose).
+    const { x, y, width, height } = scissorFromStage(stage, window.innerHeight);
+    renderer.setScissor(x, y, width, height);
     renderer.setScissorTest(true);
     return true;
   }

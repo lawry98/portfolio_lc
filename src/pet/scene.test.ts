@@ -4,6 +4,7 @@ import {
   FOV_DEG,
   cameraDistanceForHeight,
   hasWebGL,
+  scissorFromStage,
   screenFromWorld,
   worldFromScreen,
 } from './scene';
@@ -66,6 +67,33 @@ describe('projection proof (ties the pixel-space formulas to a real THREE.Perspe
       const screenX = ((ndc.x + 1) / 2) * W;
       expect(Math.abs(screenX - (W / 2 + px))).toBeLessThan(1);
     }
+  });
+});
+
+describe('scissorFromStage', () => {
+  it("flips y for a stage flush to the viewport top (the brief's worked example: viewportHeight 900, y 0, height 800 → y 100)", () => {
+    const stage = { x: 20, y: 0, width: 600, height: 800 };
+    expect(scissorFromStage(stage, 900)).toEqual({ x: 20, y: 100, width: 600, height: 800 });
+  });
+
+  it('flips y for a different stage flush to the viewport top', () => {
+    const stage = { x: 40, y: 0, width: 300, height: 250 };
+    expect(scissorFromStage(stage, 1000)).toEqual({ x: 40, y: 750, width: 300, height: 250 });
+  });
+
+  it('returns y = 0 for a stage flush to the viewport bottom', () => {
+    const stage = { x: 10, y: 900, width: 500, height: 300 };
+    expect(scissorFromStage(stage, 1200)).toEqual({ x: 10, y: 0, width: 500, height: 300 });
+  });
+
+  it('flips y for a mid-page stage touching neither edge', () => {
+    const stage = { x: 100, y: 200, width: 400, height: 150 };
+    expect(scissorFromStage(stage, 800)).toEqual({ x: 100, y: 450, width: 400, height: 150 });
+  });
+
+  it('does not clamp — a stage taller than the viewport yields a negative y', () => {
+    const stage = { x: 0, y: 0, width: 1440, height: 900 };
+    expect(scissorFromStage(stage, 600)).toEqual({ x: 0, y: -300, width: 1440, height: 900 });
   });
 });
 
