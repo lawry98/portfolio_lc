@@ -4,7 +4,7 @@ import type { Point, Rect, Size, StageRect } from './stage';
 
 /**
  * `stage.ts` is plain arithmetic (no gsap, no three, no DOM, no wall-clock,
- * no `Math.random`) — every case here is a direct transcription of T11's
+ * no `Math.random`) — every case here is a direct transcription of T12's
  * task-1 brief, so each `it` title states the expected value and the
  * numbers that produce it.
  */

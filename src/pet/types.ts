@@ -14,7 +14,7 @@ import type { StageRect } from './stage';
  * importers — the two are separate statements) so `SceneHandle.setStage`
  * callers can pull the stage shape from this file alongside the rest of
  * the pet-module type surface, without a second import from `./stage`
- * (Task 1's pure geometry core; T11). Type-only on both sides — `stage.ts`
+ * (Task 1's pure geometry core; T12). Type-only on both sides — `stage.ts`
  * has zero runtime imports of its own and this file shouldn't gain one
  * just to move a shape through.
  */
@@ -56,19 +56,19 @@ export interface SceneHandle {
   /** Flip whether Byte draws behind or in front of the DOM headline. */
   setBehind(b: boolean): void;
   /**
-   * T11 stage clip (Task 2): confines `render()`/`renderFront()`/
+   * T12 stage clip (Task 2): confines `render()`/`renderFront()`/
    * `renderBack()` to `rect` via the WebGL scissor test, so Byte and the
    * front layer never paint outside the active hero/footer stage.
    * Tri-state, mirroring `stage.ts`'s `intersectViewport` contract: passing
    * a `StageRect` clips both renderers to it; passing `null` means no
    * stage is on screen anywhere, so the next render clears both canvases
-   * and skips drawing entirely (R11-3) instead of freezing the last frame
+   * and skips drawing entirely (R12-3) instead of freezing the last frame
    * on screen. Never calling this at all renders unclipped, byte-identical
-   * to pre-T11 behaviour.
+   * to pre-T12 behaviour.
    */
   setStage(rect: StageRect | null): void;
   /**
-   * T11 hero/footer hand-off fade (Task 2, R11-5): sets CSS `opacity`
+   * T12 hero/footer hand-off fade (Task 2, R12-5): sets CSS `opacity`
    * directly on both `#gl-back`/`#gl-front` canvas elements. No tween
    * lives here — `createBytePet`'s migration driver owns the GSAP tween
    * across a trip and calls this setter on every tick of it.

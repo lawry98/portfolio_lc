@@ -57,7 +57,7 @@ export function screenFromWorld(
 }
 
 /**
- * T11 (Task 2, R11-1): converts a `StageRect` (screen px, DOM top-left
+ * T12 (Task 2, R12-1): converts a `StageRect` (screen px, DOM top-left
  * origin — `stage.ts`'s coordinate convention) into the box
  * `WebGLRenderer.setScissor`/`prepareRenderer` below expect: CSS px, GL's
  * bottom-left origin. Only `y` needs to change — DOM `x` already grows
@@ -88,7 +88,7 @@ export function scissorFromStage(
 }
 
 /**
- * T11 containment (R11-7; Task 3 fix round 1 — "the highest-risk math was
+ * T12 containment (R12-7; Task 3 fix round 1 — "the highest-risk math was
  * not extracted as a pure, testable helper"). Clamps a proposed FEET
  * position (world px — `createBytePet.ts`'s own `rootX`/`rootY`, i.e.
  * `anchorWorld.x + drift.x`, `anchorWorld.y - unitPx / 2`) into `stage` and
@@ -357,7 +357,7 @@ function getOrCreateCanvas(id: string, mount: HTMLElement, zIndex: number): HTML
   canvas.style.inset = '0';
   canvas.style.zIndex = String(zIndex);
   canvas.style.pointerEvents = 'none';
-  // Reset on every reuse, not just at creation: T11's hand-off fade (`setOpacity`,
+  // Reset on every reuse, not just at creation: T12's hand-off fade (`setOpacity`,
   // below) writes this property on both canvases, so a canvas recycled by a second
   // `createScene()` call must not inherit whatever opacity a prior instance's
   // in-flight fade left behind.
@@ -594,10 +594,10 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Render loop --------------------------------------------------------
   const tickCallbacks: Array<(dt: number) => void> = [];
 
-  // T11 stage clip (R11-4). Tri-state: `undefined` until the first
-  // `setStage()` call — renders unclipped, byte-identical to pre-T11
+  // T12 stage clip (R12-4). Tri-state: `undefined` until the first
+  // `setStage()` call — renders unclipped, byte-identical to pre-T12
   // behaviour; `null` once set means no stage is on screen anywhere
-  // (render-skip, R11-3); a `StageRect` is the active hero/footer stage
+  // (render-skip, R12-3); a `StageRect` is the active hero/footer stage
   // both renderers scissor-clip to. `createBytePet`'s `onTick` callback is
   // what calls `setStage()` each frame, and `render(dt)` below runs tick
   // callbacks before `renderBack()`/`renderFront()`, so `stage` is always
@@ -605,7 +605,7 @@ export function createScene(opts: SceneOptions): SceneHandle {
   let stage: StageRect | null | undefined = undefined;
 
   /**
-   * T11 scissor clip + render-skip (R11-1/R11-2/R11-3), shared by
+   * T12 scissor clip + render-skip (R12-1/R12-2/R12-3), shared by
    * `renderFront()`/`renderBack()` so both canvases always agree on
    * whether — and where — to draw. Returns whether the caller should still
    * call `renderer.render(scene, camera)` this frame.
@@ -619,10 +619,10 @@ export function createScene(opts: SceneOptions): SceneHandle {
    * hero-region Byte ghosting on screen once the active stage moves to the
    * footer.
    *
-   * `stage === null` clears and returns `false` (R11-3) rather than
+   * `stage === null` clears and returns `false` (R12-3) rather than
    * skipping the clear too — an un-cleared skip would leave the compositor
    * showing the last presented frame, freezing Byte mid-page, which is the
-   * exact bug T11 exists to fix.
+   * exact bug T12 exists to fix.
    */
   function prepareRenderer(renderer: THREE.WebGLRenderer): boolean {
     renderer.setScissorTest(false);
@@ -643,7 +643,7 @@ export function createScene(opts: SceneOptions): SceneHandle {
     return true;
   }
 
-  /** T11 stage clip setter (Task 2) — see `SceneHandle.setStage`'s doc comment in `types.ts`
+  /** T12 stage clip setter (Task 2) — see `SceneHandle.setStage`'s doc comment in `types.ts`
    *  for the tri-state contract; this just records it for `prepareRenderer()` to read. */
   function setStage(rect: StageRect | null): void {
     stage = rect;
@@ -677,7 +677,7 @@ export function createScene(opts: SceneOptions): SceneHandle {
     tickCallbacks.push(cb);
   }
 
-  /** T11 hero/footer hand-off fade (Task 2, R11-5): sets CSS `opacity` directly on both
+  /** T12 hero/footer hand-off fade (Task 2, R12-5): sets CSS `opacity` directly on both
    *  canvas elements. No tween lives here — `createBytePet`'s migration driver owns the
    *  GSAP tween across a hero/footer trip and calls this setter on every tick of it. */
   function setOpacity(a: number): void {
@@ -704,7 +704,7 @@ export function createScene(opts: SceneOptions): SceneHandle {
   function dispose(): void {
     window.removeEventListener('resize', resize);
 
-    // T11: `setScissorTest`'s flag is plain renderer state, not tied to the
+    // T12: `setScissorTest`'s flag is plain renderer state, not tied to the
     // GL context lifecycle, so reset it (and this module's own `stage`)
     // explicitly for a clean teardown — mirrors nulling `themeTween` and
     // zeroing `tickCallbacks.length` below.

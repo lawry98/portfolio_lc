@@ -1,6 +1,6 @@
 /**
- * Byte's stage geometry — the PURE geometry core for T11's scroll-bounds
- * confinement (TICKETS T11 "Scroll bounds: stage clip, containment &
+ * Byte's stage geometry — the PURE geometry core for T12's scroll-bounds
+ * confinement (TICKETS T12 "Scroll bounds: stage clip, containment &
  * hand-off fade": "Byte and everything the pet module draws stay inside
  * the section they belong to. Nothing ever paints over the APPROACH
  * (`#manifesto`) or SELECTED WORK sections — at any scroll position, in
@@ -12,7 +12,7 @@
  * clearing its furniture (`stageFromSection`), clipping a stage to the
  * current viewport for the WebGL scissor test and the render-skip signal
  * (`intersectViewport`), and containing a moving point inside a stage
- * (`clampToStage`). Later T11 tasks wire these into `scene.ts`'s scissor
+ * (`clampToStage`). Later T12 tasks wire these into `scene.ts`'s scissor
  * rect and `createBytePet.ts`'s wander/dash target clamping; this file
  * never draws, scrolls, or measures anything itself.
  *
