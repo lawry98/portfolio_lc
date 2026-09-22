@@ -397,13 +397,111 @@ Commits: `feat(pet): bound Byte to hero/footer stages via scissor clip + hand-of
 
 ---
 
-## T-GLB — Byte GLB swap-in _(when Lawrence delivers the model)_
+## T-GLB — Byte GLB swap-in _(model delivered 2026-08-27)_
 
-**Depends on:** T4 (rig interface). **Trigger:** `public/models/byte.glb` delivered per `ASSET_SPEC.md`.
+**Goal:** The real Byte replaces the procedural placeholder everywhere it appears: entrance, idle brain, feeding, retype, peek, sleep/wake, migration and theme reaction. The placeholder survives only as the fallback while the model loads or if it fails.
 
-**Key work:** implement the GLB branch of `PetRig` via `loadByteGLB` + `AnimationMixer`; map `Body`/`Glow` materials, `Eye`/`Head` + `Mouth` nodes, and named clips; dispose the placeholder; blend clips on FSM transitions; re-verify model budget + 60fps on device; fallbacks for any missing name/clip.
+**Depends on:** T4 (rig interface), T12 (stages; this ticket builds on PR #8).
 
-**DoD / QA:** real Byte animates all states; budget + 60fps verified; missing-name fallbacks don't crash. Commit `feat(pet): integrate Byte GLB (mixer, materials, nodes, clips)`.
+**The delivered asset** (`/Volumes/SD500/Documents/blender/byte.glb`, audited 2026-09-22 against `ASSET_SPEC.md`):
+
+- One glTF binary scene, Y-up, faces +Z, feet at y=0, **1.80 units** tall, a single `ByteRoot`, no cameras or lights. **36,283 tris**, no textures.
+- `EXT_meshopt_compression` (required) and `KHR_materials_emissive_strength`. **728,928 B** raw, **525,126 B** gzipped.
+- Materials `Body`, `Glow` (emissive mint, strength 1.86) and an extra `Visor`.
+- A 15-bone skin (`Root`, `Torso`, `Head`, legs, arms). `EyeL`, `EyeR`, `VisorMesh` and the `Mouth` locator are children of the `Head` bone. There is no `Eye` node, so the mapper falls back to `Head`.
+- All seven clips, every bone keyed with translation, rotation and scale. Root motion is in place: `Root` is constant in every clip, and vertical motion lives on `Torso`.
+
+**Authored clip beats** (decoded with three's own loader, 2026-09-22):
+
+| Clip | Length | Loop | Beats |
+|---|---|---|---|
+| `Idle` | 3.00 s | loop | ±1.3° torso sway, ±2.6° head tilt, no vertical bob |
+| `Hop` | 1.17 s | once | crouch to 0.13 s, takeoff 0.20 s, apex **0.50 s** (+0.165 u, 9% of height), land 0.80 s |
+| `Dash` | 0.67 s | loop | 12° forward lean, bouncing run cycle |
+| `Eat` | 1.33 s | once | bites at **0.33 s** and **0.60 s** (head nods +8°), satisfied bounce at 0.90 s |
+| `Sleep` | 4.00 s | loop | slumped (torso −0.025 u, head nod 10°), breathing |
+| `Wake` | 1.25 s | once | starts from the Sleep pose, jolt at 0.20–0.33 s, head shake to 0.90 s, settled by 1.18 s |
+| `Peek` | 1.67 s | once | starts and ends crouched (−0.34 u), rises through 0.1–0.7 s, peers 0.7–1.1 s, drops 1.3–1.6 s |
+
+**Settled design** (grilled with the owner 2026-09-22 — do not re-open a row without asking):
+
+1. **Load timing.** The fetch starts when `createBytePet` is constructed, and the preloader waits for it inside its existing 4 s cap: the gate becomes `Promise.all([whenFontsSettled(), delay(PRELOADER_MIN_MS), race(modelReady, delay(PRELOADER_FONTS_FALLBACK_MS))])`, so it still resolves within 0.9–4 s. Usually the real Byte drops in from the first frame. A late model means the placeholder drops in and the real Byte swaps in when it lands. A failed load keeps the placeholder for the session.
+2. **Ship the asset as delivered.** Copy it to `public/models/byte.glb` unchanged. The 525 KB gzip (~5% over the soft 500 KB target) is an accepted exception, recorded in DECISIONS.
+3. **Branching.** T12 lands first (PR #8). T-GLB builds on top of it.
+4. **Cursor look = both.** A half-strength head turn (the rig's existing clamps, ±0.35 rad yaw and ±0.16 rad pitch, at 0.5×) is applied to the `Head` bone *after* each mixer update. At the same time `EyeL`/`EyeR` slide across the visor, up to 0.07 × 0.045 model units at 0.8× of the look.
+5. **Size = 1.25 × the headline font-size.** One constant multiplies `unitPx` at its source, so it applies to both rigs and every Byte-relative distance (half-height pin, stage clamp box, shadow, glyph and toss sizes) scales with it.
+6. **Timing follows the clips.** The choreography moves to the authored beats:
+   - feed bites end at 0.33 s and 0.60 s;
+   - the FSM wake window is 1.25 s, passed through `createFSM` config so `fsm.ts` stays untouched;
+   - the peek lasts 1.667 s, with the behind/front canvas swaps at 0.2 s and 1.45 s.
+
+   The placeholder's GSAP-faked `Eat`/`Wake`/`Peek` are retimed to the same beats so a fallback stays in sync.
+7. **One swappable rig.** `createBytePet` and `feed.ts` keep a single `PetRig` whose `object3d` (root) and `pose` groups are stable. The placeholder lives inside at boot, and `swap()` replaces it with the GLB rig, re-applying the current clip, body color, glow level, opacity, blink and look. Rebuilding the pet was ruled out (it loses FSM, phrase and FED state), and so was "no late swap" (it contradicts row 1).
+8. **The swap moment.** If Byte is `hidden`, the swap is instant and invisible. Otherwise it waits for the next resting state (`idle`, `curious`, `invited` or `sleeping`), never mid-dash, eat, retype, travel, peek or wake. It then plays a ~0.3 s pop: the old content squashes out on `pose.scale` and the new one springs back with `back.out`. Under reduced motion the swap is instant.
+9. **The loader is a dynamic `import('./glbLoader')`.** `GLTFLoader` plus `MeshoptDecoder` form their own ~33 KB gz chunk and the entry chunk stays unchanged. This narrowly revises R10-3 ("no code-splitting") because here there's a real critical-path saving. The never-shipped DRACO wiring (`/draco/` path, `DRACOLoader`) is removed.
+10. **Theming per D-11.** `Body` is recolored with today's palette (`bodyColorForTheme`), replacing the authored off-white. `Glow` is mint at 0.6 emissive in dark mode and 0 in light mode, where the eyes read as unlit mint. `Visor` stays as authored.
+11. **Clip playback.** `Idle`, `Dash` and `Sleep` loop. `Hop`, `Eat`, `Wake` and `Peek` play once, clamp, and hand back to `Idle`. Every change crossfades over 0.2 s. `ClipPlayOptions.loop` forces a one-shot to repeat, and `onComplete` fires on the mixer's `finished` event. The mixer advances in `rig.update(dt)` on the shared `gsap.ticker`. Under reduced motion `rig.play()` is still never called (unchanged), so the model holds its rest pose while blink and look continue.
+12. **Degrading per ASSET_SPEC §8.** A missing piece disables only that piece and never throws:
+    - clip → hold the current pose, fire `onComplete` on the next tick, one `console.warn` per name;
+    - `Body`/`Glow` → no recolor or glow;
+    - `Head` → no head turn;
+    - `EyeL`/`EyeR` → no eye slide or blink;
+    - `Torso` → hover height 0;
+    - `Mouth` → glyphs converge on the head.
+
+    A load or parse failure logs one `console.warn` and resolves `modelReady` anyway.
+
+**Files — Create:**
+- `src/pet/glbRig.ts` + `glbRig.test.ts`: `createGlbRig`. Tests run the mixer against a synthetic skeleton, since `AnimationMixer` needs no WebGL.
+- `src/pet/swapRig.ts` + `swapRig.test.ts`: `createSwappableRig`.
+- `src/pet/glbAsset.test.ts`: a real-file smoke test that decodes `public/models/byte.glb` with `MeshoptDecoder` and asserts every name and clip, the height, tris ≤ 40k and the byte size, so a bad re-export fails the suite rather than the page.
+- `public/models/byte.glb`.
+
+**Modify:**
+- `src/pet/types.ts`, `glbLoader.ts` + test (meshopt, new fields, DRACO removed), `rig.ts` + test (new methods, retimed fakes), `placeholderBot.ts` (unit-scaled content: `unitPx` moves to the swappable root).
+- `createBytePet.ts`: `modelUrl` load, swap wiring, `modelReady`, and blink, hover, reduced-peek fade, theme glow lerp and entrance pose all go through the rig. The size constant and retimed peek/wake constants.
+- `feed.ts` (bite beats), `src/page/preloader.ts` (model joins the gate) and `src/main.ts` (`modelUrl`, `modelReady`).
+- Docs: `SPEC.md` (§4.2, §4.4, §6 peek/wake timing, §13, §14), `ASSET_SPEC.md` (delivered status, meshopt, the beats above as the re-export contract, 1.25×), `INTEGRATION.md` (host passes `modelUrl`, serves the file), `DECISIONS.md` (**D-22**), `PROGRESS.md`, `CLAUDE.md` (file map).
+
+**Produces:**
+
+- `PetOptions.modelUrl?: string`: absent means placeholder only, byte-identical to today.
+- `BytePetHandle.modelReady: Promise<void>`: settles once the GLB is live or has failed. It never rejects, and resolves immediately when there's no `modelUrl`.
+- `PetRig` additions:
+  - `readonly pose: THREE.Object3D`, the stable inner group for the entrance drop-in scale, the reduced-peek rise and the swap pop;
+  - `setBlink(closed: boolean)`;
+  - `hoverHeight(): number`, the lift as a fraction of Byte's height, for the shadow;
+  - `setGlowLevel(level: number, accent)`, where 0–1 maps onto the on-intensity and `setGlow(on, accent)` becomes `setGlowLevel(on ? 1 : 0, accent)`;
+  - `setOpacity(a: number)`, covering every material the rig owns, `Visor` included.
+- `RigSource` additions: `eyes?: THREE.Object3D[]` (`EyeL`, `EyeR`), `torso?: THREE.Object3D`, `materials?: THREE.Material[]`.
+- `createGlbRig(source: RigSource): PetRig`.
+- `createSwappableRig(initial: PetRig): PetRig & { swap(next: PetRig, opts: { animate: boolean }): void }`.
+
+**DoD / QA:**
+
+- `npm test` green (296 baseline plus the new suites), and `npm run lint`, `npm run format:check` and `npm run build` clean.
+- Budgets:
+  - entry JS ≈ today (209.65 KB gz);
+  - loader chunk ≈ 33 KB gz;
+  - total ≤ 280 KB gz;
+  - the model accepted at 525 KB gz.
+- Browser QA in the Browser pane (rAF runs there now: the T-GLB design demo hit 60 fps), at 1440×900, 768×1024 and 390×844 in both themes:
+  - the entrance with the model ready before the lift;
+  - a slow model (placeholder, then the pop at rest);
+  - a forced 404 (placeholder for the session, no errors beyond the one warning);
+  - feed ×3 with the glyph arriving on the two bites, then retype and the FED counter;
+  - peek behind a letter (the occlusion screenshot);
+  - curious, invited, and the look (head plus eyes);
+  - blink on the eyes;
+  - sleep 30 s, then wake, then dash;
+  - hero↔footer migration inside the T12 stages, plus the footer retype;
+  - a theme toggle mid-dash;
+  - the shadow reacting to `Hop`;
+  - a 10 s perf trace (long frames ≤ 2 per 10 s) and a heap check after 50 feeds.
+- Anything the pane can't emulate (reduced motion, a real phone) goes to `docs/qa/README.md` as on-device rows.
+- Delete the untracked `byte-glb-demo.html` design demo before the final commit.
+
+Commits: `feat(pet): swappable rig + GLB rig (mixer, look, blink, materials)`, `feat(pet): load byte.glb behind the preloader gate (modelUrl, modelReady)`, `feat(pet): retime the choreography to the delivered clips`, then `docs(t-glb): record the swap-in, D-22, QA`.
 
 ---
 
