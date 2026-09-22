@@ -293,6 +293,46 @@ Docs written + committed on `feat/byte-pet-demo`: `SPEC.md`, `BRIEF.md`, `ASSET_
 
 ---
 
+## T11 — First-visit cursor messaging _(owner play-test feedback)_
+
+**Goal:** On a first visit the cursor carries exactly ONE message. Today it carries two — the `FEED`/`TOGGLE`/`OPEN` zone pill (T7, SPEC §8.7) and the `(click to enable sound)` gate hint (T7, SPEC §8.3) — stacked ~18px apart and describing the *same single click*, since the first-gesture unlock is a capture-phase `pointerdown` on `window` and a first click in the hero also feeds Byte.
+
+**Depends on:** T7.
+
+**Trigger:** Owner T6/T7 play-test feedback (recorded as pending in `PROGRESS.md`).
+
+**Files — Modify:** `src/page/hero.ts` (set/clear the root flag), `src/styles/global.css` (one suppression rule), `src/page/hero.sound.test.ts` (flag lifecycle), `docs/SPEC.md` (§8.3 + §8.7), `docs/DECISIONS.md` (D-19).
+
+**Explicitly NOT modified:** `src/lib/cursor.ts`, `src/main.ts` — the fix is a root-level CSS gate, so the cursor mechanism stays zone-blind and `main.ts`'s resolver stays the sole zone→label authority (**R7-4 preserved**, not re-litigated).
+
+**Produces:**
+
+- `.byte-sound-locked` on `document.documentElement` while audio is gated — a boolean root-state class mirroring `lib/cursor.ts`'s existing `.byte-cursor-active`, set in `initSoundControls` and cleared in `handleFirstGesture` alongside `removeGateLabel()`.
+- `global.css`: `.byte-sound-locked .byte-cursor__pill { display: none; }` — specificity (0,2,1), so it beats both `.byte-cursor__pill` (0,1,0) and the existing `.byte-cursor__pill[hidden]` (0,2,0).
+
+**Unit tests** (`hero.sound.test.ts`): the class is present on `<html>` after `initSoundControls`; removed after a first `pointerdown`; removed after a first `keydown` (keyboard-only parity, SPEC §12); and NOT set at all when the EQ button is absent (the existing early-return no-op path, so a stripped page never suppresses pills forever).
+
+**Key work:** ALL pills suppressed pre-unlock, not just `FEED` — suppressing `FEED` alone merely relocates the collision to the `OPEN` and `TOGGLE` zones (verified by enumeration: `scope=feed` yields two simultaneous cursor messages over any link and over the theme/EQ buttons) and, since CSS cannot know which label the pill holds, would force exactly the `hero.ts`→`main.ts` coupling R7-4 rejected. Touch/coarse is unaffected: `initCursor()` builds no pill DOM there, so the rule is inert, and the gate keeps its `--static` corner variant. No new deps; no `src/pet/*` change.
+
+**Out of scope (owner decision, recorded in D-19):** `createBytePet.ts`'s `(click to feed Byte)` invited hint stays as-is — it is page copy anchored under the headline, not a cursor label, so it never stacks with the gate. Note it is retired by `markHintPermanentlyDismissed()` on the *feed action*, not on being seen, so hiding it pre-unlock would permanently destroy the affordance for any visitor whose first click lands in the hero. Its post-unlock redundancy with the `FEED` pill is pre-existing and untouched.
+
+**DoD / QA:** pre-unlock, no zone pill in ANY zone (hero, link, toggle, elsewhere) while the gate hint follows the cursor; after the first gesture (pointer OR key) the gate is gone and pills resume in all zones; `tsc --noEmit` strict + lint + `format:check` + full `vitest` green; before/after visual of the hero on a fine pointer. Commit `fix(cursor): serialize the sound gate ahead of the zone pills on first visit`.
+
+**Owner-approved SPEC wording** (pin — do not re-derive):
+
+- **§8.3** (currently _"muted until first click; `(click to enable sound)` label follows cursor until then; EQ icon animates when on."_) → append after "until then": _"; the cursor's zone pills stay suppressed until that gate opens, so a first-time visitor sees exactly one cursor message."_
+- **§8.7** (currently _"custom cursor dot → labeled pills (`FEED` / `TOGGLE` / `OPEN`)"_) → qualify to _"custom cursor dot → labeled pills (`FEED` / `TOGGLE` / `OPEN`, post-unlock only — see §8.3)"_.
+
+**Handoff notes (no owner input required to execute):**
+
+- `npm install` has already been run in this worktree (clean, 0 vulnerabilities). Node via mise: `mise exec node@22 -- <cmd>`.
+- The class goes in **after** `initSoundControls`'s `if (!button) return` guard — a page with no EQ button must never suppress pills (that's the 4th unit test).
+- `D-19` is the next DECISIONS number (D-18 is the current head). Record the shipped test count in it, per the D-15/D-17/D-18 pattern.
+- Execution: this is small enough to implement directly; the `subagent-driven-development` expansion `BRIEF.md` prescribes for T7-sized tickets would cost more coordination than the change contains.
+- Suggested commits: `docs(t11): ticket for first-visit cursor messaging`, then the `fix(cursor): …` above carrying code + tests + D-19 + the SPEC amendments.
+
+---
+
 ## T12 — Scroll bounds: stage clip, containment & hand-off fade  ✅ DONE
 
 > **Renumbered on merge (2026-09-22).** Built and committed as **T11 / D-19 / R11-\*** on branch `lc/byte-pet-scroll-bounds-25b3c2`, in parallel with first-visit cursor messaging, which landed first under those numbers. Commit subjects and the `.superpowers/sdd/t11-plan/` audit trail keep the old label; everything else says **T12 / D-21 / R12-\***.
@@ -379,7 +419,7 @@ Commits: `feat(pet): bound Byte to hero/footer stages via scissor clip + hand-of
 
 ## Self-review (against SPEC)
 
-- **Coverage:** SPEC §4 → T3/T4/T-GLB; §5 → T4/T-GLB (ASSET_SPEC); §6 states → T4/T5/T6/T8; §7 lab → T2/T7/T8; §8 page → T1/T2/T6/T7; §9 sound → T7/T-Audio; §10 copy → T2/T6; §11 theming → T1/T8; §12 a11y/reduced-motion → T9 (+ per-ticket); §13 budgets → Global + T10; §14 stack → T1; §15 testing → per-ticket + T9/T10. No uncovered section.
+- **Coverage:** SPEC §4 → T3/T4/T-GLB; §5 → T4/T-GLB (ASSET_SPEC); §6 states → T4/T5/T6/T8; §7 lab → T2/T7/T8; §8 page → T1/T2/T6/T7/T11; §9 sound → T7/T-Audio; §10 copy → T2/T6; §11 theming → T1/T8; §12 a11y/reduced-motion → T9 (+ per-ticket); §13 budgets → Global + T10; §14 stack → T1; §15 testing → per-ticket + T9/T10. No uncovered section.
 - **Type consistency:** `ClipName`, `PetRig`, `SoundEngine`/`Cue`, `RetypeFrame`, `PhraseSet` are defined once (T3/T4/T6/T7) and reused by name downstream.
 - **No vague steps:** each ticket names real files, real signatures, real test targets, and a concrete DoD; bite-sized code steps are produced per ticket at execution.
 
