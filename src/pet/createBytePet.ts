@@ -322,20 +322,19 @@ function lastLineTextRect(el: HTMLElement): DOMRect {
 /**
  * The `<section>`/`<footer>` ancestor `el` lives in — the DOM home whose box
  * `stageFromSection` (stage.ts, T12 Task 1) carves a `StageRect` out of.
- * `closest('section, footer')`, NOT the bare `closest('section')` the
- * existing `feedZone` lookup (below, inside `createBytePet`) uses — that one
- * is a SEPARATE lookup, owned by a different task and left untouched here;
- * it happens to work because it only ever sees the hero headline. This one
- * must resolve BOTH homes: `index.html` nests `<div id="app"> > <main
+ * `closest('section, footer')`, NOT a bare `closest('section')`: this must
+ * resolve BOTH homes, and `index.html` nests `<div id="app"> > <main
  * id="main"> > <section id="hero">`, so `closest('section')` finds the hero
  * fine, but `<footer id="footer">` is a SIBLING of `<main>`, not inside it,
  * and it is a `<footer>` TAG whose `class="section footer"` is only a CSS
  * class — from the footer headline, the bare `closest('section')` would
  * match nothing on the way up and silently return `null`, losing the footer
- * stage entirely. Selecting on TAG names (never a page class) also keeps
- * `pet/` portable. Falls back to the element's own parent, then the element
- * itself, mirroring `feedZone`'s own fallback chain — defensive; a real page
- * always has one.
+ * stage entirely. The feed zone (`feedZoneFor`, `feedZone.ts`, D-20) solves
+ * the same trap separately with a wider list of region tags; on this page
+ * both lookups resolve the same two homes. Selecting on TAG names (never a
+ * page class) also keeps `pet/` portable. Falls back to the element's own
+ * parent, then the element itself, mirroring `feedZoneFor`'s fallback chain
+ * — defensive; a real page always has one.
  */
 function stageSectionOf(el: HTMLElement): HTMLElement {
   return el.closest<HTMLElement>('section, footer') ?? el.parentElement ?? el;
