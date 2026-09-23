@@ -35,10 +35,16 @@ import { createFeeder } from './feed';
 import { feedZoneFor } from './feedZone';
 import { startTicker } from './motion';
 import { createBlobShadow } from './shadow';
-import { bodyColorForTheme, createScene, DEFAULT_GLOW_ACCENT } from './scene';
+import {
+  bodyColorForTheme,
+  clampFeetToStage as clampFeetToStagePure,
+  createScene,
+  DEFAULT_GLOW_ACCENT,
+} from './scene';
 import { createRetype, renderRetype } from './retype';
 import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
+import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
 import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
 
@@ -255,6 +261,33 @@ const THEME_STRETCH_UP_DURATION_S = 0.14;
 const THEME_STRETCH_DOWN_DURATION_S = 0.21;
 
 /**
+ * T12 (TICKETS "Scroll bounds: stage clip, containment & hand-off fade") —
+ * builds on T8's hero/footer home model above. Every `onTick` measures each
+ * home's own `<section>`/`<footer>` box + its tagged furniture and derives a
+ * `StageRect` (`stage.ts`'s pure `stageFromSection`, Task 1) that Byte's
+ * wander/hard-pin is clamped into (`STAGE_CLAMP_PAD_PX` below) and that the
+ * scene's WebGL scissor clips to (`SceneHandle.setStage`, Task 2) — so Byte
+ * and everything the pet module draws stay inside whichever section it's
+ * currently homed in, at any scroll position, in either theme (stage
+ * geometry doesn't change with theme — only colour tokens do). The fade
+ * across a hand-off (`STAGE_FADE_DURATION_S` below) is driven off the FSM's
+ * `traveling` state via `fsm.onEnter` (`fadeStageOpacity`, declared just
+ * above `dispatch`) — `fsm.ts` itself is untouched by this ticket.
+ */
+/** Inset (screen px) `clampToStage` keeps between Byte's `unitPx`-square body
+ *  and the active stage's own edges — enough breathing room that Byte never
+ *  visually touches the section boundary or a furniture element it was
+ *  carved around, small enough to stay unnoticeable on the roomy hero stage.
+ *  A small FIXED px gap, not `unitPx`-scaled — same spirit as `HINT_GAP_PX`. */
+const STAGE_CLAMP_PAD_PX = 12;
+/** Hand-off fade (R12-5) duration for BOTH legs (out on entering `traveling`,
+ *  back in on leaving it). Quick, so reduced motion's one-tick `traveling`
+ *  span (`runMigrationReduced` sends MIGRATE then ARRIVED the next tick)
+ *  still reads as a brief dip rather than a fade visibly stuck mid-flight —
+ *  same spirit as `REACQUIRE_DURATION_S`. */
+const STAGE_FADE_DURATION_S = 0.3;
+
+/**
  * Tight bounding rect of the LAST rendered line of text inside `el`, via a
  * `Range` over its last non-empty text node — deliberately NOT
  * `el.getBoundingClientRect()`. This project's `.hero__line` spans are
@@ -284,6 +317,44 @@ function lastLineTextRect(el: HTMLElement): DOMRect {
   const range = document.createRange();
   range.selectNodeContents(lastNode);
   return range.getBoundingClientRect();
+}
+
+/**
+ * The `<section>`/`<footer>` ancestor `el` lives in — the DOM home whose box
+ * `stageFromSection` (stage.ts, T12 Task 1) carves a `StageRect` out of.
+ * `closest('section, footer')`, NOT a bare `closest('section')`: this must
+ * resolve BOTH homes, and `index.html` nests `<div id="app"> > <main
+ * id="main"> > <section id="hero">`, so `closest('section')` finds the hero
+ * fine, but `<footer id="footer">` is a SIBLING of `<main>`, not inside it,
+ * and it is a `<footer>` TAG whose `class="section footer"` is only a CSS
+ * class — from the footer headline, the bare `closest('section')` would
+ * match nothing on the way up and silently return `null`, losing the footer
+ * stage entirely. The feed zone (`feedZoneFor`, `feedZone.ts`, D-20) solves
+ * the same trap separately with a wider list of region tags; on this page
+ * both lookups resolve the same two homes. Selecting on TAG names (never a
+ * page class) also keeps `pet/` portable. Falls back to the element's own
+ * parent, then the element itself, mirroring `feedZoneFor`'s fallback chain
+ * — defensive; a real page always has one.
+ */
+function stageSectionOf(el: HTMLElement): HTMLElement {
+  return el.closest<HTMLElement>('section, footer') ?? el.parentElement ?? el;
+}
+
+/**
+ * Live furniture rects inside `section` — every element tagged
+ * `data-byte-furniture` in `index.html` (the hero's scroll cue; the footer's
+ * meta row + copyright line), scoped to `section` so the hero's own
+ * furniture is never read against the footer's stage or vice versa. An
+ * ATTRIBUTE query, never a page CSS class — matches the `data-byte-line`/
+ * `data-byte-caret`/`data-feed-byte` idiom elsewhere in this module and
+ * keeps `pet/` portable. Queried fresh on every call: the SET of tagged
+ * elements is static, but each one's OWN rect moves with scroll/reflow,
+ * same reasoning as `lastLineTextRect`'s own "never snapshot" doc comment.
+ */
+function furnitureRectsOf(section: HTMLElement): DOMRect[] {
+  return Array.from(section.querySelectorAll<HTMLElement>('[data-byte-furniture]')).map((el) =>
+    el.getBoundingClientRect(),
+  );
 }
 
 /**
@@ -497,6 +568,18 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     opts.footerEl && opts.footerPhrases ? buildHome(opts.footerEl, opts.footerPhrases) : null;
   let activeHome: Home = heroHome;
 
+  // --- T12 stage geometry (R12-6/R12-7): each home's own bounded stage -----
+  // `heroSection`/`footerSection` are resolved ONCE here — the DOM ancestor
+  // relationship never changes at runtime — via the portable `stageSectionOf`
+  // lookup above; `onTick` (below) re-measures their (and their furniture's)
+  // LIVE rects every tick and rebuilds fresh `StageRect`s from them
+  // (`stageFromSection`) — see `onTick`'s own read-batch comment for why the
+  // MEASURING happens there rather than here. `footerSection` is `null`
+  // exactly when there is no footer home at all, mirroring `footerHome`'s
+  // own optionality.
+  const heroSection = stageSectionOf(heroHome.el);
+  const footerSection = footerHome ? stageSectionOf(footerHome.el) : null;
+
   /**
    * The LIVE caret node for `home`. That home's SplitText line-reveal (+ its
    * revert) can REPLACE its children with clones that keep the `data-byte-*`
@@ -654,6 +737,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   /** T8 "theme reaction" — the full-height squash-and-stretch pulse (`playThemeStretch`,
    *  below). Named for the same kill-before-restart reason as `themeLerpTween`. */
   let themeStretchTween: ReturnType<typeof gsap.timeline> | null = null;
+  /** T12 hand-off fade (R12-5) — persists the CURRENT opacity across kills: a
+   *  `gsap.to(stageOpacity, {...})` tween always starts from `stageOpacity.v`'s
+   *  live value, so `fadeStageOpacity` (declared just above `dispatch`,
+   *  mirroring `playHappySpin`'s own placement) killing an in-flight fade and
+   *  starting the reverse leg resumes smoothly from wherever the outgoing one
+   *  had reached — never a snap to 1 or 0 first. `stageFadeTween` is a named
+   *  slot (not just `liveTweens` membership), same kill-before-restart reason
+   *  as `themeLerpTween`/`themeStretchTween` above. */
+  const stageOpacity = { v: 1 };
+  let stageFadeTween: ReturnType<typeof gsap.to> | null = null;
   // Per-frame Byte→caret follow (T6): `quickTo` so the per-tick target update
   // during a retype reuses ONE tween per axis instead of spawning a fresh
   // tween each frame (CLAUDE.md GSAP conventions). Created once here; drives
@@ -1341,6 +1434,35 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     );
   }
 
+  // --- T12 hand-off fade (R12-5) ---------------------------------------------
+  /**
+   * Tweens the shared `stageOpacity` scalar to `target` (1 = fully shown, 0 =
+   * fully hidden) over `STAGE_FADE_DURATION_S`, writing `scene.setOpacity`
+   * (Task 2 — sets CSS `opacity` on BOTH canvases) on every frame of the
+   * tween via `onUpdate`; no tween lives inside `scene.ts` itself (see its
+   * own `setOpacity` doc comment). Subscribed below to the FSM's `traveling`
+   * entry/exit — see that `fsm.onEnter` call for why those two edges are the
+   * fade's only triggers. Kill-before-restart (`killTracked`) so a rapid
+   * reversal (e.g. a feed-while-traveling re-entry, `prev === 'eating'` in
+   * `dispatch` above, or reduced motion's own one-tick `traveling` span —
+   * see the T12 tunables' doc comment) never leaves two tweens racing to
+   * write the same `stageOpacity.v`.
+   */
+  function fadeStageOpacity(target: number): void {
+    stageFadeTween = killTracked(stageFadeTween);
+    stageFadeTween = track(
+      gsap.to(stageOpacity, {
+        v: target,
+        duration: STAGE_FADE_DURATION_S,
+        ease: 'power1.inOut',
+        onUpdate: () => scene.setOpacity(stageOpacity.v),
+        onComplete: () => {
+          stageFadeTween = null;
+        },
+      }),
+    );
+  }
+
   // --- FSM → choreography dispatch (brief 4d, "the idle brain") -------------------
   function dispatch(state: PetState, prev: PetState): void {
     // A prior onEnter listener may have caused a NESTED transition mid-loop (e.g. the
@@ -1501,6 +1623,38 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (next === 'idle' && prev === 'entering') {
       entranceResolve?.();
       entranceResolve = null;
+    }
+  });
+
+  // T12 hand-off fade (R12-5): `traveling` is entered/left ONLY across a
+  // hero<->footer hand-off (`runMigrationFull`/`runMigrationReduced`, below,
+  // are the sole callers of `fsm.send('MIGRATE')`/`'ARRIVED'`), so this
+  // fires exactly across a hand-off, and `stageOpacity` sits at 1 (full
+  // opacity) whenever Byte is homed or mid-dash/eat — it only ever leaves 1
+  // while `traveling`. Reduced motion's `traveling` lasts about one tick
+  // (`runMigrationReduced` sends MIGRATE then ARRIVED next tick): the
+  // out-tween this starts is immediately superseded by the in-tween a tick
+  // later (`fadeStageOpacity`'s own kill-before-restart), producing a brief
+  // dip rather than a full fade — intentional (brief), not special-cased;
+  // the guaranteed end state is still opacity 1.
+  //
+  // NOT a containment mechanism (fix round 1 correction): a mid-trip feed
+  // sends `traveling --FEED--> dashing` (fsm.ts), which is a `prev ===
+  // 'traveling'` edge — opacity fades straight back to 1 for the whole
+  // dash+eat, potentially seconds, while `activeHome`/`activeStage` (above,
+  // in `onTick`) are STILL the pre-arrival home (`setHomeAnchor` only runs
+  // in the migration drivers' own `arrived` branch). So this fade is purely
+  // a cosmetic smoothing device for the hand-off, never load-bearing for
+  // containment — the WebGL scissor clip (`scene.setStage`, fed
+  // unconditionally every tick above, independent of this fade's current
+  // opacity or of FSM state) is what actually guarantees Byte can never
+  // paint outside a real section's stage. Do not remove the clip on the
+  // assumption this fade already covers it.
+  fsm.onEnter((next, prev) => {
+    if (next === 'traveling') {
+      fadeStageOpacity(0);
+    } else if (prev === 'traveling') {
+      fadeStageOpacity(1);
     }
   });
 
@@ -1789,6 +1943,33 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     wasActiveInBand = activeInBand;
   }
 
+  /**
+   * T12 containment (R12-7) — thin wrapper. The actual math (world<->screen
+   * + feet<->centre round trip through `clampToStage`) is `scene.ts`'s pure,
+   * exported `clampFeetToStage` (Task 3 fix round 1: extracted so the
+   * highest-risk arithmetic in this ticket has unit coverage — see
+   * `scene.test.ts` — mirroring how `scissorFromStage` was extracted for
+   * the same reason in Task 2's own fix round). This wrapper's only job is
+   * supplying the two live values the pure function can't know about
+   * itself: `unitPx` (this instance's own size measure) and the CURRENT
+   * viewport — mirrors how `scene.ts`'s own `worldFromScreenAtViewport`
+   * wraps `worldFromScreen` with the live viewport.
+   *
+   * Called only from the steady-state hard-pin and the no-snap reacquire
+   * target (`onTick`, below) — never from the migration lane
+   * (`byteToLaneX/Y`) or the dash/eat/retype/entrance root writers, which
+   * the brief does not require this to cover.
+   */
+  function clampFeetToStage(feetWorldX: number, feetWorldY: number, stage: StageRect): Point {
+    return clampFeetToStagePure(
+      { x: feetWorldX, y: feetWorldY },
+      unitPx,
+      stage,
+      { width: window.innerWidth, height: window.innerHeight },
+      STAGE_CLAMP_PAD_PX,
+    );
+  }
+
   // --- Per-tick update (brief 4b) -----------------------------------------------------
   function onTick(dt: number): void {
     // Free-running retype clock — ALWAYS advanced (independent of state) so
@@ -1819,6 +2000,48 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const anchorY = lineRect.top + lineRect.height / 2;
     const anchorWorld = scene.worldFromScreen(anchorX, anchorY);
     cursorWorld = scene.worldFromScreen(cursorScreen.x, cursorScreen.y);
+
+    // T12 stage measurement (R12-6/R12-7, pre-flight finding 6): batched
+    // here with `lineRect` above — BOTH sections' + their furniture's LIVE
+    // `getBoundingClientRect()`s, read together before ANY write this tick
+    // (`hintEl.style.transform` and the caret transform, further down, are
+    // the first ones) so this never interleaves a read between two writes
+    // and forces a synchronous layout recalc (layout thrashing) in this
+    // 60fps loop. `stageFromSection` (stage.ts, Task 1) carves each
+    // section's own box down to clear its tagged furniture — NOT yet
+    // clipped to the viewport, which only matters for the scissor feed
+    // just below (`intersectViewport`); the containment clamp further down
+    // uses this section-relative box directly, since Byte should stay
+    // inside its home's content area regardless of what's currently
+    // scrolled on screen.
+    const heroStage = stageFromSection(
+      heroSection.getBoundingClientRect(),
+      furnitureRectsOf(heroSection),
+    );
+    const footerStage = footerSection
+      ? stageFromSection(footerSection.getBoundingClientRect(), furnitureRectsOf(footerSection))
+      : null;
+    // Mirrors `activeHome`'s own hero/footer switch exactly — a hand-off
+    // switches the stage exactly when `setHomeAnchor` switches the home, no
+    // new state machine needed. `footerStage` is only possibly `null` when
+    // there is no footer home at all, in which case `activeHome` can never
+    // legally BE `footerHome` (`setHomeAnchor`'s own guard, above) — the
+    // `&& footerStage` conjunct exists purely so TypeScript can see that,
+    // narrowing `footerStage` to non-null in the branch that reads it. It's
+    // never a real runtime fallback: `heroStage` is only reached here as an
+    // (unreachable-in-practice) type-safe default, not a masked bug.
+    const activeStage: StageRect =
+      activeHome === footerHome && footerStage ? footerStage : heroStage;
+
+    // Feed the scene's WebGL scissor clip (Task 2) with the active stage
+    // intersected against the CURRENT viewport — `intersectViewport`
+    // returns `null` when the stage doesn't overlap the viewport at all,
+    // which is `SceneHandle.setStage`'s render-skip signal (R12-3): the
+    // next render clears both canvases instead of drawing Byte outside its
+    // stage or freezing a stale frame on screen.
+    scene.setStage(
+      intersectViewport(activeStage, { width: window.innerWidth, height: window.innerHeight }),
+    );
 
     // Edge-triggered (brief 4c), NOT sent unconditionally every tick: the
     // FSM's `peeking` case resets its sleep accumulator on POINTER_NEAR/FAR
@@ -1859,8 +2082,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // while `dashing`/`eating`, the feeder (`feed.ts`) owns
     // `rig.object3d.position` (toss-dash + eat convergence), and pinning it
     // here too every tick would fight that tween for the same property.
-    const rootX = anchorWorld.x + drift.x;
-    const rootY = anchorWorld.y - unitPx / 2;
+    const wanderRootX = anchorWorld.x + drift.x;
+    const wanderRootY = anchorWorld.y - unitPx / 2;
+    // T12 containment (R12-7): clamp the proposed feet position into the
+    // active stage (measured above) before either home writer below ever
+    // applies it — see `clampFeetToStage`'s own doc comment for the centre/
+    // feet + world/screen round trip. Covers BOTH the steady-state hard-pin
+    // and the no-snap reacquire target (next block), since both consume
+    // `rootX`/`rootY` below, so a wander/reacquire can never land Byte
+    // outside its home stage, even transiently.
+    const { x: rootX, y: rootY } = clampFeetToStage(wanderRootX, wanderRootY, activeStage);
     const home = HOME_STATES.has(fsm.state());
 
     if (home && !wasHome) {
@@ -2232,6 +2463,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     sparkTween = null;
     themeLerpTween = null;
     themeStretchTween = null;
+    stageFadeTween = null;
     // Drop any in-flight entrance resolver (the drop-in tween itself is in
     // `liveTweens`, already killed by the bulk kill above). A destroy mid-
     // entrance leaves the `enterAndType()` Promise unresolved — intentional:
@@ -2242,6 +2474,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // `liveTweens`, so kill them explicitly here (one call: both target the
     // same `rig.object3d.position` object).
     gsap.killTweensOf(rig.object3d.position);
+
+    // T12 hand-off fade: leave the canvases fully opaque on teardown,
+    // regardless of where an in-flight fade (already killed above via the
+    // bulk `liveTweens` sweep) had reached.
+    scene.setOpacity(1);
 
     mm.revert();
 

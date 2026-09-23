@@ -14,6 +14,7 @@
  */
 import gsap from 'gsap';
 import * as THREE from 'three';
+import { clampToStage, type Point, type Size, type StageRect } from './stage';
 import type { SceneHandle, SceneOptions } from './types';
 
 /** Vertical field of view (degrees) for the shared perspective camera. */
@@ -53,6 +54,103 @@ export function screenFromWorld(
   h: number,
 ): { x: number; y: number } {
   return { x: x + w / 2, y: h / 2 - y };
+}
+
+/**
+ * T12 (Task 2, R12-1): converts a `StageRect` (screen px, DOM top-left
+ * origin — `stage.ts`'s coordinate convention) into the box
+ * `WebGLRenderer.setScissor`/`prepareRenderer` below expect: CSS px, GL's
+ * bottom-left origin. Only `y` needs to change — DOM `x` already grows
+ * rightward same as GL `x`, and a rect's `width`/`height` don't depend on
+ * which corner is the origin — so the flip is `viewportHeight - (stage.y +
+ * stage.height)`: the distance from the viewport's bottom edge up to the
+ * stage's own bottom edge becomes the new box's distance up from GL's
+ * bottom-left origin.
+ *
+ * Returns CSS px, NOT device px — three multiplies by the renderer's own
+ * pixel ratio internally (three@0.185.1,
+ * `node_modules/three/build/three.cjs:76805`: `setScissor` stores the rect
+ * then calls `.multiplyScalar(_pixelRatio)` before handing it to GL).
+ * Pre-multiplying by devicePixelRatio before calling `setScissor` would
+ * double-apply the ratio and clip to a quarter-size box on any retina
+ * display — do not "fix" this back.
+ */
+export function scissorFromStage(
+  stage: StageRect,
+  viewportHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: stage.x,
+    y: viewportHeight - (stage.y + stage.height),
+    width: stage.width,
+    height: stage.height,
+  };
+}
+
+/**
+ * T12 containment (R12-7; Task 3 fix round 1 — "the highest-risk math was
+ * not extracted as a pure, testable helper"). Clamps a proposed FEET
+ * position (world px — `createBytePet.ts`'s own `rootX`/`rootY`, i.e.
+ * `anchorWorld.x + drift.x`, `anchorWorld.y - unitPx / 2`) into `stage` and
+ * returns the clamped FEET position, also in world px. Pure — composed
+ * entirely of already-pure pieces (`screenFromWorld`/`worldFromScreen`
+ * above, `clampToStage` from `stage.ts`), with `unitPx`/`viewport` taken as
+ * plain parameters rather than read from `window` or a caller's closure —
+ * the same shape as `scissorFromStage` above, so both can be exercised the
+ * same way in `scene.test.ts`, asserting exact numbers.
+ *
+ * Two conversions make this a round trip through `clampToStage`, which
+ * works in SCREEN px on the box CENTRE:
+ *  - world <-> screen: `screenFromWorld` going in, `worldFromScreen` coming
+ *    back — both defined just above;
+ *  - feet <-> centre: world-y grows UP, and a FEET position sits
+ *    `unitPx / 2` BELOW its box's own centre (`createBytePet.ts` places
+ *    Byte's feet at `anchorWorld.y - unitPx / 2`, where `anchorWorld.y` IS
+ *    the box's vertical centre by construction — see that module's own
+ *    root-placement comment), so centre = feet + `unitPx / 2` going in, and
+ *    the inverse coming back.
+ * Byte's body is treated as `unitPx` square (the only live size measure
+ * `createBytePet.ts` keeps for the placeholder rig), so that same value
+ * sizes BOTH the box `clampToStage` fits and the feet/centre offset above.
+ *
+ * `createBytePet.ts` wraps this with its own live `unitPx` and
+ * `window.innerWidth`/`innerHeight` — mirrors how `worldFromScreenAtViewport`
+ * (below) wraps `worldFromScreen` — see that module's own (now-thin)
+ * `clampFeetToStage` wrapper.
+ *
+ * NOTE on containment: this function bounds Byte's *wander*, not the
+ * page's containment guarantee. That guarantee is the WebGL scissor clip
+ * (`scissorFromStage` above, driven by `SceneHandle.setStage`) — it is fed
+ * `activeStage` unconditionally, every tick, regardless of FSM state or the
+ * hand-off fade's current opacity, so nothing this module draws can ever
+ * paint outside a real section's stage. This function is a *second*,
+ * independent safeguard (keeps Byte's own root visually inside the stage
+ * rather than merely invisible-because-clipped at its edge) — removing it
+ * would look wrong, but would not by itself let Byte paint over another
+ * section.
+ */
+export function clampFeetToStage(
+  feet: Point,
+  unitPx: number,
+  stage: StageRect,
+  viewport: Size,
+  pad: number,
+): Point {
+  const centreWorldY = feet.y + unitPx / 2;
+  const centreScreen = screenFromWorld(feet.x, centreWorldY, viewport.width, viewport.height);
+  const clampedCentreScreen = clampToStage(
+    centreScreen,
+    { width: unitPx, height: unitPx },
+    stage,
+    pad,
+  );
+  const clampedCentreWorld = worldFromScreen(
+    clampedCentreScreen.x,
+    clampedCentreScreen.y,
+    viewport.width,
+    viewport.height,
+  );
+  return { x: clampedCentreWorld.x, y: clampedCentreWorld.y - unitPx / 2 };
 }
 
 /**
@@ -259,6 +357,11 @@ function getOrCreateCanvas(id: string, mount: HTMLElement, zIndex: number): HTML
   canvas.style.inset = '0';
   canvas.style.zIndex = String(zIndex);
   canvas.style.pointerEvents = 'none';
+  // Reset on every reuse, not just at creation: T12's hand-off fade (`setOpacity`,
+  // below) writes this property on both canvases, so a canvas recycled by a second
+  // `createScene()` call must not inherit whatever opacity a prior instance's
+  // in-flight fade left behind.
+  canvas.style.opacity = '1';
   canvas.setAttribute('aria-hidden', 'true');
   if (canvas.parentElement !== mount) {
     mount.appendChild(canvas);
@@ -491,12 +594,73 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Render loop --------------------------------------------------------
   const tickCallbacks: Array<(dt: number) => void> = [];
 
+  // T12 stage clip (R12-4). Tri-state: `undefined` until the first
+  // `setStage()` call — renders unclipped, byte-identical to pre-T12
+  // behaviour; `null` once set means no stage is on screen anywhere
+  // (render-skip, R12-3); a `StageRect` is the active hero/footer stage
+  // both renderers scissor-clip to. `createBytePet`'s `onTick` callback is
+  // what calls `setStage()` each frame, and `render(dt)` below runs tick
+  // callbacks before `renderBack()`/`renderFront()`, so `stage` is always
+  // current for the frame by the time those two read it.
+  let stage: StageRect | null | undefined = undefined;
+
+  /**
+   * T12 scissor clip + render-skip (R12-1/R12-2/R12-3), shared by
+   * `renderFront()`/`renderBack()` so both canvases always agree on
+   * whether — and where — to draw. Returns whether the caller should still
+   * call `renderer.render(scene, camera)` this frame.
+   *
+   * Every branch clears `renderer` first, with the scissor test forced
+   * OFF: `clear()` is itself subject to the scissor test (WebGL spec), and
+   * the scissor-test flag is NOT reset per render — three.js restores
+   * whatever `setScissorTest()` last set on every `render()` call — so
+   * leaving a prior frame's scissor box enabled here would clear only
+   * inside that box and strand last frame's pixels outside it: a stale
+   * hero-region Byte ghosting on screen once the active stage moves to the
+   * footer.
+   *
+   * `stage === null` clears and returns `false` (R12-3) rather than
+   * skipping the clear too — an un-cleared skip would leave the compositor
+   * showing the last presented frame, freezing Byte mid-page, which is the
+   * exact bug T12 exists to fix.
+   */
+  function prepareRenderer(renderer: THREE.WebGLRenderer): boolean {
+    renderer.setScissorTest(false);
+    renderer.clear();
+
+    if (stage === null) {
+      return false;
+    }
+    if (stage === undefined) {
+      return true;
+    }
+
+    // CSS px, matching `applyViewport`'s `setSize` — see `scissorFromStage`
+    // for why (it takes/returns CSS px throughout, on purpose).
+    const { x, y, width, height } = scissorFromStage(stage, window.innerHeight);
+    renderer.setScissor(x, y, width, height);
+    renderer.setScissorTest(true);
+    return true;
+  }
+
+  /** T12 stage clip setter (Task 2) — see `SceneHandle.setStage`'s doc comment in `types.ts`
+   *  for the tri-state contract; this just records it for `prepareRenderer()` to read. */
+  function setStage(rect: StageRect | null): void {
+    stage = rect;
+  }
+
   function renderFront(): void {
+    if (!prepareRenderer(frontRenderer)) {
+      return;
+    }
     camera.layers.set(FRONT_RENDER_LAYER);
     frontRenderer.render(scene, camera);
   }
 
   function renderBack(): void {
+    if (!prepareRenderer(backRenderer)) {
+      return;
+    }
     camera.layers.set(BACK_RENDER_LAYER);
     backRenderer.render(scene, camera);
   }
@@ -511,6 +675,14 @@ export function createScene(opts: SceneOptions): SceneHandle {
 
   function onTick(cb: (dt: number) => void): void {
     tickCallbacks.push(cb);
+  }
+
+  /** T12 hero/footer hand-off fade (Task 2, R12-5): sets CSS `opacity` directly on both
+   *  canvas elements. No tween lives here — `createBytePet`'s migration driver owns the
+   *  GSAP tween across a hero/footer trip and calls this setter on every tick of it. */
+  function setOpacity(a: number): void {
+    backCanvas.style.opacity = String(a);
+    frontCanvas.style.opacity = String(a);
   }
 
   // --- Pixel-space helpers -------------------------------------------------
@@ -531,6 +703,14 @@ export function createScene(opts: SceneOptions): SceneHandle {
   // --- Teardown ------------------------------------------------------------
   function dispose(): void {
     window.removeEventListener('resize', resize);
+
+    // T12: `setScissorTest`'s flag is plain renderer state, not tied to the
+    // GL context lifecycle, so reset it (and this module's own `stage`)
+    // explicitly for a clean teardown — mirrors nulling `themeTween` and
+    // zeroing `tickCallbacks.length` below.
+    backRenderer.setScissorTest(false);
+    frontRenderer.setScissorTest(false);
+    stage = undefined;
 
     themeTween?.kill();
     themeTween = null;
@@ -558,6 +738,8 @@ export function createScene(opts: SceneOptions): SceneHandle {
     render,
     onTick,
     setBehind,
+    setStage,
+    setOpacity,
     addToPet,
     addToFront,
     setTheme,
