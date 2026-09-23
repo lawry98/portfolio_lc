@@ -82,7 +82,7 @@ function placeholderRig(): {
   rig: ReturnType<typeof createPetRig>;
   clipPose: THREE.Object3D;
 } {
-  const source = createPlaceholderBot({ unitPx: 1, theme: 'light' });
+  const source = createPlaceholderBot({ theme: 'light' });
   const rig = createPetRig(source);
   const clipPose = source.scene.getObjectByName(POSE_GROUP_NAME);
   if (!clipPose) {

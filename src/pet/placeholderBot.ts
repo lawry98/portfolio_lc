@@ -13,10 +13,10 @@
  * **Sizing:** every mesh below is authored in a normalized space where the
  * bot's total height (feet at y=0 to the antenna tip) is ~1 unit — see the
  * "Total height sanity check" comment near the bottom of the proportion
- * consts. The returned root is then scaled by `unitPx` as a whole
- * (`root.scale.setScalar(unitPx)`), so the bot's rendered height ends up
- * ≈ `unitPx` world px (== CSS px, per `scene.ts`'s convention) regardless of
- * the live headline font-size passed in.
+ * consts. T-GLB (R-GLB-7): the returned root stays at unit scale.
+ * `createBytePet` scales the swappable rig's root (`swapRig.ts`) by `unitPx`
+ * instead, so the placeholder and the GLB (also one unit tall, `glbRig.ts`)
+ * share one size seam.
  *
  * **Root vs. "pose" split:** every visible part nests under an internal
  * `POSE_GROUP_NAME` group, itself the sole child of the returned root
@@ -120,14 +120,14 @@ const GLOW_BASE_COLOR = 0x1c1b22;
 /**
  * Builds Byte's procedural placeholder body: a chunky `RoundedBoxGeometry`
  * body + head, a thin cylinder-and-sphere antenna, and a single wide
- * eye/visor, under one root `THREE.Group` (`name = 'byte-placeholder'`)
- * sized so the bot's height ≈ `unitPx` (brief 3a; SPEC §4.2). Returns the
- * `RigSource` shape (Task 1, `types.ts`) `rig.ts` (3b) adapts into a
- * `PetRig`. `clips` is always `{}` — the placeholder has no baked
+ * eye/visor, under one root `THREE.Group` (`name = 'byte-placeholder'`),
+ * one unit tall (the swappable rig above it applies `unitPx`, T-GLB).
+ * Returns the `RigSource` shape (Task 1, `types.ts`) `rig.ts` (3b) adapts
+ * into a `PetRig`. `clips` is always `{}` — the placeholder has no baked
  * `THREE.AnimationClip`s; `rig.ts` fakes every clip with GSAP instead.
  */
-export function createPlaceholderBot(opts: { unitPx: number; theme: 'light' | 'dark' }): RigSource {
-  const { unitPx, theme } = opts;
+export function createPlaceholderBot(opts: { theme: 'light' | 'dark' }): RigSource {
+  const { theme } = opts;
 
   // "Body" — the bulk of the robot (ASSET_SPEC §4). One shared material
   // instance across body/head/antenna so `rig.setBodyColor()` recolors the
@@ -211,7 +211,6 @@ export function createPlaceholderBot(opts: { unitPx: number; theme: 'light' | 'd
   const root = new THREE.Group();
   root.name = 'byte-placeholder';
   root.add(pose);
-  root.scale.setScalar(unitPx);
 
   return {
     scene: root,
