@@ -219,6 +219,8 @@ export function createPlaceholderBot(opts: { unitPx: number; theme: 'light' | 'd
     glow: glowMaterial,
     eye,
     mouth,
+    // T-GLB: every material this bot owns — what `rig.setOpacity` fades.
+    materials: [bodyMaterial, glowMaterial],
     clips: {},
   };
 }

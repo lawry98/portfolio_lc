@@ -117,6 +117,17 @@ export interface RigSource {
   glow?: THREE.MeshStandardMaterial;
   eye?: THREE.Object3D;
   mouth?: THREE.Object3D;
+  /**
+   * T-GLB: the model's two eye meshes, `EyeL` then `EyeR` (only those
+   * present) — the GLB rig slides them for the look and squashes them for
+   * the blink. The placeholder has a single visor (`eye`) instead and leaves
+   * this unset.
+   */
+  eyes?: THREE.Object3D[];
+  /** T-GLB: the `Torso` bone — its lift above its rest height is the GLB rig's hover (shadow) signal. */
+  torso?: THREE.Object3D;
+  /** T-GLB: every distinct material the source owns (`Body`, `Glow`, `Visor`, …) — what `setOpacity` fades. */
+  materials?: THREE.Material[];
   clips: Partial<Record<ClipName, THREE.AnimationClip>>;
 }
 
@@ -188,7 +199,9 @@ export interface PetFSM {
   tickTimers(dtMs: number): void;
 }
 
-/** Optional per-clip playback options for the rig (Task 3 implements; defined here so the shape is shared). */
+/** Optional per-clip playback options for the rig (Task 3 implements; defined here so the shape is shared).
+ *  `loop` forces a one-shot clip to repeat; `onComplete` fires when a one-shot finishes. It never
+ *  fires for a looping clip or for one interrupted by another `play()` or a swap. */
 export interface ClipPlayOptions {
   loop?: boolean;
   onComplete?: () => void;
@@ -295,14 +308,29 @@ export interface BytePetHandle {
 export interface PetRig {
   /** Byte's root node — createBytePet adds this to scene.petLayer via scene.addToPet(). */
   readonly object3d: THREE.Object3D;
+  /** T-GLB (R-GLB-6): a unit group directly inside `object3d` that the rig itself never animates.
+   *  Consumers own its scale/position (the entrance drop-in, the reduced-motion peek rise, the swap
+   *  pop). The swappable rig's `pose` is stable across swaps. */
+  readonly pose: THREE.Object3D;
   /** Play a named clip (placeholder fakes it with GSAP; GLB routes to the mixer). */
   play(clip: ClipName, opts?: ClipPlayOptions): void;
   /** Aim Byte's eye/head at a world-space point on the z=0 plane (createBytePet passes cursor world coords). */
   setLook(x: number, y: number): void;
   /** Recolour the Body material (per theme). */
   setBodyColor(color: THREE.ColorRepresentation): void;
-  /** Toggle the emissive Glow (dark-mode phosphor) in the given accent colour. */
+  /** Toggle the emissive Glow; shorthand for `setGlowLevel(on ? 1 : 0, accent)`. */
   setGlow(on: boolean, accent: THREE.ColorRepresentation): void;
+  /** T-GLB: the Glow's level from 0 (off) to 1 (the rig's full on-intensity), in the given accent.
+   *  The theme crossfade lerps this. */
+  setGlowLevel(level: number, accent: THREE.ColorRepresentation): void;
+  /** T-GLB: fade every material the rig owns (0 = invisible, 1 = opaque; `transparent` follows). */
+  setOpacity(a: number): void;
+  /** T-GLB: close (`true`) or open (`false`) the eyes. These are the blink's two hard steps;
+   *  `createBytePet` owns the cadence. */
+  setBlink(closed: boolean): void;
+  /** T-GLB: the current lift above the ground as a fraction of Byte's height (0 at rest; negative
+   *  when crouched). Drives the blob shadow. */
+  hoverHeight(): number;
   /** World position of the Mouth intake node (T5 glyphs converge here). */
   mouthWorld(): { x: number; y: number; z: number };
   /** Per-tick update (placeholder: apply damped look etc.; GLB: advance the mixer). */
