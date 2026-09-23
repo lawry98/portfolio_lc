@@ -210,10 +210,10 @@ export interface ClipPlayOptions {
 /**
  * Inputs to `createBytePet()` (SPEC §4.4). Only the fields there's a real
  * consumer for — `noUnusedParameters` is on, so an option nothing reads
- * would fail the build. Later tickets extend this (`modelUrl` for T-GLB)
- * once they have a real consumer for each; adding them now would be dead
- * weight. (T7 added the `sound` seam below; T8 un-deferred `footerEl` +
- * `footerPhrases` for the switchable footer home.)
+ * would fail the build. Later tickets extend this once they have a real
+ * consumer for each; adding them now would be dead weight. (T7 added the
+ * `sound` seam below; T8 un-deferred `footerEl` + `footerPhrases` for the
+ * switchable footer home; T-GLB added `modelUrl`.)
  */
 export interface PetOptions {
   /** The live headline element Byte anchors to and sizes itself from (`unitPx` = its computed font-size). */
@@ -257,6 +257,15 @@ export interface PetOptions {
    * whether or not sound was ever wired up (no `if (sound)` guards).
    */
   sound?: SoundEngine;
+  /**
+   * T-GLB: URL of Byte's real model (`byte.glb`, ASSET_SPEC). The fetch starts
+   * at construction through a lazily-loaded loader chunk; the procedural
+   * placeholder stands in until the GLB swaps in — instantly while Byte is
+   * hidden, else at the next resting state with a small pop — and stays for
+   * the session if the load fails (one `console.warn`). Omitted → placeholder
+   * only, byte-identical to before T-GLB.
+   */
+  modelUrl?: string;
 }
 
 /**
@@ -299,6 +308,14 @@ export interface BytePetHandle {
    * `data-phrase-set` axis.
    */
   setPhrases(cycle: readonly Phrase[]): void;
+  /**
+   * T-GLB: settles once Byte's real model is live (swapped in) or has failed
+   * to load. Never rejects; resolves immediately without `modelUrl`. The
+   * demo's preloader gate waits on it (capped at 4 s,
+   * `page/preloader.ts`'s `entranceGate`), so the real Byte usually drops in
+   * from the first frame.
+   */
+  readonly modelReady: Promise<void>;
   /** Tears down everything this instance created: tweens/timelines, matchMedia, listeners, the rig, the shadow, and the scene (renderers + canvases). */
   destroy(): void;
 }

@@ -402,6 +402,12 @@ function bootstrap(): void {
     // above. `createBytePet` speaks only the `SoundEngine` interface — this is
     // its single injection point; omitting it would fall back to silence.
     sound,
+    // T-GLB: Byte's real model, served from `public/models/` (ASSET_SPEC §8).
+    // The fetch starts at construction; `runEntrance`'s gate waits on
+    // `bytePet.modelReady` (capped at 4 s) so the real Byte usually drops in
+    // from the very first frame, and the placeholder covers a slow or failed
+    // load.
+    modelUrl: `${import.meta.env.BASE_URL}models/byte.glb`,
   });
 
   // Style Lab wiring (T8, SPEC §7 "preview & lock variants live") — WebGL-only

@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { createPetRig } from './rig';
 import { createPlaceholderBot } from './placeholderBot';
 import { createSwappableRig } from './swapRig';
+import { createGlbRig } from './glbRig';
 import { createFSM } from './fsm';
 import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
@@ -47,7 +48,7 @@ import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
 import type { Phrase } from '../phrases';
-import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
+import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState } from './types';
 
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
@@ -133,6 +134,19 @@ const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'waking',
 ]);
 const REACQUIRE_DURATION_S = 0.3;
+
+/**
+ * T-GLB row 8 (R-GLB-13): the resting states a loaded GLB may swap in at,
+ * with the ~0.3 s pop — never mid-dash, eat, retype, travel, peek or wake.
+ * `hidden` swaps instantly instead (Byte isn't visible yet), and reduced
+ * motion always swaps instantly.
+ */
+const MODEL_SWAP_STATES: ReadonlySet<PetState> = new Set<PetState>([
+  'idle',
+  'curious',
+  'invited',
+  'sleeping',
+]);
 
 /**
  * T6 retype reward (SPEC §6 "Byte operates the caret"). `RETYPE_FOLLOW_*`
@@ -419,6 +433,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   const rig = createSwappableRig(createPetRig(createPlaceholderBot({ theme })));
   rig.object3d.scale.setScalar(unitPx);
   scene.addToPet(rig.object3d);
+
+  // --- T-GLB: the real model's arrival (rows 1/8, R-GLB-13) ---------------
+  // Loaded but not yet swapped in (waiting for a resting state), or null.
+  let pendingModelRig: PetRig | null = null;
+  let resolveModelReady: () => void = () => {};
+  /** `BytePetHandle.modelReady` — resolved at the swap, at a load failure, or at `destroy()`; never rejects. */
+  const modelReady = new Promise<void>((resolve) => {
+    resolveModelReady = resolve;
+  });
 
   const shadow = createBlobShadow();
   scene.addToFront(shadow.mesh);
@@ -1629,6 +1652,36 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
   });
 
+  /**
+   * Swaps a loaded GLB in if Byte is somewhere it may appear (row 8): instantly
+   * while `hidden`, else only at a resting state (`MODEL_SWAP_STATES`) — with
+   * the pop, or instantly under reduced motion. Anywhere else it keeps
+   * waiting; the `fsm.onEnter` below retries on the next resting state.
+   */
+  function trySwapInModel(): void {
+    if (!pendingModelRig || destroyed) {
+      return;
+    }
+    const state = fsm.state();
+    const hidden = state === 'hidden';
+    if (!hidden && !MODEL_SWAP_STATES.has(state)) {
+      return;
+    }
+    rig.swap(pendingModelRig, { animate: !hidden && !reducedActive });
+    pendingModelRig = null;
+    resolveModelReady();
+  }
+
+  // Retry a waiting swap on the next resting state — one tick later, never
+  // inside this dispatch (`dispatch` above has already re-played the state's
+  // clip on the old leaf; the swap re-applies it to the new one, R-GLB-9),
+  // and re-checked then, so a state Byte already left never gets a swap.
+  fsm.onEnter((next) => {
+    if (pendingModelRig && MODEL_SWAP_STATES.has(next)) {
+      fireOnNextTick(trySwapInModel);
+    }
+  });
+
   // onEnter never fires for the FSM's initial state, so the initial choreography
   // is invoked explicitly here. `applyTheme(theme, { animate: false })` runs
   // either way (instant — construction never animates). Then, per the initial
@@ -2467,9 +2520,41 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     teardownAnnouncer();
 
     feeder.dispose();
+    // T-GLB: a GLB that loaded but never swapped in is owned by nobody else.
+    pendingModelRig?.dispose();
+    pendingModelRig = null;
+    resolveModelReady();
     rig.dispose();
     shadow.dispose();
     scene.dispose();
+  }
+
+  // --- T-GLB: start the model fetch (row 1) --------------------------------
+  // Kicked off at construction, last, once everything the swap touches exists.
+  // `import('./glbLoader')` keeps GLTFLoader + MeshoptDecoder in their own lazy
+  // chunk (row 9). Any failure — the chunk, the fetch, a 404, the parse — logs
+  // ONE warning and keeps the placeholder for the session (row 12);
+  // `modelReady` resolves either way.
+  if (opts.modelUrl) {
+    const url = opts.modelUrl;
+    import('./glbLoader')
+      .then(({ loadByteGLB }) => loadByteGLB(url))
+      .then((source) => {
+        const glbRig = createGlbRig(source);
+        if (destroyed) {
+          glbRig.dispose();
+          resolveModelReady();
+          return;
+        }
+        pendingModelRig = glbRig;
+        trySwapInModel();
+      })
+      .catch((error: unknown) => {
+        console.warn('[byte] byte.glb failed to load; keeping the placeholder.', error);
+        resolveModelReady();
+      });
+  } else {
+    resolveModelReady();
   }
 
   return {
@@ -2480,6 +2565,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     setHomeAnchor,
     setGlowAccent,
     setPhrases,
+    modelReady,
     destroy,
   };
 }
