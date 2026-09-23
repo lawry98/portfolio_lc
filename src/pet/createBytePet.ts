@@ -59,6 +59,14 @@ type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
 /** SPEC §6 "cursor within ~150px" — screen-space distance that flips POINTER_NEAR/FAR. */
 const PROXIMITY_PX = 150;
 
+/**
+ * T-GLB row 5: Byte stands 1.25× the headline font-size. Applied once, where
+ * `unitPx` is read, so it reaches both rigs and every Byte-relative distance
+ * — the half-height pin, the stage clamp box, the shadow, and the glyph and
+ * toss sizes (`feed.ts` receives the same `unitPx`).
+ */
+const BYTE_SIZE_SCALE = 1.25;
+
 /** `localStorage` key gating the invited hint (SPEC §6 "gone forever after first feed"). */
 const HINT_SHOWN_KEY = 'byte-hint-shown';
 const HINT_TEXT = '(click to feed Byte)';
@@ -433,7 +441,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     reducedMotion: opts.reducedMotion,
   });
 
-  const unitPx = parseFloat(getComputedStyle(opts.headlineEl).fontSize);
+  const unitPx = parseFloat(getComputedStyle(opts.headlineEl).fontSize) * BYTE_SIZE_SCALE;
   // T-GLB row 7 (R-GLB-7): ONE swappable rig for Byte's whole life. It owns
   // the stable root (placement + the `unitPx` scale, set here once) and
   // `pose`, and hosts the procedural placeholder now and the GLB once it
