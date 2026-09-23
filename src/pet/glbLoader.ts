@@ -8,14 +8,11 @@
  *   per the artist-facing naming contract in `docs/ASSET_SPEC.md` §4-6.
  *   Unit-tested below against a synthetic in-memory scene graph — no real
  *   GLB is ever loaded in T3 (R-T3-8).
- * - `loadByteGLB()` — the I/O shell. Wires a `GLTFLoader` + `DRACOLoader`
- *   (decoder path `/draco/`; the addon import path is confirmed for this
- *   three version per R-T3-1/context7) and feeds the parsed result to
- *   `mapGltfToRigSource()`. Nothing in T3 calls this yet — it's infra for
- *   `rig.ts`'s future "try the GLB, fall back to the placeholder" wiring
- *   (T4/T-GLB). The `/draco/` decoder files themselves don't exist until
- *   T-GLB adds them, which is fine: T3 never attempts a real fetch through
- *   this function (R-T3-8), so nothing needs to decode anything yet.
+ * - `loadByteGLB()` — the I/O shell. Wires a `GLTFLoader` with three's
+ *   bundled `MeshoptDecoder` (byte.glb uses `EXT_meshopt_compression`; the
+ *   never-shipped DRACO wiring is gone, T-GLB row 9). `createBytePet` reaches
+ *   this module only through a dynamic `import()`, so the loader and decoder
+ *   form their own lazy chunk and stay off the critical path.
  *
  * Per ASSET_SPEC §8 ("If a name doesn't match or a clip is missing, the demo
  * still runs ... nothing hard-crashes"), a missing/misnamed material, node,
@@ -24,15 +21,12 @@
  * placeholder/procedural piece for just that part.
  */
 import * as THREE from 'three';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { ClipName, RigSource } from './types';
 
 /** `RigSource.clips` keys, in the order `mapGltfToRigSource` scans `gltf.animations` for a match. */
 const CLIP_NAMES: readonly ClipName[] = ['Idle', 'Hop', 'Dash', 'Eat', 'Sleep', 'Wake', 'Peek'];
-
-/** `DRACOLoader` decoder base path (ASSET_SPEC/R-T3-8) — the decoder files themselves land at T-GLB. */
-const DRACO_DECODER_PATH = '/draco/';
 
 /** Case-insensitive name compare — every lookup below (materials, nodes, clips) matches names this way per ASSET_SPEC §4/§5. */
 function sameName(actual: string, target: string): boolean {
@@ -76,6 +70,9 @@ function namedStandardMaterial(
  *   matching name; a `ClipName` with no matching clip is simply absent from
  *   the map rather than present-but-`undefined` (ASSET_SPEC §6: "a subset is
  *   fine — at minimum `Idle` + `Eat`").
+ * - `eyes`: `EyeL` then `EyeR`, only those present.
+ * - `torso`: the `Torso` bone.
+ * - `materials`: every distinct material, in traversal order.
  *
  * All name matching is case-insensitive; anything not found is left
  * `undefined`/omitted rather than throwing (ASSET_SPEC §8).
@@ -89,15 +86,25 @@ export function mapGltfToRigSource(gltf: {
   let eye: THREE.Object3D | undefined;
   let head: THREE.Object3D | undefined;
   let mouth: THREE.Object3D | undefined;
+  let eyeL: THREE.Object3D | undefined;
+  let eyeR: THREE.Object3D | undefined;
+  let torso: THREE.Object3D | undefined;
+  const materials = new Set<THREE.Material>();
 
   gltf.scene.traverse((object) => {
     if (object instanceof THREE.Mesh) {
       body ??= namedStandardMaterial(object.material, 'Body');
       glow ??= namedStandardMaterial(object.material, 'Glow');
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach((m) =>
+        materials.add(m),
+      );
     }
     if (!eye && sameName(object.name, 'Eye')) eye = object;
     if (!head && sameName(object.name, 'Head')) head = object;
     if (!mouth && sameName(object.name, 'Mouth')) mouth = object;
+    if (!eyeL && sameName(object.name, 'EyeL')) eyeL = object;
+    if (!eyeR && sameName(object.name, 'EyeR')) eyeR = object;
+    if (!torso && sameName(object.name, 'Torso')) torso = object;
   });
 
   const clips: Partial<Record<ClipName, THREE.AnimationClip>> = {};
@@ -106,21 +113,29 @@ export function mapGltfToRigSource(gltf: {
     if (match) clips[clipName] = match;
   }
 
-  return { scene: gltf.scene, body, glow, eye: eye ?? head, mouth, clips };
+  const eyes = [eyeL, eyeR].filter((o): o is THREE.Object3D => o !== undefined);
+  return {
+    scene: gltf.scene,
+    body,
+    glow,
+    eye: eye ?? head,
+    mouth,
+    eyes: eyes.length > 0 ? eyes : undefined,
+    torso,
+    materials: materials.size > 0 ? [...materials] : undefined,
+    clips,
+  };
 }
 
 /**
- * Loads `url` as a Byte GLB: a `GLTFLoader` with a `DRACOLoader` attached,
- * mapped through `mapGltfToRigSource()` once parsed. Rejects on any
- * load/parse error — falling back to the placeholder rig is the caller's
- * job (T4/T-GLB), not this function's.
+ * Loads `url` as a Byte GLB: a `GLTFLoader` with the meshopt decoder
+ * attached, mapped through `mapGltfToRigSource()` once parsed. Rejects on
+ * any load/parse error — falling back to the placeholder rig is the
+ * caller's job (T4/T-GLB), not this function's.
  */
 export function loadByteGLB(url: string): Promise<RigSource> {
-  const draco = new DRACOLoader();
-  draco.setDecoderPath(DRACO_DECODER_PATH);
-
   const loader = new GLTFLoader();
-  loader.setDRACOLoader(draco);
+  loader.setMeshoptDecoder(MeshoptDecoder);
 
   return new Promise<RigSource>((resolve, reject) => {
     loader.load(url, (gltf) => resolve(mapGltfToRigSource(gltf)), undefined, reject);
