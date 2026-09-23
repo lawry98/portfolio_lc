@@ -67,6 +67,9 @@ const HINT_GAP_PX = 14;
 const HINT_FADE_S = 0.35;
 
 /**
+ * T-GLB row 6: the FSM holds `peeking` for the delivered Peek clip's full
+ * 1.667 s (it was 1.2 s, tuned to the placeholder).
+ *
  * `createBytePet` is the single source of truth for `peekMs` — passed
  * straight into `createFSM({ peekMs: PEEK_MS })` below, rather than relying
  * on this constant merely matching `fsm.ts`'s own default by convention (a
@@ -75,11 +78,17 @@ const HINT_FADE_S = 0.35;
  * the other). Also used to time this module's own `setBehind()` flip
  * against the FSM's own peekMs-driven auto-exit.
  */
-const PEEK_MS = 1200;
-/** When (seconds into the peek) the bot flips behind the letterform — roughly the rise's apex. */
-const PEEK_BEHIND_ON_S = 0.3;
-/** When it flips back in front — comfortably before the FSM's own `peekMs` auto-exit, leaving a settle beat. */
-const PEEK_BEHIND_OFF_S = 0.85;
+const PEEK_MS = 1667;
+/** When (s into the peek) Byte flips behind the letterform — during the Peek clip's fast rise (0.1–0.7 s), T-GLB row 6. */
+const PEEK_BEHIND_ON_S = 0.2;
+/** When it flips back in front — during the clip's drop (1.3–1.6 s), before the FSM's `PEEK_MS` exit. */
+const PEEK_BEHIND_OFF_S = 1.45;
+/**
+ * T-GLB row 6: the FSM's wake window — the delivered Wake clip's full 1.25 s
+ * (fsm.ts's own default is 600 ms). Passed through `createFSM`'s config like
+ * `peekMs`, so fsm.ts stays untouched.
+ */
+const WAKE_MS = 1250;
 /** Reduced-motion peek: opacity dipped to, and the small rise/duration of each fade leg. */
 const PEEK_REDUCED_FADE_OPACITY = 0.45;
 const PEEK_REDUCED_RISE_PX = 10;
@@ -449,7 +458,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // `initialState: 'hidden'` (T6b entrance) starts Byte in the construction
   // mode `enterAndType()` reveals + drops in from; omitting the entrance keeps
   // the FSM starting `idle`, byte-for-byte as before.
-  const fsm = createFSM({ peekMs: PEEK_MS, initialState: opts.entrance ? 'hidden' : 'idle' });
+  const fsm = createFSM({
+    peekMs: PEEK_MS,
+    wakeMs: WAKE_MS,
+    initialState: opts.entrance ? 'hidden' : 'idle',
+  });
 
   // --- Feeder (T5, R-T5-8) ---------------------------------------------------
   // Owns the toss/dash/eat glyph choreography end to end: `feed(x,y)` tosses

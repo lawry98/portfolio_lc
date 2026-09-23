@@ -221,3 +221,62 @@ describe('createPetRig setLook depth (T-GLB, R-GLB-7)', () => {
     rig.dispose();
   });
 });
+
+describe('placeholder fakes follow the delivered clips (T-GLB row 6)', () => {
+  let clock: ReturnType<typeof freezeGsap>;
+  beforeEach(() => {
+    clock = freezeGsap();
+  });
+  afterEach(() => {
+    clock.release();
+  });
+
+  it('Eat squash-peaks on the bites at 0.33 s and 0.60 s and ends at 0.70 s', () => {
+    const { rig, clipPose } = placeholderRig();
+    const onComplete = vi.fn();
+    rig.play('Eat', { onComplete });
+    clock.seek(0.2);
+    expect(clipPose.scale.y).toBe(1); // bite 1's squash starts at 0.23 s
+    clock.seek(0.33);
+    expect(clipPose.scale.y).toBeCloseTo(0.82, 3); // EAT_CHOMP_SCALE_Y
+    clock.seek(0.6);
+    expect(clipPose.scale.y).toBeCloseTo(0.82, 3);
+    expect(onComplete).not.toHaveBeenCalled();
+    clock.seek(0.71);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(clipPose.scale.y).toBe(1);
+    rig.dispose();
+  });
+
+  it('Wake holds the Sleep slump, jolts over 0.20–0.33 s, and has settled by 0.90 s', () => {
+    const { rig, clipPose } = placeholderRig();
+    const onComplete = vi.fn();
+    rig.play('Wake', { onComplete });
+    clock.seek(0.1);
+    expect(clipPose.position.y).toBeCloseTo(-0.05, 5); // SLEEP_SETTLE_Y
+    clock.seek(0.33);
+    expect(clipPose.position.y).toBeCloseTo(0.3, 3); // the jolt's top (WAKE_JUMP_HEIGHT)
+    clock.seek(0.91);
+    expect(clipPose.position.y).toBe(0);
+    expect(clipPose.rotation.z).toBe(0);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    rig.dispose();
+  });
+
+  it('Peek rises through 0.1–0.7 s, peers until 1.3 s, and settles by 1.6 s', () => {
+    const { rig, clipPose } = placeholderRig();
+    const onComplete = vi.fn();
+    rig.play('Peek', { onComplete });
+    clock.seek(0.1);
+    expect(clipPose.position.y).toBe(0);
+    clock.seek(0.7);
+    expect(clipPose.position.y).toBeCloseTo(0.15, 5); // PEEK_RISE
+    clock.seek(1.3);
+    expect(clipPose.position.y).toBeCloseTo(0.15, 5);
+    expect(onComplete).not.toHaveBeenCalled();
+    clock.seek(1.61);
+    expect(clipPose.position.y).toBe(0);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    rig.dispose();
+  });
+});

@@ -107,6 +107,14 @@ const DASH_SCALE_Y = 1.06;
 const DASH_VIBRATE_AMPLITUDE = 0.02;
 const DASH_VIBRATE_DURATION = 0.05;
 
+/**
+ * T-GLB row 6: the two chomps SQUASH-PEAK on the delivered Eat clip's bites
+ * — the same beats feed.ts lands the glyph on (`EAT_BITE_1_S`/`EAT_BITE_2_S`
+ * there; echoed by hand, the cross-file-constant convention shadow.ts
+ * uses). Each chomp squashes down over `EAT_CHOMP_DURATION` into its bite,
+ * then recovers over the same.
+ */
+const EAT_BITE_TIMES_S: readonly number[] = [0.33, 0.6];
 const EAT_CHOMP_SCALE_Y = 0.82;
 const EAT_CHOMP_SCALE_XZ = 1.1;
 const EAT_CHOMP_DURATION = 0.1;
@@ -115,19 +123,37 @@ const SLEEP_SETTLE_Y = -0.05;
 const SLEEP_SCALE_Y = 0.92;
 const SLEEP_BREATH_DURATION = 1.3;
 
+/**
+ * T-GLB row 6 (R-GLB-17): the Wake fake follows the delivered clip — it
+ * starts from the Sleep fake's slump (the clip "starts from the Sleep
+ * pose"), jolts up over 0.20–0.33 s, lands, and shakes until 0.90 s (the clip
+ * is settled by 1.18 s; the FSM's wake window is its full 1.25 s).
+ */
+const WAKE_JOLT_START_S = 0.2;
 const WAKE_JUMP_HEIGHT = 0.3;
-const WAKE_JUMP_DURATION = 0.12;
+const WAKE_JUMP_DURATION = 0.13;
 const WAKE_LAND_DURATION = 0.16;
 const WAKE_SHAKE_RAD = 0.12;
-const WAKE_SHAKE_DURATION = 0.05;
 const WAKE_SHAKE_REPEATS = 5;
+const WAKE_SHAKE_END_S = 0.9;
+/** One shake leg: the yoyo's 1 + `WAKE_SHAKE_REPEATS` legs fill the jolt's top (0.33 s) → `WAKE_SHAKE_END_S` exactly. */
+const WAKE_SHAKE_DURATION =
+  (WAKE_SHAKE_END_S - (WAKE_JOLT_START_S + WAKE_JUMP_DURATION)) / (WAKE_SHAKE_REPEATS + 1);
 
+/**
+ * T-GLB row 6: the Peek fake follows the delivered clip — it rises through
+ * 0.1–0.7 s, peers until 1.3 s, and settles over 1.3–1.6 s, inside the
+ * 1.667 s the FSM now holds `peeking` (createBytePet's `PEEK_MS`). The
+ * canvas swaps (behind at 0.2 s, back in front at 1.45 s) are createBytePet's.
+ * The shape is unchanged — retimed, not reshaped (R-GLB-17).
+ */
 const PEEK_RISE = 0.15;
 const PEEK_TILT_RAD = 0.22;
 const PEEK_SCALE_Y = 1.05;
 const PEEK_SCALE_XZ = 0.97;
-const PEEK_RISE_DURATION = 0.35;
-const PEEK_HOLD_DURATION = 0.5;
+const PEEK_RISE_START_S = 0.1;
+const PEEK_RISE_DURATION = 0.6;
+const PEEK_SETTLE_START_S = 1.3;
 const PEEK_SETTLE_DURATION = 0.3;
 
 /**
@@ -312,29 +338,20 @@ export function createPetRig(source: RigSource): PetRig {
     return tl;
   }
 
-  /** Two quick chomp scale-pulses, back to identity between and after. */
+  /** Two chomp squash-pulses, each peaking on one of the Eat clip's bites (T-GLB row 6). */
   function buildEat(): ReturnType<typeof gsap.timeline> {
     const chompDown = { y: EAT_CHOMP_SCALE_Y, x: EAT_CHOMP_SCALE_XZ, z: EAT_CHOMP_SCALE_XZ };
     const chompUp = { y: 1, x: 1, z: 1 };
-    const secondChompStart = EAT_CHOMP_DURATION * 2;
 
     const tl = gsap.timeline();
-    tl.to(pose.scale, { ...chompDown, duration: EAT_CHOMP_DURATION, ease: 'power2.out' }, 0);
-    tl.to(
-      pose.scale,
-      { ...chompUp, duration: EAT_CHOMP_DURATION, ease: 'power2.in' },
-      EAT_CHOMP_DURATION,
-    );
-    tl.to(
-      pose.scale,
-      { ...chompDown, duration: EAT_CHOMP_DURATION, ease: 'power2.out' },
-      secondChompStart,
-    );
-    tl.to(
-      pose.scale,
-      { ...chompUp, duration: EAT_CHOMP_DURATION, ease: 'power2.in' },
-      secondChompStart + EAT_CHOMP_DURATION,
-    );
+    for (const bite of EAT_BITE_TIMES_S) {
+      tl.to(
+        pose.scale,
+        { ...chompDown, duration: EAT_CHOMP_DURATION, ease: 'power2.out' },
+        bite - EAT_CHOMP_DURATION,
+      );
+      tl.to(pose.scale, { ...chompUp, duration: EAT_CHOMP_DURATION, ease: 'power2.in' }, bite);
+    }
     return tl;
   }
 
@@ -350,17 +367,21 @@ export function createPetRig(source: RigSource): PetRig {
     return tl;
   }
 
-  /** Startled jump (reusing Hop's stretch feel), lands, then shakes a few times. */
+  /** Still slumped from Sleep, then a startled jolt (Hop's stretch feel), a landing, and a shake — on the Wake clip's beats (T-GLB row 6). */
   function buildWake(): ReturnType<typeof gsap.timeline> {
-    const tJumpEnd = WAKE_JUMP_DURATION;
+    const tJumpEnd = WAKE_JOLT_START_S + WAKE_JUMP_DURATION;
     // +1 for the shake tween's initial play, on top of its `repeat`s.
     const tShakeEnd = tJumpEnd + WAKE_SHAKE_DURATION * (WAKE_SHAKE_REPEATS + 1);
 
     const tl = gsap.timeline();
+    // `play()` has just reset `pose` to identity; hold the Sleep fake's slump
+    // until the jolt, so Byte doesn't pop upright 0.2 s early (R-GLB-17).
+    tl.set(pose.position, { y: SLEEP_SETTLE_Y }, 0);
+    tl.set(pose.scale, { y: SLEEP_SCALE_Y }, 0);
     tl.to(
       pose.position,
       { y: WAKE_JUMP_HEIGHT, duration: WAKE_JUMP_DURATION, ease: 'power3.out' },
-      0,
+      WAKE_JOLT_START_S,
     );
     tl.to(
       pose.scale,
@@ -371,7 +392,7 @@ export function createPetRig(source: RigSource): PetRig {
         duration: WAKE_JUMP_DURATION,
         ease: 'power3.out',
       },
-      0,
+      WAKE_JOLT_START_S,
     );
     tl.to(pose.position, { y: 0, duration: WAKE_LAND_DURATION, ease: 'bounce.out' }, tJumpEnd);
     tl.to(
@@ -403,31 +424,21 @@ export function createPetRig(source: RigSource): PetRig {
     return tl;
   }
 
-  /** Rises + tilts back to "peer up", holds, then settles back down. */
+  /** Rises + tilts back to "peer up", holds, then settles back down — on the Peek clip's beats (T-GLB row 6). */
   function buildPeek(): ReturnType<typeof gsap.timeline> {
-    const tHoldEnd = PEEK_RISE_DURATION + PEEK_HOLD_DURATION;
-
     const tl = gsap.timeline();
-    tl.to(pose.position, { y: PEEK_RISE, duration: PEEK_RISE_DURATION, ease: 'power2.out' }, 0);
-    tl.to(pose.rotation, { x: PEEK_TILT_RAD, duration: PEEK_RISE_DURATION, ease: 'power2.out' }, 0);
+    const rise = { duration: PEEK_RISE_DURATION, ease: 'power2.out' };
+    const settle = { duration: PEEK_SETTLE_DURATION, ease: 'power2.in' };
+    tl.to(pose.position, { y: PEEK_RISE, ...rise }, PEEK_RISE_START_S);
+    tl.to(pose.rotation, { x: PEEK_TILT_RAD, ...rise }, PEEK_RISE_START_S);
     tl.to(
       pose.scale,
-      {
-        y: PEEK_SCALE_Y,
-        x: PEEK_SCALE_XZ,
-        z: PEEK_SCALE_XZ,
-        duration: PEEK_RISE_DURATION,
-        ease: 'power2.out',
-      },
-      0,
+      { y: PEEK_SCALE_Y, x: PEEK_SCALE_XZ, z: PEEK_SCALE_XZ, ...rise },
+      PEEK_RISE_START_S,
     );
-    tl.to(pose.position, { y: 0, duration: PEEK_SETTLE_DURATION, ease: 'power2.in' }, tHoldEnd);
-    tl.to(pose.rotation, { x: 0, duration: PEEK_SETTLE_DURATION, ease: 'power2.in' }, tHoldEnd);
-    tl.to(
-      pose.scale,
-      { y: 1, x: 1, z: 1, duration: PEEK_SETTLE_DURATION, ease: 'power2.in' },
-      tHoldEnd,
-    );
+    tl.to(pose.position, { y: 0, ...settle }, PEEK_SETTLE_START_S);
+    tl.to(pose.rotation, { x: 0, ...settle }, PEEK_SETTLE_START_S);
+    tl.to(pose.scale, { y: 1, x: 1, z: 1, ...settle }, PEEK_SETTLE_START_S);
     return tl;
   }
 
