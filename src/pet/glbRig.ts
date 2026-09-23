@@ -35,7 +35,9 @@
  * **Materials** follow D-11 (row 10): `Body` takes the theme colour, `Glow`
  * the accent at `GLOW_ON_INTENSITY × level` (overriding the 1.86 the loader
  * reads from `KHR_materials_emissive_strength`), `Visor` stays as authored,
- * and `setOpacity` fades all three.
+ * and `setOpacity` fades all three. `Glow` also carries a small depth bias
+ * (`GLOW_DEPTH_BIAS`) so the eyes resolve over the visor at the page camera's
+ * depth precision.
  *
  * No GSAP here: the mixer and the look both advance inside `update(dt)`,
  * which `createBytePet` calls from its single `gsap.ticker`-driven `onTick`.
@@ -57,6 +59,15 @@ export const GLB_MODEL_HEIGHT = 1.8;
 
 /** Crossfade length for every clip change (TICKETS T-GLB row 11). */
 export const CLIP_CROSSFADE_S = 0.2;
+
+/**
+ * Depth bias on the `Glow` material (T-GLB QA fix, D-22): the eyes sit only 0.01 model units in
+ * front of the visor (≈ 0.7 px at 1.25 × a 104 px headline), below the page camera's depth
+ * resolution at Byte's distance (≈ 1.7 px: near 0.1, 24-bit depth), so they z-fought with it.
+ * Pulling `Glow` toward the camera by a few depth units resolves the eyes (and the chest light,
+ * which shares the material) cleanly over the surfaces they sit on.
+ */
+export const GLOW_DEPTH_BIAS = { factor: -1, units: -4 } as const;
 
 /** Row 4: the head turns at half the look's clamped yaw/pitch… */
 const HEAD_TURN_STRENGTH = 0.5;
@@ -116,6 +127,13 @@ export function createGlbRig(source: RigSource): PetRig {
       child.frustumCulled = false;
     }
   });
+
+  // QA fix: lift the Glow surfaces (eyes + chest light) over the visor/body they sit on.
+  if (source.glow) {
+    source.glow.polygonOffset = true;
+    source.glow.polygonOffsetFactor = GLOW_DEPTH_BIAS.factor;
+    source.glow.polygonOffsetUnits = GLOW_DEPTH_BIAS.units;
+  }
 
   const head = source.eye; // the mapper's `Eye`, else `Head` — byte.glb has no `Eye`, so the Head bone
   const eyes = source.eyes ?? [];

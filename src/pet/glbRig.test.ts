@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createGlbRig, GLB_MODEL_HEIGHT } from './glbRig';
+import { createGlbRig, GLB_MODEL_HEIGHT, GLOW_DEPTH_BIAS } from './glbRig';
 import {
   EYE_CLOSED_SCALE_Y,
   EYE_OPEN_SCALE_Y,
@@ -314,6 +314,16 @@ describe('createGlbRig blink, materials, mouth', () => {
     rig.setOpacity(1);
     expect(source.materials.every((m) => !m.transparent)).toBe(true);
     rig.dispose();
+  });
+
+  it('biases the Glow material toward the camera so the eyes never z-fight the visor', () => {
+    const source = makeSource();
+    createGlbRig(source);
+    expect(source.glow?.polygonOffset).toBe(true);
+    expect(source.glow?.polygonOffsetFactor).toBe(GLOW_DEPTH_BIAS.factor);
+    expect(source.glow?.polygonOffsetUnits).toBe(GLOW_DEPTH_BIAS.units);
+    // Body and Visor keep their authored depth.
+    expect(source.body?.polygonOffset).toBe(false);
   });
 
   it('reports the Mouth world position, and the head when there is no Mouth', () => {
