@@ -16,7 +16,8 @@ methods) — plus the DOM/CSS contract the module expects from its host and a co
 **Contents:** [Overview](#1-overview) · [What to copy](#2-what-to-copy) ·
 [DOM contract](#3-dom-contract) · [React sketch](#4-react-sketch) ·
 [Options reference](#5-options-reference) · [Theme, glow & phrases](#6-theme-glow--phrases) ·
-[Fonts](#7-fonts) · [Fallbacks](#8-fallbacks) · [Cleanup checklist](#9-cleanup-checklist)
+[Fonts](#7-fonts) · [Fallbacks](#8-fallbacks) · [Cleanup checklist](#9-cleanup-checklist) ·
+[Serving the model](#10-serving-the-model)
 
 ## 1. Overview
 
@@ -228,6 +229,7 @@ don't need the drop-in beat.
 | `phrases` | `readonly Phrase[]` | `undefined` | The hero retype cycle. `phrases[0]` should equal the on-screen headline #1. Omitted (or a single entry) → retype becomes a no-op pass-through: the state machine still advances, the headline text just never changes. |
 | `entrance` | `boolean` | `false` | Run the drop-in + live-type-phrase-#1 entrance. Requires an explicit `handle.enterAndType()` call — see [§4](#4-react-sketch). |
 | `sound` | `SoundEngine` | *(silent no-op)* | The engine every cue (`typeTick`/`eatA`/`eatB`/`spawnPop`/`themeWhoosh`/`wakeBoing`/`chirp`) plays through. Omit it and Byte stays silent with no extra wiring — every call site already speaks only to this interface (`src/pet/sound/SoundEngine.ts`), so nothing branches on whether sound exists. |
+| `modelUrl` | `string` | *(placeholder only)* | The URL of Byte's rigged `byte.glb` (T-GLB). The host serves the file at this URL; the fetch starts at `createBytePet` construction, behind a dynamic `import('./glbLoader')` (its own lazy chunk). A failure keeps the procedural placeholder for the session — see [§10](#10-serving-the-model). |
 
 `Phrase` (`src/phrases.ts`): `type Phrase = readonly [string, string]` — a `[line1, line2]` tuple.
 
@@ -242,6 +244,7 @@ don't need the drop-in beat.
 | `setHomeAnchor` | `(el: HTMLElement) => void` | Switches Byte's active home between the hero and footer elements (anchor, caret, retype target, phrase cycle all follow). No-op if `el` is already active; ignored if `el` matches neither known home. Does **not** itself decide *when* to switch — see [§6](#6-theme-glow--phrases). |
 | `setGlowAccent` | `(color: THREE.ColorRepresentation) => void` | Swaps the dark-mode-only WebGL glow accent live, re-applied against the current theme immediately. Default is the mint `#38e8a8` (`DEFAULT_GLOW_ACCENT`, `src/pet/scene.ts`) until you call this. |
 | `setPhrases` | `(cycle: readonly Phrase[]) => void` | Replaces the **hero's** retype cycle live and resets its position to index 0 (the footer's cycle is untouched — it isn't affected by this call). |
+| `modelReady` | `Promise<void>` | (T-GLB) Settles once the GLB from `modelUrl` is live or has failed to load; never rejects. Resolves immediately if no `modelUrl` was passed. Useful for gating your own loading UI on the real model the same way this demo's preloader does — see [§10](#10-serving-the-model). |
 | `destroy` | `() => void` | Tears down everything this instance created — tweens/timelines, `matchMedia`, listeners, the rig, the shadow, and the scene (both renderers **and** canvases, which are removed from the DOM, not just disposed). Always call this on unmount — see [§9](#9-cleanup-checklist). |
 
 ## 6. Theme, glow & phrases
@@ -326,3 +329,38 @@ if (!hasWebGL()) {
 - **One instance per page** — see [§8](#8-fallbacks).
 - **If you used `entrance: true`, remember `enterAndType()`** (see [§4](#4-react-sketch)) —
   otherwise Byte, and under full motion the headline text itself, never appears.
+
+## 10. Serving the model
+
+Copy `public/models/byte.glb` from this repo to your host's static directory (Next's `public/`
+works the same way this demo's does) and pass its URL as `modelUrl`:
+
+```ts
+createBytePet(document.body, {
+  headlineEl: headlineRef.current,
+  modelUrl: '/models/byte.glb',
+  // ...
+});
+```
+
+The fetch starts the moment `createBytePet` runs. `GLTFLoader` and three's `MeshoptDecoder` arrive
+through a separate, lazy `import('./glbLoader')` chunk (~21.00 KB gz), keeping their decode cost
+off the critical path — but they don't leave your entry bundle untouched: the three core classes
+the mixer/skinning need (`AnimationMixer` etc.) live in `three.core.js`, which can't be split from
+the entry, so it grows too (**+15.6 KB gz**, 209.65 → 225.28 KB gz, measured). There's nothing to
+configure beyond `modelUrl` itself. Until the model resolves
+(or if it fails to load at all), Byte runs on the procedural placeholder; a late or failed load
+never blocks or breaks the page. Await `handle.modelReady` if you want to know when the real
+model is actually on screen.
+
+**Two host caveats:**
+
+- `MeshoptDecoder` instantiates WebAssembly. Under a strict Content-Security-Policy without
+  `'wasm-unsafe-eval'` in `script-src`, that instantiation fails, the load rejects, and Byte stays
+  on the placeholder for the session — exactly the "failed to load" path above, just triggered by
+  CSP instead of the network.
+- `modelReady` only resolves once the model has actually swapped in (row 8) — which waits for
+  Byte's next resting state, not just for the file to finish downloading. A host gating its own UI
+  on `modelReady` should cap how long it waits, the way this demo's preloader does — it races
+  `modelReady` against a 4 s `delay(4000)` and lifts on whichever settles first — otherwise a model
+  that loads instantly but arrives mid-dash could still be waited on for longer than expected.

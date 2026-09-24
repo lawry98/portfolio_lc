@@ -72,9 +72,9 @@ Two full-viewport, fixed, transparent canvases sandwich the DOM: `#gl-back` (beh
 
 **Robustness:** WebGL unavailable → hide canvases, page stays fully functional (static headline #1, no pet). `visibilitychange` pauses the ticker. Dispose geometries/materials/textures for eaten food and on `destroy()` (verify no leak after 50 feeds).
 
-### 4.2 Character pipeline — placeholder now, GLB later
+### 4.2 Character pipeline — the delivered GLB, placeholder as fallback
 - **Placeholder bot:** a procedural robot assembled from Three.js primitives (RoundedBox body/head, small antenna, eye), sized from the live headline font-size, that satisfies the same runtime interface as the real model: a body material to theme, a `Glow` material, an eye/head node for look-at, a mouth anchor for eating, and a set of **named "clips"** faked via GSAP so the FSM can call `play('Dash')` etc. uniformly.
-- **Real model:** loaded via `GLTFLoader` + `DRACOLoader` (meshopt-ready). On load, the loader **maps the GLB's named materials/nodes/clips to the same interface**, then the placeholder is disposed and swapped out. Contract lives in [`ASSET_SPEC.md`](ASSET_SPEC.md).
+- **Real model (T-GLB, D-22):** loaded through a dynamic `import()` of `GLTFLoader` plus three's own `MeshoptDecoder` (a lazy chunk, off the critical path). The loader **maps the GLB's named materials/nodes/clips to the same interface**, then the mapped rig is hosted inside one swappable rig that swaps it in — instantly while Byte is hidden, otherwise at the next resting state with a ~0.3s pop — and the placeholder is disposed. A failed load keeps the placeholder for the session. Contract lives in [`ASSET_SPEC.md`](ASSET_SPEC.md).
 - `modelUrl` is an optional module option; absent → placeholder is used (also the graceful fallback if the GLB fails to load).
 
 ### 4.3 Animation model (Full GSAP + Mixer)
@@ -95,6 +95,7 @@ createBytePet(mount: HTMLElement, {
 }): {
   feed(x: number, y: number): void;
   setTheme(t: 'light' | 'dark'): void;
+  modelReady: Promise<void>;   // (T-GLB) settles once the GLB is live or has failed
   destroy(): void;
 }
 ```
@@ -113,13 +114,13 @@ A small, characterful dev robot that reads clearly at headline scale. Owner supp
 States: `hidden | entering | idle | curious | invited | dashing | eating | retyping | traveling | sleeping | waking | peeking`.
 
 - **idle** — editor-authentic hard-step blink; every 4–8s a micro-behavior (eye glance, small hop onto a letter, short baseline slide, or a **peek**).
-- **peeking** — hop above a headline char, flip to the back canvas at apex, drop partly behind the letterform, peek over for ~1.2s, hop front. Must happen within the first ~10 idle seconds.
+- **peeking** — hop above a headline char, flip to the back canvas at apex, drop partly behind the letterform, peek over for ~1.67s (the delivered Peek clip), behind at 0.2s and back in front at 1.45s (T-GLB). Must happen within the first ~10 idle seconds.
 - **curious** — cursor within ~150px: blink stops, slight lean, eyes lock on.
 - **invited** — ~2.5s curious, no click: `(click to feed Byte)` hint fades in under the headline. Gone forever after first feed (`localStorage`).
-- **feed** (click/tap): spawn a random hand-modeled 3D glyph (`; = > * + {`) as bevel-extruded `THREE.Shape` paths (rounded primitives; no `typeface.json`). Toss in with a 450ms arc + spin, squash on landing. Byte: 80ms anticipation → dash (380–600ms by distance, banks ±12°, slight overshoot) → **eat** (`Eat` clip; glyph scales into the mouth over two chomps; 4–6 `currentColor` particles; alternating blips) → satisfied wiggle. Queue clicks; max 3 live glyphs (oldest pops away).
+- **feed** (click/tap): spawn a random hand-modeled 3D glyph (`; = > * + {`) as bevel-extruded `THREE.Shape` paths (rounded primitives; no `typeface.json`). Toss in with a 450ms arc + spin, squash on landing. Byte: 80ms anticipation → dash (380–600ms by distance, banks ±12°, slight overshoot) → **eat** (`Eat` clip; glyph scales into the mouth over two chomps landing on the clip's bites, 0.33s/0.60s (T-GLB); 4–6 `currentColor` particles; alternating blips) → satisfied wiggle. Queue clicks; max 3 live glyphs (oldest pops away).
 - **retype (signature reward)** — Byte glides to the headline end; the DOM caret backspaces right-to-left (~26ms/char accelerating), then types the next phrase (~40ms/char, ±12ms jitter, soft tick every 2–3 chars), caret gliding per char. 2-line sets; delete bottom line first; **zero layout shift**. DOM chars as spans.
 - **traveling & footer migration** — canvases are fixed; Byte lives in screen space. Home anchor = end of the in-view text block (hero headline ↔ footer CTA). Between the two homes Byte is **not visible at all**: everything the pet module draws is confined to two bounded **stages** — the `#hero` box and the `#footer` box, each inset at the bottom to clear its own `[data-byte-furniture]` — and the WebGL scissor test clips **both** renderers to whichever stage is active, skipping both draws entirely when neither stage is on screen, so nothing the module paints can reach `#manifesto` or `#selected-work` at any scroll position, in either theme, on any viewport. The right-margin lane still runs in code (T8's reversible `MIGRATE` traverse is untouched) but is clipped away for its whole traverse; a 1→0→1 opacity tween carries the hand-off. _(**Supersedes** this bullet's original "Between them it follows the visitor down a right-margin lane." — T12 / `DECISIONS.md` **D-21**, 2026-09-01. The home-anchor rule, the trip-feed spin and the footer retype are unchanged.)_ Feeding while traveling = eat + happy 360° spin (no retype). Footer feeds retype the footer CTA set.
-- **sleeping** — 30s idle: dim, blink slows, a small mono `z` floats up every ~2s. Click → **waking** (startled jump + shake), then the click counts as a feed.
+- **sleeping** — 30s idle: dim, blink slows, a small mono `z` floats up every ~2s. Click → **waking** (startled jump + shake), which plays the 1.25s Wake clip (T-GLB) before the click counts as a feed.
 - **theme reaction** — toggle: ~400ms token crossfade; Byte does a full-height stretch; materials/lights lerp; dark adds the phosphor glow. Stretch goal: Byte headbutts the toggle first.
 
 ---
@@ -166,8 +167,8 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 ---
 
 ## 13. Performance budgets & guardrails
-- JS ≤ **280KB gzip** (three ≈ 165KB, GSAP already counted); CSS ≤ 20KB; fonts ≤ 120KB woff2 subsetted (final, one type system).
-- **Model budget:** Byte `.glb` ≤ ~500KB compressed (DRACO/meshopt), ≤ ~40k tris, textures ≤ 1024² (verify on device).
+- JS ≤ **280KB gzip** (three ≈ 165KB, GSAP already counted); CSS ≤ 20KB; fonts ≤ 120KB woff2 subsetted (final, one type system). Shipped (T-GLB, D-22): entry **225.28 KB gz**, the lazy `glbLoader` chunk **21.00 KB gz**, JS total **≈ 246.3 KB gz** ≤ 280 ✅.
+- **Model budget:** Byte `.glb` — delivered at **525 KB gzipped (728,928 B raw), 36,283 tris, no textures** — the ~5% over the soft 500 KB target is an accepted exception (D-22).
 - Lighthouse mobile: Perf ≥ 90, A11y ≥ 95, Best Practices 100. LCP < 2.0s (headline is DOM). CLS = 0.
 - Transforms/opacity + WebGL only; batch DOM reads/writes; rect caching on scroll, not per frame. Long frames (>32ms) ≤ 2 per 10s sample; heap stable after 50 feeds.
 
@@ -175,7 +176,7 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 
 ## 14. Tech stack & tooling
 - **Vite + vanilla TypeScript** (strict). ESLint + Prettier. **Vitest** (FSM + retype queue).
-- **three** (^latest): core + `GLTFLoader`, `DRACOLoader`, `RoundedBoxGeometry` (placeholder).
+- **three** (^latest): core + `GLTFLoader`, `MeshoptDecoder` (bundled with three; T-GLB, D-22), `RoundedBoxGeometry` (placeholder).
 - **GSAP 3.13+**: core, CustomEase, ScrollTrigger, SplitText (all free on npm).
 - **lenis** smooth scroll. **Sound:** WebAudio synth now behind a `SoundEngine` interface; **Howler** (+ recorded files) is the planned swap-in (see `AUDIO_SPEC.md`).
 - **gsap-skills** installed (`~/.claude/skills/gsap-*`): use for all GSAP work; fold its `CLAUDE.md` conventions into the project at scaffold.

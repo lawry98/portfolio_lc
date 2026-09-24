@@ -14,7 +14,8 @@
  *    `PRELOADER_FONTS_FALLBACK_MS` timeout and never rejects, so a
  *    `document.fonts.ready` that never resolves (or an engine with no
  *    `document.fonts` at all) still settles the race via the timeout.
- *  - The gate is `Promise.all([whenFontsSettled(), delay(PRELOADER_MIN_MS)])`,
+ *  - The gate is `Promise.all([whenFontsSettled(), delay(PRELOADER_MIN_MS),
+ *    race(modelReady, delay(PRELOADER_FONTS_FALLBACK_MS))])` (`entranceGate`),
  *    so it resolves in `[PRELOADER_MIN_MS, max(PRELOADER_FONTS_FALLBACK_MS,
  *    PRELOADER_MIN_MS)]` — bounded on BOTH ends. It waits at least the MIN even
  *    if fonts are already ready, and at most the fallback even if they never
@@ -121,6 +122,24 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * The bounded entrance gate (SPEC §8.1 + TICKETS T-GLB row 1): webfonts
+ * settled, the MIN beat elapsed, AND Byte's real model live — the last
+ * capped at `PRELOADER_FONTS_FALLBACK_MS`, so a slow or failed model can
+ * never hold the overlay longer than the fonts fallback already could. It
+ * still resolves in `[PRELOADER_MIN_MS, PRELOADER_FONTS_FALLBACK_MS]`, and
+ * usually the real Byte drops in from the very first frame. `modelReady`
+ * never rejects (`BytePetHandle.modelReady`); absent (no WebGL, no
+ * `modelUrl`) it counts as live.
+ */
+export function entranceGate(modelReady: Promise<void> = Promise.resolve()): Promise<void> {
+  return Promise.all([
+    whenFontsSettled(),
+    delay(PRELOADER_MIN_MS),
+    Promise.race([modelReady, delay(PRELOADER_FONTS_FALLBACK_MS)]),
+  ]).then(() => undefined);
 }
 
 /**
@@ -246,7 +265,8 @@ export async function runEntrance(deps: EntranceDeps): Promise<void> {
   }
 
   // 2. The bounded gate — resolves in [MIN, max(FALLBACK, MIN)], never hangs.
-  await Promise.all([whenFontsSettled(), delay(PRELOADER_MIN_MS)]);
+  //    (T-GLB: now also waits for Byte's model, capped — see `entranceGate`)
+  await entranceGate(deps.bytePet?.modelReady);
 
   // Guarantee 100 is shown before the lift, whichever way the gate resolved
   // (fonts before the count finished, or reduced motion already at 100).

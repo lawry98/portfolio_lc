@@ -70,11 +70,14 @@ time.
 
 Enforced per `docs/SPEC.md` §13:
 
-| Budget        | Limit    | Shipped (production)                        |
-| ------------- | -------- | ------------------------------------------- |
-| JS (gzip)     | ≤ 280 KB | ~206 KB                                     |
-| CSS (gzip)    | ≤ 20 KB  | ~3.3 KB                                     |
-| Fonts (woff2) | ≤ 120 KB | ~26 KB — Space Grotesk, 2 weights (500/700) |
+| Budget                                   | Limit                                    | Shipped (production)                           |
+| ---------------------------------------- | ---------------------------------------- | ---------------------------------------------- |
+| JS entry (gzip)                          | —                                        | ~225.28 KB                                     |
+| JS loader chunk (gzip, lazy `glbLoader`) | —                                        | ~21.00 KB                                      |
+| JS total (gzip)                          | ≤ 280 KB                                 | ~246.3 KB                                      |
+| CSS (gzip)                               | ≤ 20 KB                                  | ~3.34 KB                                       |
+| Fonts (woff2)                            | ≤ 120 KB                                 | ~26 KB — Space Grotesk, 2 weights (500/700)    |
+| Model (gzip)                             | ~500 KB (soft; accepted exception, D-22) | ~525 KB — `byte.glb`, 36,283 tris, no textures |
 
 Dev intentionally ships all 3 font families (~99 KB total) so the `?lab` type chooser can
 preview each one live; only the locked family ships in production.
@@ -135,11 +138,12 @@ for the mount/cleanup contract, the DOM requirements, and a React sketch.
 
 ## Status & pending owner deliverables
 
-This is a complete, playable demo, but three pieces are still placeholders pending
-assets/details from the project owner:
+This is a complete, playable demo. Byte's model has shipped; two pieces are still
+placeholders pending assets/details from the project owner:
 
-- **Byte's model** — a procedural placeholder bot stands in until a rigged `byte.glb`
-  (see `docs/ASSET_SPEC.md`) lands at the **T-GLB** ticket.
+- **Byte's model** — the delivered, rigged `byte.glb` (see `docs/ASSET_SPEC.md`) is live
+  (**T-GLB**, D-22); the procedural placeholder bot remains as the fallback while it loads
+  or if it fails to.
 - **Sound** — the WebAudio synth stands in until recorded audio (see
   `docs/AUDIO_SPEC.md`) lands at the **T-Audio** ticket.
 - **Contact links** — the email and social links are placeholders

@@ -154,16 +154,17 @@ const DASH_BANK_RISE_FRACTION = 0.3;
 const DASH_ARRIVAL_EASE = 'back.out(1.25)';
 
 // ---------------------------------------------------------------------------
-// Tunables — eat (brief 3c: "two chomps"). `EAT_BITE_DURATION` matches
-// rig.ts's own `EAT_CHOMP_DURATION` (0.1s) x2 (one full down+up chomp
-// cycle) so the glyph's two-phase consumption lands exactly on the Eat
-// clip's two chomp landmarks (rig.ts is not imported for this — the two
-// modules just stay numerically in lockstep by hand, the same
-// cross-file-constant-echo convention shadow.ts uses against rig.ts's
-// `HOP_APEX_FRACTION`).
+// Tunables — eat (brief 3c: "two chomps"). T-GLB row 6: the two bites land on
+// the delivered Eat clip's head-nod peaks (TICKETS T-GLB clip-beat table;
+// `glbAsset.test.ts` asserts them against byte.glb) — the glyph reaches the
+// midpoint on bite 1 and is swallowed on bite 2, and each eat blip fires ON
+// its bite (R-GLB-11). rig.ts's placeholder `Eat` fake squash-peaks on the
+// same two beats; the two modules stay numerically in lockstep by hand (the
+// cross-file-constant-echo convention shadow.ts uses against rig.ts).
 // ---------------------------------------------------------------------------
 
-const EAT_BITE_DURATION = 0.2;
+const EAT_BITE_1_S = 0.33;
+const EAT_BITE_2_S = 0.6;
 /** How far toward `mouthWorld()` (and how much scale is lost) by the end of chomp 1. */
 const EAT_MIDPOINT_FRACTION = 0.5;
 const EAT_MID_SCALE_FRACTION = 0.55;
@@ -190,12 +191,12 @@ const PARTICLE_REDUCED_FADE_DURATION = 0.2;
 // ---------------------------------------------------------------------------
 // Tunables — "satisfied wiggle" (brief 3c: welcome polish, skip under
 // reduce). A ROOT-level uniform-scale pulse, RELATIVE to the root's resting
-// scalar (`deps.unitPx` — `placeholderBot.ts` does `root.scale.setScalar(
-// unitPx)` once at construction, and nothing else ever writes
-// `rig.object3d.scale` afterward, so it stays exactly `unitPx` on every axis
-// until this pulse runs). `SATISFIED_WIGGLE_SCALE` is a MULTIPLIER of that
-// resting scalar, not an absolute target — `rig.object3d.scale` rests at
-// `unitPx` (typically 48-128), never at 1.
+// scalar (`deps.unitPx` — `createBytePet.ts` does `rig.object3d.scale.
+// setScalar(unitPx)` once, on the swappable root, and nothing else ever
+// writes `rig.object3d.scale` afterward, so it stays exactly `unitPx` on
+// every axis until this pulse runs). `SATISFIED_WIGGLE_SCALE` is a
+// MULTIPLIER of that resting scalar, not an absolute target —
+// `rig.object3d.scale` rests at `unitPx` (typically 48-128), never at 1.
 // ---------------------------------------------------------------------------
 
 const SATISFIED_WIGGLE_SCALE = 1.08;
@@ -606,10 +607,11 @@ export function createFeeder(
       return;
     }
     const scale = rig.object3d.scale;
-    // The root's definitive resting scalar (placeholderBot.ts:
-    // `root.scale.setScalar(unitPx)`) — NOT the live `scale.x`, which could
-    // be read mid-tween. SATISFIED_WIGGLE_SCALE is a multiplier of this, so
-    // the pulse always returns to exactly `unitPx` on every axis, never 1.
+    // The root's definitive resting scalar (createBytePet.ts:
+    // `rig.object3d.scale.setScalar(unitPx)`, on the swappable root) — NOT
+    // the live `scale.x`, which could be read mid-tween. SATISFIED_WIGGLE_SCALE
+    // is a multiplier of this, so the pulse always returns to exactly
+    // `unitPx` on every axis, never 1.
     const base = deps.unitPx;
     const peak = base * SATISFIED_WIGGLE_SCALE;
     const tl = gsap.timeline();
@@ -688,34 +690,35 @@ export function createFeeder(
         fsm.send('ATE');
       },
     });
-    // Chomp 1 (0 -> EAT_BITE_DURATION): partway to the mouth, partway shrunk.
+    const bite2Duration = EAT_BITE_2_S - EAT_BITE_1_S;
+    // Bite 1 (0 -> EAT_BITE_1_S): partway to the mouth, partway shrunk.
     tl.to(
       glyph.position,
-      { x: mid.x, y: mid.y, z: mid.z, duration: EAT_BITE_DURATION, ease: 'power1.in' },
+      { x: mid.x, y: mid.y, z: mid.z, duration: EAT_BITE_1_S, ease: 'power1.in' },
       0,
     );
     tl.to(
       glyph.scale,
-      { x: midScale, y: midScale, z: midScale, duration: EAT_BITE_DURATION, ease: 'power1.in' },
+      { x: midScale, y: midScale, z: midScale, duration: EAT_BITE_1_S, ease: 'power1.in' },
       0,
     );
-    // Chomp 2 (EAT_BITE_DURATION -> 2x): the rest of the way into the mouth, gone.
+    // Bite 2 (EAT_BITE_1_S -> EAT_BITE_2_S): the rest of the way into the mouth, gone.
     tl.to(
       glyph.position,
-      { x: mouth.x, y: mouth.y, z: mouth.z, duration: EAT_BITE_DURATION, ease: 'power2.in' },
-      EAT_BITE_DURATION,
+      { x: mouth.x, y: mouth.y, z: mouth.z, duration: bite2Duration, ease: 'power2.in' },
+      EAT_BITE_1_S,
     );
     tl.to(
       glyph.scale,
-      { x: 0, y: 0, z: 0, duration: EAT_BITE_DURATION, ease: 'power2.in' },
-      EAT_BITE_DURATION,
+      { x: 0, y: 0, z: 0, duration: bite2Duration, ease: 'power2.in' },
+      EAT_BITE_1_S,
     );
-    // T7 (R7-1): the two eat blips ALTERNATE with the chomps — `eatA` at
-    // chomp 1's start (offset 0), `eatB` at chomp 2's start (EAT_BITE_DURATION).
-    // `tl.call` fires each at its absolute timeline position regardless of
-    // insertion order, so the cues stay in lockstep with the bite tweens above.
-    tl.call(() => deps.sound.play('eatA'), [], 0);
-    tl.call(() => deps.sound.play('eatB'), [], EAT_BITE_DURATION);
+    // T7 (R7-1) + T-GLB (R-GLB-11): each eat blip lands ON its bite — `eatA` as
+    // bite 1 closes, `eatB` as bite 2 swallows the glyph (the same moment the
+    // burst + satisfied wiggle fire from `onComplete`). `tl.call` fires at its
+    // absolute timeline position regardless of insertion order.
+    tl.call(() => deps.sound.play('eatA'), [], EAT_BITE_1_S);
+    tl.call(() => deps.sound.play('eatB'), [], EAT_BITE_2_S);
     eatTween = track(tl);
   }
 

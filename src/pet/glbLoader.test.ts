@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { describe, expect, it, vi } from 'vitest';
 import { loadByteGLB, mapGltfToRigSource } from './glbLoader';
 
@@ -35,6 +36,9 @@ describe('mapGltfToRigSource', () => {
     expect(result.eye).toBeUndefined();
     expect(result.mouth).toBeUndefined();
     expect(result.clips).toEqual({});
+    expect(result.eyes).toBeUndefined();
+    expect(result.torso).toBeUndefined();
+    expect(result.materials).toBeUndefined();
   });
 
   it('finds Body and Glow materials by name, case-insensitively', () => {
@@ -189,6 +193,34 @@ describe('mapGltfToRigSource', () => {
     expect(result.clips.Eat).toBe(eatClip);
     expect(result.clips.Hop).toBeUndefined(); // missing clip — omitted, never thrown
   });
+
+  it('finds EyeL/EyeR (always in that order), Torso, and every distinct material (T-GLB)', () => {
+    const scene = new THREE.Group();
+    const body = new THREE.MeshStandardMaterial({ name: 'Body' });
+    const glow = new THREE.MeshStandardMaterial({ name: 'Glow' });
+    const visor = new THREE.MeshStandardMaterial({ name: 'Visor' });
+    const torso = new THREE.Object3D();
+    torso.name = 'torso'; // proves case-insensitivity
+    const eyeR = new THREE.Mesh(undefined, glow);
+    eyeR.name = 'EyeR';
+    const eyeL = new THREE.Mesh(undefined, glow); // Glow shared, like byte.glb
+    eyeL.name = 'eyel';
+    scene.add(new THREE.Mesh(undefined, body), torso, eyeR, eyeL, new THREE.Mesh(undefined, visor));
+
+    const result = mapGltfToRigSource(gltfOf(scene));
+
+    expect(result.eyes).toEqual([eyeL, eyeR]); // EyeL first regardless of graph order
+    expect(result.torso).toBe(torso);
+    expect(result.materials).toEqual([body, glow, visor]); // traversal order, Glow once
+  });
+
+  it('returns only the eye that exists when one is missing', () => {
+    const scene = new THREE.Group();
+    const eyeR = new THREE.Object3D();
+    eyeR.name = 'EyeR';
+    scene.add(eyeR);
+    expect(mapGltfToRigSource(gltfOf(scene)).eyes).toEqual([eyeR]);
+  });
 });
 
 describe('loadByteGLB', () => {
@@ -211,6 +243,24 @@ describe('loadByteGLB', () => {
 
     await expect(loadByteGLB('nonexistent.glb')).rejects.toBe(loadError);
 
+    loadSpy.mockRestore();
+  });
+
+  it('decodes meshopt and wires no DRACO loader (T-GLB row 9)', async () => {
+    const meshoptSpy = vi.spyOn(GLTFLoader.prototype, 'setMeshoptDecoder');
+    const dracoSpy = vi.spyOn(GLTFLoader.prototype, 'setDRACOLoader');
+    const loadSpy = vi
+      .spyOn(GLTFLoader.prototype, 'load')
+      .mockImplementation((_url, _onLoad, _onProgress, onError) => {
+        onError?.(new Error('boom'));
+      });
+
+    await expect(loadByteGLB('byte.glb')).rejects.toThrow('boom');
+    expect(meshoptSpy).toHaveBeenCalledWith(MeshoptDecoder);
+    expect(dracoSpy).not.toHaveBeenCalled();
+
+    meshoptSpy.mockRestore();
+    dracoSpy.mockRestore();
     loadSpy.mockRestore();
   });
 });

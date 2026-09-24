@@ -28,7 +28,9 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 import { createPetRig } from './rig';
-import { createPlaceholderBot, POSE_GROUP_NAME } from './placeholderBot';
+import { createPlaceholderBot } from './placeholderBot';
+import { createSwappableRig, decideSwapTiming, MODEL_SWAP_STATES } from './swapRig';
+import { createGlbRig } from './glbRig';
 import { createFSM } from './fsm';
 import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
@@ -46,7 +48,7 @@ import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
 import type { Phrase } from '../phrases';
-import type { BytePetHandle, ClipName, PetOptions, PetState } from './types';
+import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState } from './types';
 
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
@@ -57,6 +59,14 @@ type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
 /** SPEC §6 "cursor within ~150px" — screen-space distance that flips POINTER_NEAR/FAR. */
 const PROXIMITY_PX = 150;
 
+/**
+ * T-GLB row 5: Byte stands 1.25× the headline font-size. Applied once, where
+ * `unitPx` is read, so it reaches both rigs and every Byte-relative distance
+ * — the half-height pin, the stage clamp box, the shadow, and the glyph and
+ * toss sizes (`feed.ts` receives the same `unitPx`).
+ */
+const BYTE_SIZE_SCALE = 1.25;
+
 /** `localStorage` key gating the invited hint (SPEC §6 "gone forever after first feed"). */
 const HINT_SHOWN_KEY = 'byte-hint-shown';
 const HINT_TEXT = '(click to feed Byte)';
@@ -65,6 +75,9 @@ const HINT_GAP_PX = 14;
 const HINT_FADE_S = 0.35;
 
 /**
+ * T-GLB row 6: the FSM holds `peeking` for the delivered Peek clip's full
+ * 1.667 s (it was 1.2 s, tuned to the placeholder).
+ *
  * `createBytePet` is the single source of truth for `peekMs` — passed
  * straight into `createFSM({ peekMs: PEEK_MS })` below, rather than relying
  * on this constant merely matching `fsm.ts`'s own default by convention (a
@@ -73,25 +86,32 @@ const HINT_FADE_S = 0.35;
  * the other). Also used to time this module's own `setBehind()` flip
  * against the FSM's own peekMs-driven auto-exit.
  */
-const PEEK_MS = 1200;
-/** When (seconds into the peek) the bot flips behind the letterform — roughly the rise's apex. */
-const PEEK_BEHIND_ON_S = 0.3;
-/** When it flips back in front — comfortably before the FSM's own `peekMs` auto-exit, leaving a settle beat. */
-const PEEK_BEHIND_OFF_S = 0.85;
+const PEEK_MS = 1667;
+/** When (s into the peek) Byte flips behind the letterform — during the Peek clip's fast rise (0.1–0.7 s), T-GLB row 6. */
+const PEEK_BEHIND_ON_S = 0.2;
+/** When it flips back in front — during the clip's drop (1.3–1.6 s), before the FSM's `PEEK_MS` exit. */
+const PEEK_BEHIND_OFF_S = 1.45;
+/**
+ * T-GLB row 6: the FSM's wake window — the delivered Wake clip's full 1.25 s
+ * (fsm.ts's own default is 600 ms). Passed through `createFSM`'s config like
+ * `peekMs`, so fsm.ts stays untouched.
+ */
+const WAKE_MS = 1250;
 /** Reduced-motion peek: opacity dipped to, and the small rise/duration of each fade leg. */
 const PEEK_REDUCED_FADE_OPACITY = 0.45;
 const PEEK_REDUCED_RISE_PX = 10;
 const PEEK_REDUCED_PHASE_S = 0.25;
 
-/** Editor-authentic hard-step blink (brief 4d) — `source.eye.scale.y` squash via `steps()`. */
-const EYE_OPEN_SCALE_Y = 1;
-const EYE_CLOSED_SCALE_Y = 0.06;
+/**
+ * Editor-authentic hard-step blink (brief 4d): two instant `rig.setBlink`
+ * steps per cycle. The squash itself lives in each rig (`EYE_CLOSED_SCALE_Y`,
+ * rig.ts, T-GLB), so it lands on the placeholder's visor and on the GLB's
+ * EyeL/EyeR alike.
+ */
 /** Time between the start of one blink and the next. */
 const BLINK_CYCLE_S = 2.6;
 /** How long the eye stays visually closed. */
 const BLINK_CLOSED_HOLD_S = 0.08;
-/** Non-zero so `ease: 'steps(1)'` has a (tiny) window to snap within — see `buildBlink()`. */
-const BLINK_SNAP_S = 0.05;
 
 /** Micro-behaviour scheduler cadence (SPEC §6 "every 4–8s"). */
 const MICRO_MIN_S = 4;
@@ -383,6 +403,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * default.
    */
   let currentGlowAccent: THREE.ColorRepresentation = DEFAULT_GLOW_ACCENT;
+  /**
+   * T-GLB: the Glow level (0 off … 1 full) this module last gave the rig —
+   * `applyTheme`'s crossfade lerps FROM it, so this module never reads a
+   * material back. 0 until the construction-time `applyTheme` below sets it.
+   */
+  let glowLevel = 0;
+  function applyGlowLevel(level: number): void {
+    glowLevel = level;
+    rig.setGlowLevel(level, currentGlowAccent);
+  }
   // T7 sound seam (R7-1): every cue this module or its feeder fires goes through
   // this one `SoundEngine`. Defaults to the exported `silentSoundEngine` no-op
   // when `main.ts` injects no engine, so all `sound.play(...)` calls become
@@ -398,10 +428,24 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     reducedMotion: opts.reducedMotion,
   });
 
-  const unitPx = parseFloat(getComputedStyle(opts.headlineEl).fontSize);
-  const source = createPlaceholderBot({ unitPx, theme });
-  const rig = createPetRig(source);
+  const unitPx = parseFloat(getComputedStyle(opts.headlineEl).fontSize) * BYTE_SIZE_SCALE;
+  // T-GLB row 7 (R-GLB-7): ONE swappable rig for Byte's whole life. It owns
+  // the stable root (placement + the `unitPx` scale, set here once) and
+  // `pose`, and hosts the procedural placeholder now and the GLB once it
+  // loads (`swap()`, below). Everything in this module and in `feed.ts`
+  // talks to `rig` alone — never to a leaf rig or its RigSource.
+  const rig = createSwappableRig(createPetRig(createPlaceholderBot({ theme })));
+  rig.object3d.scale.setScalar(unitPx);
   scene.addToPet(rig.object3d);
+
+  // --- T-GLB: the real model's arrival (rows 1/8, R-GLB-13) ---------------
+  // Loaded but not yet swapped in (waiting for a resting state), or null.
+  let pendingModelRig: PetRig | null = null;
+  let resolveModelReady: () => void = () => {};
+  /** `BytePetHandle.modelReady` — resolved at the swap, at a load failure, or at `destroy()`; never rejects. */
+  const modelReady = new Promise<void>((resolve) => {
+    resolveModelReady = resolve;
+  });
 
   const shadow = createBlobShadow();
   scene.addToFront(shadow.mesh);
@@ -409,7 +453,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // `initialState: 'hidden'` (T6b entrance) starts Byte in the construction
   // mode `enterAndType()` reveals + drops in from; omitting the entrance keeps
   // the FSM starting `idle`, byte-for-byte as before.
-  const fsm = createFSM({ peekMs: PEEK_MS, initialState: opts.entrance ? 'hidden' : 'idle' });
+  const fsm = createFSM({
+    peekMs: PEEK_MS,
+    wakeMs: WAKE_MS,
+    initialState: opts.entrance ? 'hidden' : 'idle',
+  });
 
   // --- Feeder (T5, R-T5-8) ---------------------------------------------------
   // Owns the toss/dash/eat glyph choreography end to end: `feed(x,y)` tosses
@@ -425,12 +473,6 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     unitPx,
     sound,
   });
-
-  // The placeholder's internal clip-motion node (`placeholderBot.ts`'s "root
-  // vs pose split") — read-only here, purely to sample the bot's CURRENT
-  // hover height for the shadow. Never written to directly: only `rig.play()`
-  // owns this node's transform.
-  const pose = source.scene.getObjectByName(POSE_GROUP_NAME);
 
   // --- Feed zone (brief 4c "the feed zone (hero area)") --------------------
   // `PetOptions` only hands us the home headlines, so each home's zone is
@@ -709,6 +751,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let microTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let glanceTimer: ReturnType<typeof gsap.delayedCall> | null = null;
   let peekTimeline: ReturnType<typeof gsap.timeline> | null = null;
+  /** T-GLB: the reduced-motion peek's opacity, persisted across kills so a superseded fade resumes from where it was (the `stageOpacity` idiom) — driven into `rig.setOpacity`. */
+  const peekFade = { v: 1 };
   /** Named single slot (parked T4 minor, carry-forward #5) so a superseded hint fade self-prunes instead of leaving a dead entry in `liveTweens` — `overwrite: true` already kills the competing GSAP tween internally, but that kill never fires `onComplete`, so `track()`'s own Set-removal never ran for it without this. */
   let hintTween: ReturnType<typeof gsap.to> | null = null;
   /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
@@ -844,35 +888,22 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let wasActiveInBand = true;
 
   // --- Blink (brief 4d "Blink") ----------------------------------------------
-  // Hard-step squash of `source.eye.scale.y` — an infinite-repeat timeline
-  // that's PAUSED/RESUMED (not killed/rebuilt) as states change, so it never
-  // restarts mid-cycle. Built fresh inside EACH matchMedia branch below (both
-  // branches call `buildBlink()` identically) so it survives a live OS
-  // reduced-motion flip, per R-T4-7's explicit instruction.
-  function buildBlink(): ReturnType<typeof gsap.timeline> | null {
-    if (!source.eye) {
-      return null;
-    }
-    const eyeScale = source.eye.scale;
+  // An infinite-repeat timeline of two `rig.setBlink` steps that's PAUSED/
+  // RESUMED (not killed/rebuilt) as states change, so it never restarts
+  // mid-cycle. Built fresh inside EACH matchMedia branch below (both branches
+  // call `buildBlink()` identically) so it survives a live OS reduced-motion
+  // flip, per R-T4-7's explicit instruction. A rig without eyes simply
+  // ignores `setBlink` (T-GLB row 12).
+  function buildBlink(): ReturnType<typeof gsap.timeline> {
     const tl = track(gsap.timeline({ repeat: -1 }));
-    tl.to(
-      eyeScale,
-      { y: EYE_CLOSED_SCALE_Y, duration: BLINK_SNAP_S, ease: 'steps(1)' },
-      BLINK_CYCLE_S,
-    );
-    tl.to(
-      eyeScale,
-      { y: EYE_OPEN_SCALE_Y, duration: BLINK_SNAP_S, ease: 'steps(1)' },
-      BLINK_CYCLE_S + BLINK_CLOSED_HOLD_S,
-    );
+    tl.call(() => rig.setBlink(true), undefined, BLINK_CYCLE_S);
+    tl.call(() => rig.setBlink(false), undefined, BLINK_CYCLE_S + BLINK_CLOSED_HOLD_S);
     return tl;
   }
 
   function pauseBlink(): void {
     blinkTimeline?.pause();
-    if (source.eye) {
-      gsap.set(source.eye.scale, { y: EYE_OPEN_SCALE_Y });
-    }
+    rig.setBlink(false);
   }
 
   function resumeBlink(): void {
@@ -912,10 +943,6 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   // --- Theme (R-T4-5) ----------------------------------------------------------
-  function themedMaterials(): THREE.MeshStandardMaterial[] {
-    return [source.body, source.glow].filter((m): m is THREE.MeshStandardMaterial => m != null);
-  }
-
   function setDimmed(on: boolean): void {
     const base = bodyColorForTheme(theme);
     // Reuse the `dimColor` scratch instead of allocating a fresh Color each call.
@@ -985,7 +1012,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       rig.object3d.scale.y = unitPx;
 
       scene.setTheme(t, 0);
-      rig.setGlow(t === 'dark', currentGlowAccent);
+      applyGlowLevel(t === 'dark' ? 1 : 0);
       setDimmed(fsm.state() === 'sleeping');
       return;
     }
@@ -995,22 +1022,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const fromBody = bodyColorForTheme(prevTheme);
     const toBody = bodyColorForTheme(t);
 
-    // Snapshot the Glow's CURRENT emissive intensity as the lerp's start
-    // value, then call `rig.setGlow` itself (instant) purely to read the
-    // intensity it jumps to as the lerp's target — this decouples this
-    // module from rig.ts's own private `GLOW_ON_INTENSITY` constant, which
-    // isn't exported. `rig.setGlow` also sets the emissive accent color
-    // here (constant across a single theme lerp — `currentGlowAccent`, T8's
-    // lab-switchable accent, defaulting to `DEFAULT_GLOW_ACCENT` — so it
-    // needs no lerp of its own); restoring `emissiveIntensity` to the start
-    // value right after undoes only the instant intensity jump, so the
-    // tween below can ease between the two.
-    const fromGlowIntensity = source.glow?.emissiveIntensity ?? 0;
-    rig.setGlow(t === 'dark', currentGlowAccent);
-    const toGlowIntensity = source.glow?.emissiveIntensity ?? 0;
-    if (source.glow) {
-      source.glow.emissiveIntensity = fromGlowIntensity;
-    }
+    // The Glow lerps between LEVELS (0 off … 1 on) through `rig.setGlowLevel`
+    // (T-GLB) — the rig maps a level onto its own on-intensity, so this module
+    // needs neither that constant nor a material read-back.
+    const fromGlowLevel = glowLevel;
+    const toGlowLevel = t === 'dark' ? 1 : 0;
 
     const fromColor = new THREE.Color(fromBody);
     const toColor = new THREE.Color(toBody);
@@ -1024,10 +1040,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
           // Reuse ONE scratch Color per frame (no per-tick allocation). `copy` resets it to the
           // start each frame before lerping toward `toColor` by the eased progress.
           rig.setBodyColor(themeLerpColor.copy(fromColor).lerp(toColor, proxy.p));
-          if (source.glow) {
-            source.glow.emissiveIntensity =
-              fromGlowIntensity + (toGlowIntensity - fromGlowIntensity) * proxy.p;
-          }
+          applyGlowLevel(fromGlowLevel + (toGlowLevel - fromGlowLevel) * proxy.p);
         },
         onComplete: () => {
           themeLerpTween = null;
@@ -1102,57 +1115,46 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   /** Reduced-motion: "fade up/behind instead of a hop" — still `setBehind` (occlusion is a layer swap). */
   function runPeekReduced(): void {
     peekTimeline = killTracked(peekTimeline);
-    themedMaterials().forEach((m) => {
-      m.transparent = true;
-    });
 
-    // The small "rise" drives `pose.position.y` — the SAME hover channel
-    // the shadow's height/opacity reads every tick (`onTick`, `hoverPx`) and
-    // the full-motion path's `rig.play('Peek')` uses internally — NOT
-    // `drift` (a ROOT-level offset the shadow's own POSITION also follows).
-    // Driving the rise through `drift` moved the shadow along with the bot
-    // without correspondingly fading/growing it (the shadow read `hoverPx`
-    // from `pose`, which `drift` never touches), so the ground-contact blob
-    // floated up fully dark instead of scaling/fading like the full-motion
-    // peek's does. Reaching into `pose` directly here (unlike everywhere
-    // else in this module) is safe specifically because `playUnlessReduced`
-    // guarantees `rig.play()` is never called while `reducedActive` is true
-    // — nothing else can be fighting over this node's transform in this
-    // mode. `riseFraction` converts the original world-px rise target into
-    // `pose`'s normalized (fraction-of-bot-height) units, so the visible
-    // rise stays ~`PEEK_REDUCED_RISE_PX` regardless of `unitPx`.
+    // The small "rise" drives `rig.pose.position.y` — the swappable rig's
+    // consumer-owned pose (T-GLB, R-GLB-6), which its `hoverHeight()` adds to
+    // the leaf's lift, so the shadow's height/opacity still follow the rise
+    // (the reason this rise never lived on `drift`, a ROOT offset the shadow
+    // only follows in POSITION). Safe to write directly: `playUnlessReduced`
+    // guarantees `rig.play()` never runs while `reducedActive`, and nothing
+    // else writes `pose.position`. `riseFraction` converts the world-px rise
+    // into pose units (fractions of Byte's height), so the visible rise stays
+    // ~`PEEK_REDUCED_RISE_PX` at any `unitPx`.
     const riseFraction = PEEK_REDUCED_RISE_PX / unitPx;
+    // R-GLB-2: `rig.setOpacity` flips `transparent` WITH `needsUpdate`, so this
+    // fade is finally visible (it never was before T-GLB), and it reaches every
+    // material the rig owns — the GLB's Visor included.
+    const writeFade = (): void => rig.setOpacity(peekFade.v);
 
     const holdEnd = PEEK_MS / 1000 - PEEK_REDUCED_PHASE_S * 2 - 0.15;
     const tl = track(gsap.timeline());
     tl.call(() => scene.setBehind(true), undefined, 0);
-    if (pose) {
-      tl.to(
-        pose.position,
-        { y: riseFraction, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
-        0,
-      );
-    }
     tl.to(
-      themedMaterials(),
-      { opacity: PEEK_REDUCED_FADE_OPACITY, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
+      rig.pose.position,
+      { y: riseFraction, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.out' },
+      0,
+    );
+    tl.to(
+      peekFade,
+      {
+        v: PEEK_REDUCED_FADE_OPACITY,
+        duration: PEEK_REDUCED_PHASE_S,
+        ease: 'power1.out',
+        onUpdate: writeFade,
+      },
       0,
     );
     tl.call(() => scene.setBehind(false), undefined, holdEnd);
-    if (pose) {
-      tl.to(pose.position, { y: 0, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' }, holdEnd);
-    }
+    tl.to(rig.pose.position, { y: 0, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' }, holdEnd);
     tl.to(
-      themedMaterials(),
-      { opacity: 1, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in' },
+      peekFade,
+      { v: 1, duration: PEEK_REDUCED_PHASE_S, ease: 'power1.in', onUpdate: writeFade },
       holdEnd,
-    );
-    // Back to fully opaque by this point — drop `transparent` so the
-    // material renders in the normal (non-blended) pass again afterward.
-    tl.call(
-      () => themedMaterials().forEach((m) => (m.transparent = false)),
-      undefined,
-      holdEnd + PEEK_REDUCED_PHASE_S,
     );
     peekTimeline = tl;
   }
@@ -1299,11 +1301,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * pool (`idleMicroPool()`), `Peek`'s reduced branch (`runPeekReduced`)
    * never calls `rig.play('Peek')`, and this function itself gates the
    * remaining four. `rig.play()` is the only thing THIS GUARD needs to
-   * worry about gating, so `pose` stays at its construction-time identity
-   * for the entire reduced-motion lifetime EXCEPT during a peek:
-   * `runPeekReduced` nudges `pose.position.y` directly (a small rise/fall,
-   * not through `play()`) for the fade's duration, settling back to
-   * identity once the peek ends. Sleep's dim (`setDimmed`, unconditional)
+   * worry about gating, so the rig's content holds its rest pose for the
+   * entire reduced-motion lifetime, and the only exception is a peek, where
+   * `runPeekReduced` nudges `rig.pose.position.y` directly (a small
+   * rise/fall, not through `play()`) for the fade's duration, settling back
+   * to identity once the peek ends. Sleep's dim (`setDimmed`, unconditional)
    * is unaffected either way.
    */
   function playUnlessReduced(clip: ClipName): void {
@@ -1409,8 +1411,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * state. Skipped outright under `reducedActive` (no spin a reduced-motion
    * user can't stop, matching every other full-motion-only beat in this
    * module). A full turn of `rig.object3d.rotation.y` — a channel nothing
-   * else ever writes: `rig.ts`'s look system drives `source.eye.rotation`
-   * (a different node, yaw+pitch for the eyes), and the dash bank
+   * else ever writes: the rig's look drives its own eye/head node inside the
+   * rig (a different node, yaw+pitch), and the dash bank
    * (`feed.ts`) / curious lean (`applyCuriousLean`) both live on
    * `rotation.z` — so this can never fight another writer. Hard-resets to
    * exactly 0 on completion (rather than leaving it at the tweened '+=2π'
@@ -1656,6 +1658,36 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       fadeStageOpacity(0);
     } else if (prev === 'traveling') {
       fadeStageOpacity(1);
+    }
+  });
+
+  /**
+   * Swaps a loaded GLB in if Byte is somewhere it may appear (row 8): instantly
+   * while `hidden`, else only at a resting state (`MODEL_SWAP_STATES`) — with
+   * the pop, or instantly under reduced motion. Anywhere else it keeps
+   * waiting; the `fsm.onEnter` below retries on the next resting state.
+   */
+  function trySwapInModel(): void {
+    if (!pendingModelRig || destroyed) {
+      return;
+    }
+    const state = fsm.state();
+    const timing = decideSwapTiming(state, state === 'hidden', reducedActive); // F7
+    if (timing === 'wait') {
+      return;
+    }
+    rig.swap(pendingModelRig, { animate: timing === 'pop' });
+    pendingModelRig = null;
+    resolveModelReady();
+  }
+
+  // Retry a waiting swap on the next resting state — one tick later, never
+  // inside this dispatch (`dispatch` above has already re-played the state's
+  // clip on the old leaf; the swap re-applies it to the new one, R-GLB-9),
+  // and re-checked then, so a state Byte already left never gets a swap.
+  fsm.onEnter((next) => {
+    if (pendingModelRig && MODEL_SWAP_STATES.has(next)) {
+      fireOnNextTick(trySwapInModel);
     }
   });
 
@@ -2192,9 +2224,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // reacquire glide just above, `rig.object3d.position` is wherever the
     // feeder/tween left it, and the shadow must track that rather than snap
     // ahead to where Byte is heading. Its scale/opacity still only respond
-    // to the pose group's own live hover height, never its own position.
+    // to the rig's live hover height (`rig.hoverHeight()`, T-GLB — the
+    // placeholder's clip lift or the GLB's Torso lift, plus the reduced-peek
+    // rise), never its own position.
     shadow.mesh.position.set(rig.object3d.position.x, rig.object3d.position.y, 0);
-    const hoverPx = (pose?.position.y ?? 0) * unitPx;
+    const hoverPx = rig.hoverHeight() * unitPx;
     shadow.setHeight(Math.max(0, hoverPx));
 
     // The hint sits under the last line (also "under the headline" — it's
@@ -2250,15 +2284,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * this from the `data-glow` axis's live `--glow` CSS token. Stores the new
    * accent in this instance's own `currentGlowAccent` (so every LATER
    * `applyTheme` call — including a subsequent theme toggle — keeps
-   * painting it, not just this one call) and re-applies it immediately via
-   * `rig.setGlow`, reading the CURRENT theme rather than assuming dark. In
-   * light mode the glow is off (`rig.setGlow(false, ...)` — see rig.ts), so
-   * switching the accent has no visible effect until dark mode is active;
-   * that is correct per SPEC §11 (the glow is a dark-mode-only effect).
+   * painting it, not just this one call) and re-applies it immediately at
+   * the current glow level (`rig.setGlowLevel`), so a switch mid-crossfade
+   * stays on the lerp. In light mode the glow level is 0, so switching the
+   * accent has no visible effect until dark mode is active; that is correct
+   * per SPEC §11 (the glow is a dark-mode-only effect).
    */
   function setGlowAccent(color: THREE.ColorRepresentation): void {
     currentGlowAccent = color;
-    rig.setGlow(theme === 'dark', currentGlowAccent);
+    rig.setGlowLevel(glowLevel, currentGlowAccent);
   }
 
   function onEat(cb: (total: number) => void): void {
@@ -2334,11 +2368,10 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * above the type-start anchor (the TOP line's left edge — where phrase #1
    * begins), shrunk to `ENTRANCE_SCALE_FROM`, then bounce it down onto the
    * anchor while its body scales up to 1, `ease: 'bounce.out'`. Writes the
-   * ROOT's `position.y` (world placement) and the clip-owned `pose`'s `scale`
-   * — the normalized body node the clips animate, NOT the root (whose scale is
-   * `unitPx`; scaling the root to 1 would shrink Byte permanently). `pose`'s
-   * identity scale is 1 and `rig.play('Idle')` resets it to 1 when the idle
-   * brain takes over, and this tween already ends there, so there is no jump.
+   * ROOT's `position.y` (world placement) and the swappable rig's own
+   * `pose.scale` (T-GLB: a consumer-owned group no clip touches), NOT the
+   * root (whose scale is `unitPx`; scaling the root to 1 would shrink Byte
+   * permanently). The tween ends at 1, which is where `pose` rests.
    * Returns a Promise resolved on the bounce's `onComplete` (composed via
    * `track()`); `enterAndType` `await`s it so the `byteToCaret` follow — which
    * also writes the root's position — only begins after the bounce finishes,
@@ -2357,9 +2390,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // Snap to the elevated, shrunk start BEFORE the bounce so frame 0 is that
     // start (world +y is up, so "above" is a larger y), never the origin.
     rig.object3d.position.set(landX, landY + unitPx * ENTRANCE_DROP_UNITS, 0);
-    if (pose) {
-      pose.scale.setScalar(ENTRANCE_SCALE_FROM);
-    }
+    rig.pose.scale.setScalar(ENTRANCE_SCALE_FROM);
 
     return new Promise<void>((resolve) => {
       const tl = track(gsap.timeline({ onComplete: resolve }));
@@ -2368,13 +2399,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         { y: landY, duration: ENTRANCE_DROP_DURATION_S, ease: 'bounce.out' },
         0,
       );
-      if (pose) {
-        tl.to(
-          pose.scale,
-          { x: 1, y: 1, z: 1, duration: ENTRANCE_DROP_DURATION_S, ease: 'bounce.out' },
-          0,
-        );
-      }
+      tl.to(
+        rig.pose.scale,
+        { x: 1, y: 1, z: 1, duration: ENTRANCE_DROP_DURATION_S, ease: 'bounce.out' },
+        0,
+      );
     });
   }
 
@@ -2504,9 +2533,60 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     teardownAnnouncer();
 
     feeder.dispose();
+    // T-GLB: a GLB that loaded but never swapped in is owned by nobody else.
+    pendingModelRig?.dispose();
+    pendingModelRig = null;
+    resolveModelReady();
     rig.dispose();
     shadow.dispose();
     scene.dispose();
+  }
+
+  // --- T-GLB: start the model fetch (row 1) --------------------------------
+  // Kicked off at construction, last, once everything the swap touches exists.
+  // `import('./glbLoader')` keeps GLTFLoader + MeshoptDecoder in their own lazy
+  // chunk (row 9). A chunk/fetch/404/parse failure logs ONE warning and keeps
+  // the placeholder for the session (row 12); `modelReady` resolves either way.
+  //
+  // F4: the two `.then` arguments below split that load failure from a
+  // failure building or swapping in the loaded rig (`createGlbRig`/
+  // `trySwapInModel`) — a single trailing `.catch` would report the latter
+  // as "byte.glb failed to load", which is false (the file loaded fine).
+  if (opts.modelUrl) {
+    const url = opts.modelUrl;
+    import('./glbLoader')
+      .then(({ loadByteGLB }) => loadByteGLB(url))
+      .then(
+        (source) => {
+          // F6: check before building the rig — destroyed means nothing
+          // downstream should be constructed, let alone mutated.
+          if (destroyed) {
+            resolveModelReady();
+            return;
+          }
+          try {
+            pendingModelRig = createGlbRig(source);
+            trySwapInModel();
+          } catch (error: unknown) {
+            // F4: a failure here is NOT a load failure — the file decoded
+            // fine, so it must not reuse that warning. Drop whatever we
+            // still own so a later destroy() can't dispose it twice.
+            console.warn(
+              '[byte] byte.glb loaded but failed to show; keeping the placeholder.',
+              error,
+            );
+            pendingModelRig?.dispose();
+            pendingModelRig = null;
+            resolveModelReady();
+          }
+        },
+        (error: unknown) => {
+          console.warn('[byte] byte.glb failed to load; keeping the placeholder.', error);
+          resolveModelReady();
+        },
+      );
+  } else {
+    resolveModelReady();
   }
 
   return {
@@ -2517,6 +2597,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     setHomeAnchor,
     setGlowAccent,
     setPhrases,
+    modelReady,
     destroy,
   };
 }
