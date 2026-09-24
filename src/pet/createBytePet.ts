@@ -35,7 +35,7 @@ import { createFSM } from './fsm';
 import { pickAnchor } from './anchor';
 import { createFeeder } from './feed';
 import { feedZoneFor } from './feedZone';
-import { startTicker } from './motion';
+import { haltQuickTo, startTicker } from './motion';
 import { createBlobShadow } from './shadow';
 import {
   bodyColorForTheme,
@@ -812,15 +812,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // `traveling` isn't a HOME_STATE. Unlike `byteToCaretX/Y`'s own
   // end-of-retype handoff (which relies solely on tween-creation-order —
   // see its doc comment above), `runMigrationFull`'s arrival branch
-  // (fix round 1, hardening) EXPLICITLY `gsap.killTweensOf`s
-  // `rig.object3d.position` before handing off to the reacquire glide, so
-  // this pair's own in-flight ease can never still be writing the SAME
-  // tick that glide starts. Confirmed (empirically, against the installed
-  // gsap version) that killing a `quickTo`'s underlying tween this way
-  // does NOT break its returned setter for a LATER migration — `resetTo()`
-  // re-attaches a killed tween to the root timeline on its next call.
-  // Also covered by `destroy()`'s existing
-  // `gsap.killTweensOf(rig.object3d.position)`.
+  // (fix round 1, hardening) EXPLICITLY halts this pair (`haltQuickTo`,
+  // motion.ts) before handing off to the reacquire glide, so its own
+  // in-flight ease can never still be writing the SAME tick that glide
+  // starts. Halting pauses the pair's tweens and the next migration's
+  // first call resumes them. It must NOT be `gsap.killTweensOf(position)`:
+  // `resetTo()` does re-attach a killed tween to the root timeline, but
+  // the kill emptied its PropTween list, so it never writes the root
+  // again. That was a shipped bug: every migration after the first froze
+  // in `traveling` (e.g. the footer->hero return leg). Only `destroy()`
+  // may kill the root's tweens outright.
   const byteToLaneX = gsap.quickTo(rig.object3d.position, 'x', {
     duration: MIGRATE_LANE_FOLLOW_DURATION_S,
     ease: 'power2',
@@ -1828,9 +1829,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    *    still-active home, `setHomeAnchor` simply no-ops (the brief's own
    *    documented behavior: `el === activeHome.el`), and `ARRIVED` +
    *    the reacquire glide alone bring Byte back onto it. Before handing
-   *    off, this branch also explicitly kills this module's own lane
-   *    tween (fix round 1, item 2 — see `byteToLaneX/Y`'s own doc comment
-   *    above for why that's safe to do and still leaves the pair usable
+   *    off, this branch also explicitly halts this module's own lane
+   *    pair (fix round 1, item 2 — see `byteToLaneX/Y`'s own doc comment
+   *    above for why it halts rather than kills: the pair must stay usable
    *    for a LATER migration).
    */
   function runMigrationFull(footer: Home): void {
@@ -1885,7 +1886,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       // Fix round 1, item 2: explicitly hand the root back over — never
       // rely solely on tween-creation-order to keep this pair from racing
       // the reacquire glide that starts moments later in this same tick.
-      gsap.killTweensOf(rig.object3d.position);
+      // HALT the lane pair, never `gsap.killTweensOf(rig.object3d.position)`:
+      // killing permanently disabled this (always mid-ease) pair, so the
+      // NEXT migration's lane never moved and Byte stayed `traveling` forever
+      // (see `haltQuickTo`).
+      haltQuickTo(byteToLaneX, byteToLaneY);
       setHomeAnchor(pickHome.el);
       fsm.send('ARRIVED');
       return;

@@ -1,5 +1,5 @@
 import gsap from 'gsap';
-import { startTicker, type TickerHandle } from './motion';
+import { haltQuickTo, startTicker, type TickerHandle } from './motion';
 
 /**
  * `document.hidden` is a getter inherited from `Document.prototype` (jsdom
@@ -151,5 +151,75 @@ describe('startTicker', () => {
     handle.stop();
 
     expect(removeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Drives GSAP's root timeline by hand, one synthetic 60fps frame per call —
+ * the same `updateRoot` the real ticker calls every rAF, so these tests run
+ * the actual quickTo/resetTo machinery without waiting on jsdom's rAF.
+ * Starts from the global timeline's current time so an earlier test (or a
+ * stray real tick) can't make the first synthetic frame render backwards.
+ */
+function createFrameDriver(): (frames: number, beforeEach?: () => void) => void {
+  let time = gsap.globalTimeline.time();
+  return (frames, beforeEach) => {
+    for (let i = 0; i < frames; i += 1) {
+      beforeEach?.();
+      time += 1 / 60;
+      gsap.updateRoot(time);
+    }
+  };
+}
+
+describe('haltQuickTo', () => {
+  it('stops an in-flight quickTo ease on the spot', () => {
+    const target = { x: 0 };
+    const toX = gsap.quickTo(target, 'x', { duration: 0.5, ease: 'power2' });
+    const frames = createFrameDriver();
+
+    frames(3, () => toX(100));
+    const held = target.x;
+    expect(held).toBeGreaterThan(0);
+    expect(held).toBeLessThan(100);
+
+    haltQuickTo(toX);
+    frames(30);
+
+    expect(target.x).toBe(held);
+  });
+
+  // Regression: the T8 migration arrival used `gsap.killTweensOf(position)`
+  // to stop the lane pair, which left every quickTo on that target unable
+  // to write again — the footer->hero return leg never moved and Byte
+  // stayed `traveling` forever. A halted setter must drive a second leg.
+  it('leaves the setter usable, so a second leg still drives the target', () => {
+    const target = { x: 0 };
+    const toX = gsap.quickTo(target, 'x', { duration: 0.5, ease: 'power2' });
+    const frames = createFrameDriver();
+
+    frames(60, () => toX(100));
+    expect(target.x).toBeCloseTo(100, 0);
+    haltQuickTo(toX);
+
+    frames(60, () => toX(0));
+
+    expect(target.x).toBeCloseTo(0, 0);
+  });
+
+  // Pins the GSAP behaviour that makes `haltQuickTo` necessary: if a gsap
+  // upgrade ever changes this, the comment on `haltQuickTo` needs revisiting.
+  it('exists because gsap.killTweensOf permanently disables a quickTo setter', () => {
+    const target = { x: 0 };
+    const toX = gsap.quickTo(target, 'x', { duration: 0.5, ease: 'power2' });
+    const frames = createFrameDriver();
+
+    frames(60, () => toX(100));
+    const afterFirstLeg = target.x;
+    gsap.killTweensOf(target);
+
+    frames(60, () => toX(0));
+
+    expect(target.x).toBe(afterFirstLeg);
   });
 });
