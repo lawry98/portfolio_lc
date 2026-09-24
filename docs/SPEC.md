@@ -72,7 +72,7 @@ Two full-viewport, fixed, transparent canvases sandwich the DOM: `#gl-back` (beh
 
 **Robustness:** WebGL unavailable → hide canvases, page stays fully functional (static headline #1, no pet). `visibilitychange` pauses the ticker. Dispose geometries/materials/textures for eaten food and on `destroy()` (verify no leak after 50 feeds).
 
-### 4.2 Character pipeline — placeholder now, GLB later
+### 4.2 Character pipeline — the delivered GLB, placeholder as fallback
 - **Placeholder bot:** a procedural robot assembled from Three.js primitives (RoundedBox body/head, small antenna, eye), sized from the live headline font-size, that satisfies the same runtime interface as the real model: a body material to theme, a `Glow` material, an eye/head node for look-at, a mouth anchor for eating, and a set of **named "clips"** faked via GSAP so the FSM can call `play('Dash')` etc. uniformly.
 - **Real model (T-GLB, D-22):** loaded through a dynamic `import()` of `GLTFLoader` plus three's own `MeshoptDecoder` (a lazy chunk, off the critical path). The loader **maps the GLB's named materials/nodes/clips to the same interface**, then the mapped rig is hosted inside one swappable rig that swaps it in — instantly while Byte is hidden, otherwise at the next resting state with a ~0.3s pop — and the placeholder is disposed. A failed load keeps the placeholder for the session. Contract lives in [`ASSET_SPEC.md`](ASSET_SPEC.md).
 - `modelUrl` is an optional module option; absent → placeholder is used (also the graceful fallback if the GLB fails to load).

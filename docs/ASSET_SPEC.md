@@ -1,7 +1,7 @@
 # ASSET_SPEC — Byte's 3D model (`.glb`)
 
 - **Status:** Delivered 2026-08-27 (owner's Blender build; audited 2026-09-22) — this file is now the re-export contract.
-- **Purpose:** the checklist for whoever produces Byte's model (you in Blender, a modeler, or an AI 3D tool). If the file meets this contract, it drops into the running demo with minimal rework. Until it arrives, a procedural placeholder bot stands in.
+- **Purpose:** the checklist for whoever produces Byte's model (you in Blender, a modeler, or an AI 3D tool). If the file meets this contract, it drops into the running demo with minimal rework. The delivered model (`byte.glb`) is what runs today; the procedural placeholder bot is the fallback when it can't load (see [`SPEC.md`](SPEC.md) §4.2).
 - **Related:** [`SPEC.md`](SPEC.md) §4.2–§4.3, §5.
 
 > TL;DR: one `.glb`, a **little robot**, Y-up / faces +Z / origin at feet / ~1.8u tall, ≤ ~40k tris, textures ≤ 1024², ≤ ~500KB compressed, with **named materials** (`Body`, `Glow`), **named nodes** (`Eye` or `Head`, `Mouth`), and **named baked clips** (`Idle Hop Dash Eat Sleep Wake Peek`).
@@ -30,6 +30,10 @@
 - **`Body`** — the main surface I recolor per light/dark theme. Standard PBR **metallic-roughness**. Give the bulk of the robot this material (or a small set I can tint together).
 - **`Glow`** *(optional but recommended)* — an emissive accent (eye, visor, chest light) I drive for the dark-mode phosphor glow in the chosen accent color (mint/amber/white/cyan). Mark it emissive.
 - **`Visor`** *(optional)* — left as authored; I never recolor or theme it (T-GLB).
+- **Export every material opaque** (T-GLB, swapRig.ts/rig.ts `applyOpacity`): the rig owns transparency
+  itself, fading the whole model in/out for the entrance, the swap pop and the reduced-motion peek.
+  An authored `BLEND` mode or a base-color alpha < 1 is flattened to opaque on load, so don't rely on
+  material-level transparency for any visual effect — it will be lost.
 - Exact material **names matter** — call them `Body`, `Glow` and `Visor` (case-insensitive match, but exact is safest).
 
 ## 5. Nodes (must be findable by name)

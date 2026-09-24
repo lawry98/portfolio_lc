@@ -344,8 +344,23 @@ createBytePet(document.body, {
 ```
 
 The fetch starts the moment `createBytePet` runs. `GLTFLoader` and three's `MeshoptDecoder` arrive
-through a separate, lazy `import('./glbLoader')` chunk (~21 KB gz) — they never inflate your
-entry bundle, and there's nothing to configure beyond `modelUrl` itself. Until the model resolves
+through a separate, lazy `import('./glbLoader')` chunk (~21.00 KB gz), keeping their decode cost
+off the critical path — but they don't leave your entry bundle untouched: the three core classes
+the mixer/skinning need (`AnimationMixer` etc.) live in `three.core.js`, which can't be split from
+the entry, so it grows too (**+15.6 KB gz**, 209.65 → 225.28 KB gz, measured). There's nothing to
+configure beyond `modelUrl` itself. Until the model resolves
 (or if it fails to load at all), Byte runs on the procedural placeholder; a late or failed load
 never blocks or breaks the page. Await `handle.modelReady` if you want to know when the real
 model is actually on screen.
+
+**Two host caveats:**
+
+- `MeshoptDecoder` instantiates WebAssembly. Under a strict Content-Security-Policy without
+  `'wasm-unsafe-eval'` in `script-src`, that instantiation fails, the load rejects, and Byte stays
+  on the placeholder for the session — exactly the "failed to load" path above, just triggered by
+  CSP instead of the network.
+- `modelReady` only resolves once the model has actually swapped in (row 8) — which waits for
+  Byte's next resting state, not just for the file to finish downloading. A host gating its own UI
+  on `modelReady` should cap how long it waits, the way this demo's preloader does — it races
+  `modelReady` against a 4 s `delay(4000)` and lifts on whichever settles first — otherwise a model
+  that loads instantly but arrives mid-dash could still be waited on for longer than expected.
