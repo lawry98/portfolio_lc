@@ -59,3 +59,21 @@ export function startTicker(render: (dt: number) => void): TickerHandle {
     },
   };
 }
+
+/**
+ * Stops one or more `gsap.quickTo` setters mid-ease WITHOUT retiring them:
+ * pauses each setter's own underlying tween, so it writes nothing more until
+ * the setter is next called (`resetTo` resumes a paused tween — the same way
+ * a fresh quickTo starts out paused and plays on its first call).
+ *
+ * Use this, never `gsap.killTweensOf(target)`, to hand a quickTo-driven
+ * property over to another writer. Killing clears the tween's internal
+ * PropTween list (`_pt = 0`) but leaves it initialised, so every later
+ * `resetTo` updates orphaned PropTweens and the setter silently never
+ * writes the target again (pinned in `motion.test.ts`; gsap 3.15).
+ */
+export function haltQuickTo(...setters: gsap.QuickToFunc[]): void {
+  for (const setter of setters) {
+    setter.tween.pause();
+  }
+}
