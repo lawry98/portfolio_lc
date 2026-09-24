@@ -397,7 +397,7 @@ Commits: `feat(pet): bound Byte to hero/footer stages via scissor clip + hand-of
 
 ---
 
-## T-GLB — Byte GLB swap-in _(model delivered 2026-08-27)_
+## T-GLB — Byte GLB swap-in _(model delivered 2026-08-27)_  ✅ DONE
 
 **Goal:** The real Byte replaces the procedural placeholder everywhere it appears: entrance, idle brain, feeding, retype, peek, sleep/wake, migration and theme reaction. The placeholder survives only as the fallback while the model loads or if it fails.
 

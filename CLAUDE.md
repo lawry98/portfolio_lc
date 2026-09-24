@@ -39,7 +39,7 @@ byte-pet-demo/                 # worktree root = Vite app root
   index.html
   package.json  tsconfig.json  vite.config.ts  vitest.config.ts
   eslint.config.js  .prettierrc  CLAUDE.md
-  public/  models/(byte.glb later)  audio/(sounds later)
+  public/  models/byte.glb  audio/(sounds later)
   src/
     main.ts                    # bootstraps page + createBytePet
     phrases.ts                 # Identity / Punchy / footer phrase sets
@@ -54,7 +54,10 @@ byte-pet-demo/                 # worktree root = Vite app root
       retype.ts     retype.test.ts     # PURE
       rig.ts                   # PetRig adapter (placeholder + GLB), clip API
       placeholderBot.ts        # procedural robot
-      glbLoader.ts             # GLTFLoader+DRACO → rig mapping
+      glbLoader.ts             # GLTFLoader+MeshoptDecoder → RigSource (dynamic import)
+      glbRig.ts     glbRig.test.ts     # GLB PetRig (AnimationMixer)
+      swapRig.ts    swapRig.test.ts    # the one swappable rig
+      glbAsset.test.ts         # real byte.glb smoke test
       scene.ts                 # two-canvas sandwich, camera, renderers, lights
       shadow.ts                # blob-shadow sprite
       glyphs.ts   glyphs.test.ts        # extruded glyph shapes + queue cap
