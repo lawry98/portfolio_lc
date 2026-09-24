@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import {
   FOV_DEG,
+  cameraClipPlanes,
   cameraDistanceForHeight,
   clampFeetToStage,
   hasWebGL,
@@ -53,6 +54,40 @@ describe('cameraDistanceForHeight', () => {
 
   it('defaults to FOV_DEG (30) when no fov is passed', () => {
     expect(cameraDistanceForHeight(1000)).toBe(cameraDistanceForHeight(1000, FOV_DEG));
+  });
+});
+
+describe('cameraClipPlanes', () => {
+  /** World units (= CSS px) one 24-bit depth-buffer step spans at the z=0 plane. */
+  function depthStepAtOrigin(height: number): number {
+    const distance = cameraDistanceForHeight(height);
+    const { near, far } = cameraClipPlanes(distance);
+    const camera = new THREE.PerspectiveCamera(FOV_DEG, W / height, near, far);
+    camera.position.z = distance;
+    camera.updateMatrixWorld();
+    camera.updateProjectionMatrix();
+    const delta = 1;
+    const a = new THREE.Vector3(0, 0, 0).project(camera).z;
+    const b = new THREE.Vector3(0, 0, delta).project(camera).z;
+    const windowDepthPerUnit = Math.abs(b - a) / 2 / delta;
+    return 1 / (2 ** 24 * windowDepthPerUnit);
+  }
+
+  it("resolves depth finely enough at z=0 to separate Byte's stacked surfaces (R-GLB-19)", () => {
+    // The GLB's eyes and visor rim sit ~0.7px in front of the surface behind
+    // them, so a step anywhere near that size z-fights. Hold it 100x finer.
+    for (const height of [600, 900, 1440, 2160]) {
+      expect(depthStepAtOrigin(height)).toBeLessThan(0.007);
+    }
+  });
+
+  it('leaves Byte and the tossed glyphs room in front of and behind the z=0 plane', () => {
+    for (const height of [600, 900, 1440, 2160]) {
+      const distance = cameraDistanceForHeight(height);
+      const { near, far } = cameraClipPlanes(distance);
+      expect(distance - near).toBeGreaterThan(500);
+      expect(far - distance).toBeGreaterThan(500);
+    }
   });
 });
 

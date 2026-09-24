@@ -31,6 +31,19 @@ export function cameraDistanceForHeight(h: number, fovDeg: number = FOV_DEG): nu
 }
 
 /**
+ * Near/far clip planes for a camera `distance` from the z=0 plane, scaled to
+ * that distance. Everything the scene draws sits within a few hundred px of
+ * z=0, so a fixed near of 0.1 spent almost the whole depth buffer on empty
+ * space in front of the lens: at 900px tall one 24-bit step was ~1.7px at
+ * z=0, coarser than the ~0.7px between Byte's visor and the head shell behind
+ * it, which z-fought as light speckle through the visor (R-GLB-19). A tenth
+ * of the distance brings that step to ~0.001px.
+ */
+export function cameraClipPlanes(distance: number): { near: number; far: number } {
+  return { near: distance / 10, far: distance * 10 };
+}
+
+/**
  * Screen pixel coords (origin top-left, y-down) → world coords at z=0
  * (origin at screen center, y-up). Inverse of `screenFromWorld`.
  */
@@ -388,12 +401,8 @@ export function createScene(opts: SceneOptions): SceneHandle {
 
   const scene = new THREE.Scene();
 
-  const camera = new THREE.PerspectiveCamera(
-    FOV_DEG,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1e5,
-  );
+  // Near/far are set per viewport by `applyViewport()` (`cameraClipPlanes`).
+  const camera = new THREE.PerspectiveCamera(FOV_DEG, window.innerWidth / window.innerHeight);
 
   const backRenderer = new THREE.WebGLRenderer({
     canvas: backCanvas,
@@ -426,6 +435,9 @@ export function createScene(opts: SceneOptions): SceneHandle {
 
     camera.aspect = width / height;
     camera.position.z = cameraDistanceForHeight(height);
+    const { near, far } = cameraClipPlanes(camera.position.z);
+    camera.near = near;
+    camera.far = far;
     camera.updateProjectionMatrix();
   }
 
