@@ -1,7 +1,13 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createSwappableRig, SWAP_POP_IN_S, SWAP_POP_OUT_S } from './swapRig';
+import {
+  createSwappableRig,
+  decideSwapTiming,
+  MODEL_SWAP_STATES,
+  SWAP_POP_IN_S,
+  SWAP_POP_OUT_S,
+} from './swapRig';
 import type { PetRig } from './types';
 
 /** A `PetRig` double that records every call — swapRig only ever speaks the interface. */
@@ -196,5 +202,31 @@ describe('createSwappableRig pop (row 8)', () => {
     rig.dispose();
     expect(a.dispose).toHaveBeenCalledTimes(1);
     expect(b.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("decideSwapTiming (F7 — trySwapInModel's decision, row 8/R-GLB-13)", () => {
+  it('is instant while hidden, whatever reduced motion is', () => {
+    expect(decideSwapTiming('hidden', true, false)).toBe('instant');
+    expect(decideSwapTiming('hidden', true, true)).toBe('instant');
+  });
+
+  it.each(Array.from(MODEL_SWAP_STATES))(
+    'pops at the resting state "%s" (not reduced)',
+    (state) => {
+      expect(decideSwapTiming(state, false, false)).toBe('pop');
+    },
+  );
+
+  it.each(Array.from(MODEL_SWAP_STATES))(
+    'is instant at the resting state "%s" under reduced motion',
+    (state) => {
+      expect(decideSwapTiming(state, false, true)).toBe('instant');
+    },
+  );
+
+  it('waits at a non-resting state, whether or not reduced motion is on', () => {
+    expect(decideSwapTiming('dashing', false, false)).toBe('wait');
+    expect(decideSwapTiming('dashing', false, true)).toBe('wait');
   });
 });

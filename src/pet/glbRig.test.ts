@@ -46,6 +46,7 @@ function makeSource(): RigSource & {
   body: THREE.MeshStandardMaterial;
   glow: THREE.MeshStandardMaterial;
   materials: THREE.Material[];
+  bodyMesh: THREE.SkinnedMesh;
 } {
   const scene = new THREE.Group();
   const root = new THREE.Bone();
@@ -63,7 +64,11 @@ function makeSource(): RigSource & {
   const body = new THREE.MeshStandardMaterial({ name: 'Body' });
   const glow = new THREE.MeshStandardMaterial({ name: 'Glow' });
   const visor = new THREE.MeshStandardMaterial({ name: 'Visor' });
-  scene.add(new THREE.SkinnedMesh(new THREE.BoxGeometry(), body));
+  // Skinned like the real Body mesh (byte.glb), so disposeModel's
+  // skeleton.dispose() (F2) has a real Skeleton to spy on.
+  const bodyMesh = new THREE.SkinnedMesh(new THREE.BoxGeometry(), body);
+  bodyMesh.bind(new THREE.Skeleton([root, torso, head]));
+  scene.add(bodyMesh);
 
   const eyeL = new THREE.Mesh(new THREE.BoxGeometry(), glow);
   eyeL.name = 'EyeL';
@@ -101,6 +106,7 @@ function makeSource(): RigSource & {
     torso,
     materials: [body, glow, visor],
     clips,
+    bodyMesh,
   };
 }
 
@@ -368,11 +374,13 @@ describe('createGlbRig degrading (row 12)', () => {
     const rig = createGlbRig(source);
     const geometryDispose = vi.spyOn((source.eyes[0] as THREE.Mesh).geometry, 'dispose');
     const bodyDispose = vi.spyOn(source.body, 'dispose');
+    const skeletonDispose = vi.spyOn(source.bodyMesh.skeleton, 'dispose');
     rig.play('Idle');
     rig.update(0.1);
     rig.dispose();
     expect(geometryDispose).toHaveBeenCalled();
     expect(bodyDispose).toHaveBeenCalledTimes(1);
+    expect(skeletonDispose).toHaveBeenCalledTimes(1); // F2: skinned meshes leak their skeleton otherwise
     expect(() => rig.update(0.1)).not.toThrow();
   });
 });

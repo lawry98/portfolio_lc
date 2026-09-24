@@ -595,11 +595,11 @@ export function createPetRig(source: RigSource): PetRig {
 
   /**
    * No-op for the placeholder: `quickTo` and every clip timeline above
-   * self-drive off `gsap.ticker` independently of this call, and there is
-   * no `AnimationMixer` yet to advance. Kept as an explicit method (not
-   * omitted) so this is the one seam the future GLB rig fills in with
-   * `mixer.update(dt)` (T-GLB) without changing the `PetRig` call site in
-   * `createBytePet`.
+   * self-drive off `gsap.ticker` independently of this call, and the
+   * placeholder has no `AnimationMixer` to advance. Kept as an explicit
+   * method (not omitted) because it is the same seam the GLB rig (T-GLB,
+   * `glbRig.ts`) fills with `mixer.update(dt)` — both leaves answer to the
+   * one `PetRig.update` call site in `createBytePet`.
    */
   function update(dt: number): void {
     // Intentionally unread — see doc comment above. `void` (rather than a

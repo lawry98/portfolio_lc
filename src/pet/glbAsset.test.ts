@@ -45,11 +45,19 @@ const EAT_BITES_S = [0.33, 0.6];
 const BITE_TOLERANCE_S = 0.04;
 
 let gltf: GLTF;
+/**
+ * F8: measured in `beforeAll`, immediately after load and before any other
+ * test drives the shared `gltf.scene` through the mixer — the bites test
+ * below scrubs `Eat` across the shared scene and leaves it near Eat's end
+ * pose, which would otherwise make the height assertion depend on test order.
+ */
+let restBox: THREE.Box3;
 
 beforeAll(async () => {
   const file = readFileSync(MODEL_PATH);
   const data = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
   gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(data, '');
+  restBox = new THREE.Box3().setFromObject(gltf.scene, true);
 });
 
 describe('public/models/byte.glb', () => {
@@ -103,9 +111,8 @@ describe('public/models/byte.glb', () => {
   });
 
   it('stands 1.8 units tall with its feet at y = 0', () => {
-    const box = new THREE.Box3().setFromObject(gltf.scene, true);
-    expect(box.min.y).toBeCloseTo(0, 2);
-    expect(box.max.y - box.min.y).toBeCloseTo(GLB_MODEL_HEIGHT, 2);
+    expect(restBox.min.y).toBeCloseTo(0, 2);
+    expect(restBox.max.y - restBox.min.y).toBeCloseTo(GLB_MODEL_HEIGHT, 2);
   });
 
   it('stays within the 40k tri budget', () => {

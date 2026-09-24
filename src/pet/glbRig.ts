@@ -85,10 +85,13 @@ interface CurrentClip {
   onComplete: (() => void) | undefined;
 }
 
-/** Frees every geometry, material and material texture under `root` — each shared material once. */
+/** Frees every geometry, material, material texture and skinned-mesh skeleton under `root` — each shared material once. */
 function disposeModel(root: THREE.Object3D): void {
   const materials = new Set<THREE.Material>();
   root.traverse((child) => {
+    if (child instanceof THREE.SkinnedMesh) {
+      child.skeleton.dispose(); // F2: the skeleton's bone-matrix texture otherwise leaks
+    }
     if (!(child instanceof THREE.Mesh)) {
       return;
     }

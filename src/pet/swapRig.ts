@@ -32,7 +32,38 @@
 import gsap from 'gsap';
 import * as THREE from 'three';
 import { LOOPING_CLIPS } from './rig';
-import type { ClipName, ClipPlayOptions, PetRig } from './types';
+import type { ClipName, ClipPlayOptions, PetRig, PetState } from './types';
+
+/**
+ * T-GLB row 8 (R-GLB-13): the resting states a loaded GLB may swap in at,
+ * with the ~0.3 s pop — never mid-dash, eat, retype, travel, peek or wake.
+ * `hidden` swaps instantly instead (Byte isn't visible yet), and reduced
+ * motion always swaps instantly. Shared with createBytePet's `fsm.onEnter`
+ * retry (row 8) so both sides agree on what counts as "resting".
+ */
+export const MODEL_SWAP_STATES: ReadonlySet<PetState> = new Set<PetState>([
+  'idle',
+  'curious',
+  'invited',
+  'sleeping',
+]);
+
+/** What createBytePet's `trySwapInModel` should do with a pending model, given where Byte is right now. */
+export type SwapTiming = 'instant' | 'pop' | 'wait';
+
+/**
+ * F7: the swap-timing decision (row 8, R-GLB-13) pulled out of
+ * `trySwapInModel` (`createBytePet.ts`) so it is unit-testable without a
+ * WebGL harness. Instant while `hidden` or under reduced motion; a pop at a
+ * resting state; otherwise wait for the next one — `trySwapInModel` calls
+ * this with behaviour byte-identical to before the extraction.
+ */
+export function decideSwapTiming(state: PetState, hidden: boolean, reduced: boolean): SwapTiming {
+  if (!hidden && !MODEL_SWAP_STATES.has(state)) {
+    return 'wait';
+  }
+  return hidden || reduced ? 'instant' : 'pop';
+}
 
 /** Pop timing (row 8, "~0.3 s"): the squash-out leg, then the spring-back leg. Exported for swapRig.test.ts. */
 export const SWAP_POP_OUT_S = 0.12;
@@ -40,6 +71,7 @@ export const SWAP_POP_IN_S = 0.18;
 /** How flat (`pose.scale.y`) and how wide (x/z) the squash gets at the swap — hand-picked, free to retune visually. */
 const SWAP_POP_SQUASH_Y = 0.2;
 const SWAP_POP_SQUASH_XZ = 1.2;
+/** The spring-back leg's ease (row 8, "`back.out` spring in") — a slight overshoot, not a bounce. */
 const SWAP_POP_SPRING_EASE = 'back.out(2.2)';
 
 /** `PetRig` plus the one extra verb the swap needs (TICKETS T-GLB Produces). */

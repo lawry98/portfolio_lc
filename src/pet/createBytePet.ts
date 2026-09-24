@@ -29,7 +29,7 @@ import gsap from 'gsap';
 import * as THREE from 'three';
 import { createPetRig } from './rig';
 import { createPlaceholderBot } from './placeholderBot';
-import { createSwappableRig } from './swapRig';
+import { createSwappableRig, decideSwapTiming, MODEL_SWAP_STATES } from './swapRig';
 import { createGlbRig } from './glbRig';
 import { createFSM } from './fsm';
 import { pickAnchor } from './anchor';
@@ -151,19 +151,6 @@ const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'waking',
 ]);
 const REACQUIRE_DURATION_S = 0.3;
-
-/**
- * T-GLB row 8 (R-GLB-13): the resting states a loaded GLB may swap in at,
- * with the ~0.3 s pop — never mid-dash, eat, retype, travel, peek or wake.
- * `hidden` swaps instantly instead (Byte isn't visible yet), and reduced
- * motion always swaps instantly.
- */
-const MODEL_SWAP_STATES: ReadonlySet<PetState> = new Set<PetState>([
-  'idle',
-  'curious',
-  'invited',
-  'sleeping',
-]);
 
 /**
  * T6 retype reward (SPEC §6 "Byte operates the caret"). `RETYPE_FOLLOW_*`
@@ -1684,11 +1671,11 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       return;
     }
     const state = fsm.state();
-    const hidden = state === 'hidden';
-    if (!hidden && !MODEL_SWAP_STATES.has(state)) {
+    const timing = decideSwapTiming(state, state === 'hidden', reducedActive); // F7
+    if (timing === 'wait') {
       return;
     }
-    rig.swap(pendingModelRig, { animate: !hidden && !reducedActive });
+    rig.swap(pendingModelRig, { animate: timing === 'pop' });
     pendingModelRig = null;
     resolveModelReady();
   }
@@ -2553,27 +2540,46 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // --- T-GLB: start the model fetch (row 1) --------------------------------
   // Kicked off at construction, last, once everything the swap touches exists.
   // `import('./glbLoader')` keeps GLTFLoader + MeshoptDecoder in their own lazy
-  // chunk (row 9). Any failure — the chunk, the fetch, a 404, the parse — logs
-  // ONE warning and keeps the placeholder for the session (row 12);
-  // `modelReady` resolves either way.
+  // chunk (row 9). A chunk/fetch/404/parse failure logs ONE warning and keeps
+  // the placeholder for the session (row 12); `modelReady` resolves either way.
+  //
+  // F4: the two `.then` arguments below split that load failure from a
+  // failure building or swapping in the loaded rig (`createGlbRig`/
+  // `trySwapInModel`) — a single trailing `.catch` would report the latter
+  // as "byte.glb failed to load", which is false (the file loaded fine).
   if (opts.modelUrl) {
     const url = opts.modelUrl;
     import('./glbLoader')
       .then(({ loadByteGLB }) => loadByteGLB(url))
-      .then((source) => {
-        const glbRig = createGlbRig(source);
-        if (destroyed) {
-          glbRig.dispose();
+      .then(
+        (source) => {
+          // F6: check before building the rig — destroyed means nothing
+          // downstream should be constructed, let alone mutated.
+          if (destroyed) {
+            resolveModelReady();
+            return;
+          }
+          try {
+            pendingModelRig = createGlbRig(source);
+            trySwapInModel();
+          } catch (error: unknown) {
+            // F4: a failure here is NOT a load failure — the file decoded
+            // fine, so it must not reuse that warning. Drop whatever we
+            // still own so a later destroy() can't dispose it twice.
+            console.warn(
+              '[byte] byte.glb loaded but failed to show; keeping the placeholder.',
+              error,
+            );
+            pendingModelRig?.dispose();
+            pendingModelRig = null;
+            resolveModelReady();
+          }
+        },
+        (error: unknown) => {
+          console.warn('[byte] byte.glb failed to load; keeping the placeholder.', error);
           resolveModelReady();
-          return;
-        }
-        pendingModelRig = glbRig;
-        trySwapInModel();
-      })
-      .catch((error: unknown) => {
-        console.warn('[byte] byte.glb failed to load; keeping the placeholder.', error);
-        resolveModelReady();
-      });
+        },
+      );
   } else {
     resolveModelReady();
   }
