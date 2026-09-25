@@ -113,9 +113,11 @@ A small, characterful dev robot that reads clearly at headline scale. Owner supp
 
 States: `hidden | entering | idle | curious | invited | dashing | eating | retyping | traveling | sleeping | waking | peeking`.
 
-- **idle** — editor-authentic hard-step blink; every 4–8s a micro-behavior (eye glance, small hop onto a letter, short baseline slide, or a **peek**).
+- **rest position (D-24)** — at a home Byte stands upright **beside the caret, not on the text end**: its feet sit 0.5 × its height right of the bottom line's end, so it never covers the last letter. The same offset applies while it types, so a finished retype needs no sideways shuffle (its glide still trails the caret briefly while letters land).
+
+- **idle** — editor-authentic hard-step blink; every 4–8s a micro-behavior (eye glance, small hop onto a letter, short baseline slide — rightward only, away from the caret (D-24) — or a **peek**).
 - **peeking** — hop above a headline char, flip to the back canvas at apex, drop partly behind the letterform, peek over for ~1.67s (the delivered Peek clip), behind at 0.2s and back in front at 1.45s (T-GLB). Must happen within the first ~10 idle seconds.
-- **curious** — cursor within ~150px: blink stops, slight lean, eyes lock on.
+- **curious** — cursor within ~150px of Byte: blink stops, slight lean, eyes lock on.
 - **invited** — ~2.5s curious, no click: `(click to feed Byte)` hint fades in under the headline. Gone forever after first feed (`localStorage`).
 - **feed** (click/tap): spawn a random hand-modeled 3D glyph (`; = > * + {`) as bevel-extruded `THREE.Shape` paths (rounded primitives; no `typeface.json`). Toss in with a 450ms arc + spin, squash on landing. Byte: 80ms anticipation → dash (380–600ms by distance, banks ±12°, slight overshoot) → **eat** (`Eat` clip; glyph scales into the mouth over two chomps landing on the clip's bites, 0.33s/0.60s (T-GLB); 4–6 `currentColor` particles; alternating blips) → satisfied wiggle. Queue clicks; max 3 live glyphs (oldest pops away).
 - **retype (signature reward)** — Byte glides to the headline end; the DOM caret backspaces right-to-left (~26ms/char accelerating), then types the next phrase (~40ms/char, ±12ms jitter, soft tick every 2–3 chars), caret gliding per char. 2-line sets; delete bottom line first; **zero layout shift**. DOM chars as spans.
