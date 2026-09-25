@@ -4,6 +4,13 @@ Running log (append per ticket). Newest first. See [`SPEC.md`](SPEC.md) for the 
 
 ---
 
+## D-24 · Byte rests upright beside the caret instead of on the text end — 2026-09-24
+
+**Choice:** new pure `pet/restPose.ts` (`REST_OFFSET_UNITS` = 0.5, `restFeetX`, + `restPose.test.ts`). Byte's feet sit 0.5 × `unitPx` right of the text end at every home write: the per-tick pin, the retype/entrance caret follow, the entrance landing, the reduced-motion entrance and the instant migration. The idle slide goes rightward only (Byte rests just clear of the caret, so a left slide would bump it). Proximity (POINTER_NEAR/FAR) measures from Byte's centre, not the text end. The caret keeps its always-on blink.
+**Why:** the owner saw Byte, centred on the text end, covering the last letter ("PRODUCTS" read as "PRODUCT"). Rendered options with the real model; the owner first picked an ~11° lean against the caret (with the caret held solid while leaning, and a push-off slide), tried it live, and kept the position but dropped the lean: Byte stands straight. Fit measured at 1440/1024/768/390/360px with the longest bottom lines (LAWRENCE, TOGETHER): tightest is 360px with 21px spare, so the T12 stage clamp never fires. **Found on the way:** the footer caret was invisible after every migration (pre-existing, reproduced on the pre-change code): `setHomeAnchor` shows it, then the footer's SplitText reveal finishes ~1.8s later and swaps in its setup-time clone, caret hidden. `onTick` now re-asserts the active caret's visibility every tick (compare-before-write). **Known limit:** during a forward retype Byte's 0.18s follow glide trails the caret by a few letters, so it briefly overlaps the newest ones, as it did before (now without staying on the last letter afterwards).
+
+---
+
 ## D-23 · Camera clip planes scale with the camera distance (closes the R-GLB-19 visor speckle) — 2026-09-24
 
 **Choice:** `scene.ts` sets the camera's near/far from its distance to the z=0 plane on every viewport change (`cameraClipPlanes(distance)` → near = distance / 10, far = distance × 10), replacing the fixed near 0.1 / far 100000.

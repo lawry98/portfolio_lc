@@ -47,6 +47,7 @@ import { createRetype, renderRetype } from './retype';
 import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
+import { restFeetX } from './restPose';
 import type { Phrase } from '../phrases';
 import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState } from './types';
 
@@ -56,7 +57,7 @@ type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
 // --- Tunables (all hand-picked, free to retune visually — same spirit as
 // rig.ts/shadow.ts's own constants). Grouped by the behaviour they drive. ---
 
-/** SPEC §6 "cursor within ~150px" — screen-space distance that flips POINTER_NEAR/FAR. */
+/** SPEC §6 "cursor within ~150px" of Byte's centre — the distance that flips POINTER_NEAR/FAR. */
 const PROXIMITY_PX = 150;
 
 /**
@@ -1214,7 +1215,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   }
 
   function doBaselineSlide(): void {
-    const distance = (Math.random() < 0.5 ? -1 : 1) * gsap.utils.random(SLIDE_MIN_PX, SLIDE_MAX_PX);
+    // D-24: rightward only — Byte rests just clear of the caret, so a slide
+    // left would bump it.
+    const distance = gsap.utils.random(SLIDE_MIN_PX, SLIDE_MAX_PX);
     track(
       gsap.to(drift, {
         x: distance,
@@ -1974,7 +1977,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       const targetWorld = scene.worldFromScreen(targetRect.right, targetAnchorY);
       fsm.send('MIGRATE');
       setHomeAnchor(target.el);
-      rig.object3d.position.set(targetWorld.x, targetWorld.y - unitPx / 2, 0);
+      rig.object3d.position.set(restFeetX(targetWorld.x, unitPx), targetWorld.y - unitPx / 2, 0);
       fireOnNextTick(() => fsm.send('ARRIVED'));
     }
     wasActiveInBand = activeInBand;
@@ -2094,7 +2097,12 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // waking/sleeping span (none of which consume POINTER_NEAR) is still
     // re-detected as a fresh crossing once idle resumes (I-1 fix), rather
     // than staying silently "already near, no new edge" forever.
-    const dist = Math.hypot(cursorScreen.x - anchorX, cursorScreen.y - anchorY);
+    // D-24: measured from Byte's own centre (world units are CSS px), not the
+    // text end — Byte rests half its height to the right of it.
+    const dist = Math.hypot(
+      cursorWorld.x - rig.object3d.position.x,
+      cursorWorld.y - (rig.object3d.position.y + unitPx / 2),
+    );
     const isNear = dist <= PROXIMITY_PX;
     if (isNear && !wasNear) {
       fsm.send('POINTER_NEAR');
@@ -2119,7 +2127,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // while `dashing`/`eating`, the feeder (`feed.ts`) owns
     // `rig.object3d.position` (toss-dash + eat convergence), and pinning it
     // here too every tick would fight that tween for the same property.
-    const wanderRootX = anchorWorld.x + drift.x;
+    const wanderRootX = restFeetX(anchorWorld.x, unitPx) + drift.x;
     const wanderRootY = anchorWorld.y - unitPx / 2;
     // T12 containment (R12-7): clamp the proposed feet position into the
     // active stage (measured above) before either home writer below ever
@@ -2191,7 +2199,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // minus half the bot height, matching the home anchor's `- unitPx/2`).
         const cr = caret.getBoundingClientRect();
         const cw = scene.worldFromScreen(cr.left, cr.top + cr.height / 2);
-        byteToCaretX(cw.x);
+        byteToCaretX(restFeetX(cw.x, unitPx));
         byteToCaretY(cw.y - unitPx / 2);
         // T7 (R7-6): keep the edit DETECTOR live every frame (`lastRetypeTotal`
         // tracks the char total), but gate the EFFECTS — the caret spark AND
@@ -2393,7 +2401,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const line0El = opts.headlineEl.querySelector<HTMLElement>('[data-byte-line="0"]');
     const startRect = (line0El ?? opts.headlineEl).getBoundingClientRect();
     const landWorld = scene.worldFromScreen(startRect.left, startRect.top + startRect.height / 2);
-    const landX = landWorld.x;
+    const landX = restFeetX(landWorld.x, unitPx);
     const landY = landWorld.y - unitPx / 2; // feet, matching onTick's `- unitPx/2`
 
     // Snap to the elevated, shrunk start BEFORE the bounce so frame 0 is that
@@ -2452,7 +2460,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       // this call); the completion detector resolves `entered`.
       const anchor = lastLineTextRect(opts.headlineEl);
       const anchorWorld = scene.worldFromScreen(anchor.right, anchor.top + anchor.height / 2);
-      rig.object3d.position.set(anchorWorld.x, anchorWorld.y - unitPx / 2, 0);
+      rig.object3d.position.set(restFeetX(anchorWorld.x, unitPx), anchorWorld.y - unitPx / 2, 0);
       fsm.send('SHOWN');
       fireOnNextTick(() => fsm.send('ENTERED'));
       return entered;
