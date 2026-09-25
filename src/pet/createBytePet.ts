@@ -2248,6 +2248,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     if (fsm.state() !== 'retyping' && fsm.state() !== 'entering') {
       liveCaret(activeHome).style.transform = caretRestTransform(activeHome.el, lineRect);
     }
+    // The footer's SplitText reveal, on finishing, swaps in a clone of its
+    // setup-time markup (caret hidden), which lands after a migration has
+    // already shown that caret, leaving the footer with no visible caret.
+    // Re-assert it every tick instead of only at `setHomeAnchor`;
+    // compare-before-write keeps the steady state free.
+    const activeCaret = liveCaret(activeHome);
+    if (activeCaret.style.visibility === 'hidden') {
+      activeCaret.style.visibility = '';
+    }
   }
 
   scene.onTick(onTick);
