@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REVEAL_MS } from '../lib/themeReveal';
 import {
   buildChargeRelease,
   buildPulse,
@@ -148,6 +149,6 @@ describe('buildPulse', () => {
 
 describe('THEME_SWITCH_LERP_S', () => {
   it("matches the page reveal's length so Byte's look lands with the circle", () => {
-    expect(THEME_SWITCH_LERP_S * 1000).toBe(620);
+    expect(THEME_SWITCH_LERP_S * 1000).toBe(REVEAL_MS);
   });
 });
