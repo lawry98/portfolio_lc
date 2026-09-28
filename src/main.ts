@@ -1,7 +1,8 @@
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/grain.css';
-import { initTheme, type ThemeController } from './lib/theme';
+import { initTheme, type Theme, type ThemeController } from './lib/theme';
+import { revealTheme } from './lib/themeReveal';
 import { initGrain } from './lib/grain';
 import { initLenis } from './lib/lenisScroll';
 import { initCursor, type CursorLabel } from './lib/cursor';
@@ -33,8 +34,8 @@ import { phrases, type Phrase } from './phrases';
  * headline, page fully usable) — see the guard block below.
  * `createBytePet()` owns the scene, the render ticker, the rig, the
  * shadow, and the FSM internally; this module only holds the returned
- * `BytePetHandle` (for the theme-toggle callback and the pagehide
- * teardown). T3's `?glcube` QA rig (which proved the two-canvas occlusion
+ * `BytePetHandle` (for the theme toggle's `performThemeSwitch` and the
+ * pagehide teardown). T3's `?glcube` QA rig (which proved the two-canvas occlusion
  * sandwich) was removed once its job was done.
  *
  * Entrance (T6b, SPEC §8.1): `bootstrap()` also composes the preloader
@@ -54,16 +55,24 @@ import { phrases, type Phrase } from './phrases';
  */
 
 /**
- * Wires the nav theme-toggle button to the theme controller and keeps its
- * `aria-pressed` state + icon glyph in sync with the active theme. `onToggle`
- * (added in T3) fires after the sync, once the DOM/ARIA state already
- * reflects the new theme — `bootstrap()` uses it to re-theme Byte without
- * this module needing to know `bytePet` exists at bind time (it's created
- * later, after the section inits and the `hasWebGL()` guard; the callback
- * closes over the module-scope `bytePet` binding below, which may still be
- * `undefined` at click time on the no-WebGL path — hence the `?.`).
+ * Wires the nav theme-toggle button: keeps its `aria-pressed` state + icon in
+ * sync with the active theme, and routes each click through `switchTheme` —
+ * Byte's `performThemeSwitch` when the pet exists (it gestures and calls
+ * back on the flip beat), else a plain reveal from the button. The page owns
+ * the reveal and the theme write (`apply`), so the pet never touches
+ * storage or `data-theme`. Clicks while a switch is running are ignored
+ * (`aria-busy`) until the gesture and the reveal have both finished (spec
+ * D7). `switchTheme` resolves late-bound: `bytePet` is created after this
+ * binding, hence the closure over it in `bootstrap()`.
  */
-function bindThemeToggle(root: HTMLElement, theme: ThemeController, onToggle?: () => void): void {
+function bindThemeToggle(
+  root: HTMLElement,
+  theme: ThemeController,
+  switchTheme: (
+    next: Theme,
+    apply: (origin: { x: number; y: number } | null) => Promise<void>,
+  ) => Promise<void>,
+): void {
   const button = root.querySelector<HTMLButtonElement>('#theme-toggle');
   if (!button) {
     return;
@@ -78,11 +87,32 @@ function bindThemeToggle(root: HTMLElement, theme: ThemeController, onToggle?: (
     }
   };
 
+  let busy = false;
+  const release = (): void => {
+    busy = false;
+    button.removeAttribute('aria-busy');
+  };
+
   sync();
   button.addEventListener('click', () => {
-    theme.toggle();
-    sync();
-    onToggle?.();
+    if (busy) {
+      return;
+    }
+    busy = true;
+    button.setAttribute('aria-busy', 'true');
+    const next: Theme = theme.current() === 'dark' ? 'light' : 'dark';
+    const apply = (origin: { x: number; y: number } | null): Promise<void> => {
+      const r = button.getBoundingClientRect();
+      return revealTheme(
+        () => {
+          theme.set(next);
+          sync();
+        },
+        origin ?? { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+        { reduced: prefersReducedMotion() },
+      );
+    };
+    void switchTheme(next, apply).then(release, release);
   });
 }
 
@@ -255,7 +285,7 @@ function createHungryTooltip(
 }
 
 // Kept in module scope (rather than dropped like `initLenis()`'s handle) so
-// both the theme-toggle callback and the `pagehide` teardown below can reach
+// both the theme toggle's `switchTheme` and the `pagehide` teardown below can reach
 // it — `undefined` on the no-WebGL path, where there is no Byte to theme or
 // tear down.
 let bytePet: BytePetHandle | undefined;
@@ -275,7 +305,12 @@ function bootstrap(): void {
     return;
   }
 
-  bindThemeToggle(root, theme, () => bytePet?.setTheme(theme.current()));
+  // The toggle path (spec 2026-09-28): Byte performs the switch and calls
+  // `apply` on its flip beat; without a Byte (no WebGL) the page reveals from
+  // the button itself. `setTheme` stays on the handle for non-toggle changes.
+  bindThemeToggle(root, theme, (next, apply) =>
+    bytePet ? bytePet.performThemeSwitch(next, apply) : apply(null),
+  );
 
   // Entrance branch, decided ONCE up front (before the section inits) so the
   // hero and Byte agree on who owns the headline:
@@ -398,7 +433,7 @@ function bootstrap(): void {
     footerEl,
     footerPhrases: phrases.footer,
     // T7 sound seam (R7-1): route every pet cue (typeTick / eat / spawnPop /
-    // themeWhoosh / wakeBoing / chirp) through the one engine constructed
+    // themeWhoosh / themeWhooshDown / wakeBoing / chirp) through the one engine constructed
     // above. `createBytePet` speaks only the `SoundEngine` interface — this is
     // its single injection point; omitting it would fall back to silence.
     sound,
@@ -475,7 +510,7 @@ function bootstrap(): void {
   }
 
   // Gives the module-scope `bytePet` a genuine (if rarely exercised) reason
-  // to exist beyond the theme-toggle callback above: tear it down (kills
+  // to exist beyond the theme toggle's `switchTheme` above: tear it down (kills
   // every tween/timer/listener + the scene's renderers/canvases) on a *real*
   // page unload. `pagehide` also fires when the page is frozen into the
   // back/forward cache instead of destroyed (`event.persisted === true`) —

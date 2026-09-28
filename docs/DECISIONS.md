@@ -4,6 +4,40 @@ Running log (append per ticket). Newest first. See [`SPEC.md`](SPEC.md) for the 
 
 ---
 
+## D-25 · Byte causes the theme switch (charge & release + chest-light circle reveal) — 2026-09-28
+
+**Choice:** the nav toggle no longer flips the theme on the click. It calls the pet's new `performThemeSwitch(next, apply)` (spec D10), and Byte flips it: a crouch-squash while the chest glow gathers (ignites from off going dark, dims ×0.1 going light), then a stretch with a 3.6× chest flare. On the flare (0.63s, D2) the pet calls `apply(origin)`, and the page runs a View Transitions circle reveal from the chest light's screen point (`lib/themeReveal.ts`, 620ms), then persists the theme. The pet never touches storage or `data-theme`, so the seam carries over to the portfolio's `.dark` scheme. Byte's own light/material lerp runs for the reveal's length (`THEME_SWITCH_LERP_S` = 0.62, tied to `REVEAL_MS` by a test) and skips T8's stretch (D9). `setTheme()` keeps the stretch and the whoosh for non-toggle changes. Where it plays (D5, D6, pure `pet/themeGesture.ts` + 29 tests):
+- A resting Byte (idle, curious, invited, peeking) at least 50% visible goes through a new FSM state, `switching` (`THEME` → `switching` → `SWITCHED` → idle, capped at 4s). A sleeping Byte wakes first; a theme pending on the wake wins over a pending feed.
+- The same Byte less than 50% visible makes a **corner visit**: it stands on the viewport's bottom-right edge, rises on `pose.position.y` (0.6s), gestures, sinks, and is re-pinned home. The scissor clip opens to the viewport for the visit only.
+- A feeding or retyping Byte gets the gesture **layered** on `pose.scale` and the glow, with no FSM change.
+- Entrance, travel, or busy and offscreen: no gesture, the circle opens from the toggle.
+- Reduced motion (D8): one glow pulse (0.15s up, 0.15s down) with a 400ms crossfade on its peak, or a plain crossfade when Byte isn't visible.
+- Clicks are ignored while a switch runs (`aria-busy="true"`, D7). The whoosh moves to the flip beat and follows direction (`themeWhoosh` up to light, new `themeWhooshDown` down to dark, D11).
+
+The reveal origin is the new **`ChestLight`** empty (parented to `Torso`, owner re-export 2026-09-25, `byte.glb` 729,036 B, +108 B, clips unchanged), read through `PetRig.chestWorld()` and projected through the real camera; it falls back to `Torso`, then the root.
+**Why:** the owner picked gesture B (charge & release) from a four-way prototype on the real model: Byte should cause the switch, not react to it. **Busy states were re-decided (2026-09-28):** the first answer was "interrupt anything", but the feed, retype and migration drivers each have exactly one writer for Byte's position or the headline, and interrupting them would strand their work, so the gesture layers over feeding/retyping and yields to entrance/travel. **Found in QA and fixed** (`74a46e2`): GSAP stamps a timeline created between ticks with the last tick's time, so a long frame just before the click (a feed's glyph toss and its first shader compile, 140–225ms in headless Chrome) was swallowed by the timeline's first render, which skipped the reduced pulse's 150ms peak in 3 of 6 runs. The gesture and the pulse now start inside a `delayedCall(0)` (6 of 6 runs pulse). Also fixed on the way (`f36d981`): a switch that cuts a full-motion peek short kills the peek timeline, so its behind-the-text beat can't fire mid-gesture. **Known limits:** this demo's nav is `position: static`, so the toggle is only clickable (or tabbable) at the page top, where Byte is always visible and an idle Byte migrates before it loses any visibility; the corner visit is reachable here only for a sleeping Byte left at home offscreen, and matters mainly for a sticky-nav host (the portfolio). At `unitPx` 60, `CORNER_REST_Y` (−0.3) leaves the chest light ~5px above the viewport edge, about half visible; −0.15 would show it fully (not changed). A model swap popping at the moment of a click would share `pose.scale` with the gesture for a few frames.
+
+**QA** (rows 1–5 in the Browser pane at 60 fps; the rest, and the post-fix re-run, in headless Chrome over CDP with a temporary uncommitted `window.__byteQA` hook, R-GLB-20 precedent; the pane was hidden and throttled rAF to ~2 fps):
+
+| # | Row | Result |
+|---|---|---|
+| 1 | Idle at the hero, click, both directions | Pass: crouch 0.8/1.11, glow ×0.1 or +0.6, flare 3.6, flip ~0.62s into `switching`, circle from the chest, no T8 stretch |
+| 2 | Sound | Pass: 220→660 Hz to light, 660→220 Hz to dark, both on the flip, none on the click |
+| 3 | Byte offscreen | Pass\*: corner visit ~2.6s, shadow hidden then restored, circle from the chest at the corner, re-pinned home |
+| 4 | ~60% / ~30% visible | Pass\*: 0.604 → at home, 0.304 → corner visit |
+| 5 | Sleeping | Pass: wakeBoing, Wake (1.25s), then the gesture, then idle |
+| 6 | Toggle mid-eat | Pass: eat, retype and idle carry on; squash and flare layered; circle from the chest |
+| 7 | Toggle during the hand-off | Pass\*: `traveling`, no gesture, circle from the toggle (clamped onto the viewport edge) |
+| 8 | Five quick clicks | Pass: one switch, `aria-busy` until done, the next click works |
+| 9 | Keyboard | Pass: Tab ×3 reaches the toggle; Enter and Space both switch |
+| 10 | Reload after a switch | Pass: `localStorage['byte-theme']` persists; `data-theme` is set before first paint |
+| 11 | Reduced motion, rows 1/3/6 | Pass after `74a46e2`: one pulse + 400ms crossfade, no body motion, no corner, no circle; offscreen → plain crossfade |
+| 12 | Style Lab accent, then switch | Pass: the flare uses the new accent (`#ffb454`); the glow settles to 0.6 dark / 0 light |
+
+\* Driven by a no-scroll `button.click()` (a sticky-nav stand-in) and, for 3–4, a sleeping Byte, since the static nav makes these unreachable by a real click here. **Tests:** 370 → 427 (+57, 23 → 25 files). JS 227.34 KB gz.
+
+---
+
 ## D-24 · Byte rests upright beside the caret instead of on the text end — 2026-09-24
 
 **Choice:** new pure `pet/restPose.ts` (`REST_OFFSET_UNITS` = 0.5, `restFeetX`, + `restPose.test.ts`). Byte's feet sit 0.5 × `unitPx` right of the text end at every home write: the per-tick pin, the retype/entrance caret follow, the entrance landing, the reduced-motion entrance and the instant migration. The idle slide goes rightward only (Byte rests just clear of the caret, so a left slide would bump it). Proximity (POINTER_NEAR/FAR) measures from Byte's centre, not the text end. The caret keeps its always-on blink.

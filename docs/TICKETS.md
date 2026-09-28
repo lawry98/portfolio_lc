@@ -505,6 +505,12 @@ Commits: `feat(pet): swappable rig + GLB rig (mixer, look, blink, materials)`, `
 
 ---
 
+## T13 — Byte flips the theme  ✅ DONE
+
+> **DONE (2026-09-28, branch `feat/byte-theme-gesture`, cut from `feat/byte-caret-lean` at `9e4b9f6`).** The nav toggle now routes through `performThemeSwitch`: Byte charges and releases, and the new theme opens as a circle from its chest light. Spec: `docs/superpowers/specs/2026-09-28-byte-theme-gesture-design.md` (D1–D12). Plan: `docs/superpowers/plans/2026-09-28-byte-theme-gesture.md` (8 tasks). Decision + QA table: **D-25**. Adds the `ChestLight` re-export (729,036 B), `PetRig.chestWorld()`, the FSM `switching` state, `themeWhooshDown`, pure `pet/themeGesture.ts`, `lib/themeReveal.ts`, and two QA-found fixes (the peek-timeline kill and the next-tick gesture start). Tests 370 → 427.
+
+---
+
 ## T-Audio — Howler swap-in _(when audio files delivered)_
 
 **Depends on:** T7 (SoundEngine interface). **Trigger:** files in `public/audio/` per `AUDIO_SPEC.md`.
