@@ -75,6 +75,8 @@ const CUE_VOICES: Record<Cue, VoiceSpec[]> = {
   spawnPop: [{ type: 'sine', freqs: [250, 650], peak: 0.1, attack: 0.006, duration: 0.1 }],
   // Airy upward glide.
   themeWhoosh: [{ type: 'sine', freqs: [220, 660], peak: 0.07, attack: 0.05, duration: 0.3 }],
+  // Airy downward glide — themeWhoosh's mirror, for a switch to dark.
+  themeWhooshDown: [{ type: 'sine', freqs: [660, 220], peak: 0.07, attack: 0.05, duration: 0.3 }],
   // Springy pitch bend up-then-down.
   wakeBoing: [{ type: 'sine', freqs: [180, 420, 240], peak: 0.12, attack: 0.012, duration: 0.24 }],
   // Two quick ascending blips.
