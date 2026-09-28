@@ -280,3 +280,11 @@ describe('placeholder fakes follow the delivered clips (T-GLB row 6)', () => {
     rig.dispose();
   });
 });
+
+describe('createPetRig chestWorld', () => {
+  it('uses the placeholder mouth as the chest (no chest light on the placeholder)', () => {
+    const rig = createPetRig(createPlaceholderBot({ theme: 'light' }));
+    expect(rig.chestWorld()).toEqual(rig.mouthWorld());
+    rig.dispose();
+  });
+});

@@ -165,6 +165,7 @@ export function createGlbRig(source: RigSource): PetRig {
   const tmpLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   const tmpLookQuat = new THREE.Quaternion();
   const tmpMouth = new THREE.Vector3();
+  const tmpChest = new THREE.Vector3();
 
   function startClip(clip: ClipName, animation: THREE.AnimationClip, opts: ClipPlayOptions): void {
     const action = mixer.clipAction(animation);
@@ -315,6 +316,12 @@ export function createGlbRig(source: RigSource): PetRig {
     return { x: tmpMouth.x, y: tmpMouth.y, z: tmpMouth.z };
   }
 
+  /** The `ChestLight` locator's world position; without one, `Torso` (row 12 spirit), then the root. */
+  function chestWorld(): { x: number; y: number; z: number } {
+    (source.chest ?? source.torso ?? object3d).getWorldPosition(tmpChest);
+    return { x: tmpChest.x, y: tmpChest.y, z: tmpChest.z };
+  }
+
   function dispose(): void {
     mixer.stopAllAction();
     mixer.uncacheRoot(source.scene);
@@ -335,6 +342,7 @@ export function createGlbRig(source: RigSource): PetRig {
     setBlink,
     hoverHeight,
     mouthWorld,
+    chestWorld,
     update,
     dispose,
   };

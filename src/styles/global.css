@@ -60,6 +60,15 @@ html.lenis body {
   color-scheme: dark;
 }
 
+/* Theme reveal (lib/themeReveal.ts): the script animates
+   ::view-transition-new(root) itself (circle clip, or a crossfade under
+   reduced motion), so switch off the browser's default root crossfade. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 html,
 body {
   height: 100%;

@@ -41,6 +41,7 @@ function stillHeadTrack(duration: number): THREE.QuaternionKeyframeTrack {
 function makeSource(): RigSource & {
   eyes: THREE.Object3D[];
   torso: THREE.Object3D;
+  chest: THREE.Object3D;
   eye: THREE.Object3D;
   mouth: THREE.Object3D;
   body: THREE.MeshStandardMaterial;
@@ -60,6 +61,10 @@ function makeSource(): RigSource & {
   scene.add(root);
   root.add(torso);
   torso.add(head);
+  const chest = new THREE.Object3D();
+  chest.name = 'ChestLight';
+  chest.position.set(0.0066, 0.489, 0.163);
+  torso.add(chest);
 
   const body = new THREE.MeshStandardMaterial({ name: 'Body' });
   const glow = new THREE.MeshStandardMaterial({ name: 'Glow' });
@@ -104,6 +109,7 @@ function makeSource(): RigSource & {
     mouth,
     eyes: [eyeL, eyeR],
     torso,
+    chest,
     materials: [body, glow, visor],
     clips,
     bodyMesh,
@@ -344,6 +350,20 @@ describe('createGlbRig blink, materials, mouth', () => {
     const head = noMouth.eye.getWorldPosition(new THREE.Vector3());
     expect(headOnly.mouthWorld()).toEqual({ x: head.x, y: head.y, z: head.z });
     headOnly.dispose();
+  });
+
+  it('reports the ChestLight world position, then Torso, when there is no ChestLight', () => {
+    const source = makeSource();
+    const rig = createGlbRig(source);
+    const expected = source.chest.getWorldPosition(new THREE.Vector3());
+    expect(rig.chestWorld()).toEqual({ x: expected.x, y: expected.y, z: expected.z });
+    rig.dispose();
+
+    const noChest = makeSource();
+    const torsoOnly = createGlbRig({ ...noChest, chest: undefined });
+    const torso = noChest.torso.getWorldPosition(new THREE.Vector3());
+    expect(torsoOnly.chestWorld()).toEqual({ x: torso.x, y: torso.y, z: torso.z });
+    torsoOnly.dispose();
   });
 });
 

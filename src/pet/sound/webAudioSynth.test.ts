@@ -21,6 +21,7 @@ const CUE_REGISTRY: Record<Cue, true> = {
   eatB: true,
   spawnPop: true,
   themeWhoosh: true,
+  themeWhooshDown: true,
   wakeBoing: true,
   chirp: true,
 };
@@ -38,15 +39,19 @@ const audioSpies = {
 
 /** Every `GainNode` the engine builds, in creation order; `[0]` is the master bus. */
 const createdGains: MockGainNode[] = [];
+/** Every `OscillatorNode` the engine builds, in creation order. */
+const createdOscillators: MockOscillatorNode[] = [];
 
 class MockAudioParam {
   value: number;
+  readonly history: number[] = [];
 
   constructor(initial = 0) {
     this.value = initial;
   }
 
   setValueAtTime(value: number): this {
+    this.history.push(value);
     this.value = value;
     return this;
   }
@@ -57,6 +62,7 @@ class MockAudioParam {
   }
 
   exponentialRampToValueAtTime(value: number): this {
+    this.history.push(value);
     this.value = value;
     return this;
   }
@@ -105,7 +111,9 @@ class MockAudioContext {
 
   createOscillator(): MockOscillatorNode {
     audioSpies.createOscillator();
-    return new MockOscillatorNode();
+    const node = new MockOscillatorNode();
+    createdOscillators.push(node);
+    return node;
   }
 
   createGain(): MockGainNode {
@@ -139,6 +147,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   createdGains.length = 0;
+  createdOscillators.length = 0;
   installMockAudioContext();
 });
 
@@ -339,5 +348,19 @@ describe('createWebAudioSynth: cue coverage + defensive degradation', () => {
 
     expect(audioSpies.ctor).toHaveBeenCalledTimes(1);
     expect(audioSpies.oscStart).toHaveBeenCalled();
+  });
+});
+
+describe('createWebAudioSynth: theme whoosh direction', () => {
+  it('glides themeWhoosh up (to light) and themeWhooshDown down (to dark)', () => {
+    const synth = createWebAudioSynth();
+    synth.unlock();
+
+    synth.play('themeWhoosh');
+    synth.play('themeWhooshDown');
+
+    const [up, down] = createdOscillators;
+    expect(up.frequency.history).toEqual([220, 660]);
+    expect(down.frequency.history).toEqual([660, 220]);
   });
 });

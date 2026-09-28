@@ -26,7 +26,7 @@ import type { ClipName } from './types';
 
 const MODEL_PATH = resolve(__dirname, '../../public/models/byte.glb');
 /** The delivered file (TICKETS T-GLB audit, 2026-09-22). A re-export changes this on purpose — update it together with ASSET_SPEC's audit. */
-const DELIVERED_BYTES = 728_928;
+const DELIVERED_BYTES = 729_036;
 /** ASSET_SPEC §3's tri budget. */
 const MAX_TRIS = 40_000;
 /** Authored clip lengths (s), TICKETS T-GLB clip-beat table. createBytePet's WAKE_MS/PEEK_MS follow Wake/Peek. */
@@ -71,6 +71,8 @@ describe('public/models/byte.glb', () => {
     expect(source.glow?.name).toBe('Glow');
     expect(source.eye?.name).toBe('Head');
     expect(source.mouth?.name).toBe('Mouth');
+    expect(source.chest?.name).toBe('ChestLight');
+    expect(source.chest?.parent?.name).toBe('Torso');
     expect(source.torso?.name).toBe('Torso');
     expect(source.eyes?.map((eye) => eye.name)).toEqual(['EyeL', 'EyeR']);
     expect(source.materials?.map((m) => m.name).sort()).toEqual(['Body', 'Glow', 'Visor']);

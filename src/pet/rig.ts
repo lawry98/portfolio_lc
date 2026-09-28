@@ -594,6 +594,20 @@ export function createPetRig(source: RigSource): PetRig {
   }
 
   /**
+   * The placeholder has no chest light; its mouth sits on the same front face,
+   * which is close enough for a reveal origin. A real `chest` wins if a source
+   * ever provides one.
+   */
+  function chestWorld(): { x: number; y: number; z: number } {
+    const node = source.chest ?? source.mouth;
+    if (!node) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    node.getWorldPosition(tmpMouthWorld);
+    return { x: tmpMouthWorld.x, y: tmpMouthWorld.y, z: tmpMouthWorld.z };
+  }
+
+  /**
    * No-op for the placeholder: `quickTo` and every clip timeline above
    * self-drive off `gsap.ticker` independently of this call, and the
    * placeholder has no `AnimationMixer` to advance. Kept as an explicit
@@ -632,6 +646,7 @@ export function createPetRig(source: RigSource): PetRig {
     setBlink,
     hoverHeight,
     mouthWorld,
+    chestWorld,
     update,
     dispose,
   };

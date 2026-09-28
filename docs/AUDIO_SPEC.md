@@ -14,7 +14,8 @@
 | `typeTick` | soft mechanical key tick (plays every 2–3 chars while typing) | 40–80ms |
 | `eatA` / `eatB` | two alternating "chomp/blip" bites | 80–140ms |
 | `spawnPop` | light pop when a glyph is tossed in | 80–120ms |
-| `themeWhoosh` | short airy whoosh on theme toggle | 200–350ms |
+| `themeWhoosh` | short airy whoosh, upward — theme switch to light (on the gesture's flip beat) | 200–350ms |
+| `themeWhooshDown` | the same whoosh, downward — theme switch to dark (on the gesture's flip beat) | 200–350ms |
 | `wakeBoing` | springy startle on wake | 150–300ms |
 | `chirp` | Byte's occasional friendly beep (idle/peek) | 100–200ms |
 

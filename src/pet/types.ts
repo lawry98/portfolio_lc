@@ -7,7 +7,7 @@
 import type * as THREE from 'three';
 import type { Phrase } from '../phrases';
 import type { SoundEngine } from './sound/SoundEngine';
-import type { StageRect } from './stage';
+import type { Point, StageRect } from './stage';
 
 /**
  * Re-exported (an `import ... from`, above, is not by itself visible to
@@ -126,6 +126,8 @@ export interface RigSource {
   eyes?: THREE.Object3D[];
   /** T-GLB: the `Torso` bone — its lift above its rest height is the GLB rig's hover (shadow) signal. */
   torso?: THREE.Object3D;
+  /** Theme gesture (D4): the `ChestLight` locator, parented to `Torso` — the theme reveal's origin. Falls back to `torso`, then the root, when absent. */
+  chest?: THREE.Object3D;
   /** T-GLB: every distinct material the source owns (`Body`, `Glow`, `Visor`, …) — what `setOpacity` fades. */
   materials?: THREE.Material[];
   clips: Partial<Record<ClipName, THREE.AnimationClip>>;
@@ -136,7 +138,8 @@ export interface RigSource {
  *  (retyping); T6b's entrance drives hidden/entering (hidden --SHOWN--> entering
  *  --ENTERED--> idle); T8 makes `traveling` reachable — the scroll-driven
  *  hero<->footer migration (a resting home state --MIGRATE--> traveling
- *  --ARRIVED--> idle). Every state in the union is now reachable. */
+ *  --ARRIVED--> idle). Every state in the union is now reachable. Theme gesture
+ *  adds `switching` (a resting state --THEME--> switching --SWITCHED--> idle). */
 export type PetState =
   | 'hidden'
   | 'entering'
@@ -149,7 +152,8 @@ export type PetState =
   | 'traveling'
   | 'sleeping'
   | 'waking'
-  | 'peeking';
+  | 'peeking'
+  | 'switching';
 
 /** External inputs to the FSM. Interaction events come from createBytePet's pointer
  *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3);
@@ -173,7 +177,9 @@ export type PetEvent =
   | 'SHOWN' // entrance: overlay lifted / drop-in begins (hidden -> entering)
   | 'ENTERED' // entrance: phrase #1 typed (entering -> idle)
   | 'MIGRATE' // scroll: pull Byte from a resting home state into the hero<->footer trip (idle/curious/invited -> traveling)
-  | 'ARRIVED'; // scroll: Byte reached the migration destination (traveling -> idle)
+  | 'ARRIVED' // scroll: Byte reached the migration destination (traveling -> idle)
+  | 'THEME' // pet: the toggle asked Byte to perform the theme switch (resting -> switching; sleeping -> waking first)
+  | 'SWITCHED'; // pet: the charge & release gesture finished (switching -> idle)
 
 /** Timer durations (ms) plus the initial state. All optional; createFSM applies the
  *  defaults below (`initialState` excepted — it's a start value, not a duration). */
@@ -187,6 +193,7 @@ export interface PetFSMConfig {
   eatMs?: number; // default 1500 — SAFETY cap only; eating normally exits on ATE.
   retypeMs?: number; // default 4000 — SAFETY cap only; retyping normally exits on RETYPED.
   enteringMs?: number; // default 8000 — SAFETY cap only; entering normally exits on ENTERED.
+  switchMs?: number; // default 4000 — SAFETY cap only; switching normally exits on SWITCHED (the corner visit runs ~2.6s).
 }
 
 /** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */
@@ -269,6 +276,15 @@ export interface PetOptions {
 }
 
 /**
+ * Theme gesture seam (spec D10): the page's reveal, called by the pet on the
+ * flip beat with the reveal's screen origin (Byte's chest light), or `null`
+ * for "use your own" (the toggle). It applies + persists the theme; the pet
+ * never touches storage or the DOM theme attribute. May return the reveal's
+ * completion so `performThemeSwitch` resolves only once it has finished.
+ */
+export type ThemeApply = (origin: Point | null) => Promise<void> | void;
+
+/**
  * Public surface `createBytePet()` returns (SPEC §4.4). `feed`/`setTheme`
  * are stable across tickets; `destroy()` is the one required teardown path
  * (kills every tween/timer/listener/GL resource this module created).
@@ -278,6 +294,14 @@ export interface BytePetHandle {
   feed(x: number, y: number): void;
   /** Re-themes the live scene + rig (lights, body color, glow) — call after flipping the page's own theme. */
   setTheme(t: 'light' | 'dark'): void;
+  /**
+   * The toggle path (spec): Byte performs the switch — charge & release at
+   * home, a corner visit when offscreen, layered over a feed/retype, or none
+   * (entrance/travel) — and calls `apply(origin)` on the flip beat. Skips T8's
+   * stretch. Resolves once both the gesture and `apply`'s reveal are done;
+   * never rejects. A call while one is in flight returns that same promise.
+   */
+  performThemeSwitch(next: 'light' | 'dark', apply: ThemeApply): Promise<void>;
   /** Subscribe to the running eaten-glyph total (the demo wires this to the footer's FED counter). Register-many; fires on each eat. */
   onEat(cb: (total: number) => void): void;
   /** SPEC §8.1: drop Byte in + live-type phrase #1 (reduced-motion: instant). Resolves when the entrance settles into idle. Safe no-op-ish if not constructed with `{ entrance: true }`. */
@@ -350,6 +374,8 @@ export interface PetRig {
   hoverHeight(): number;
   /** World position of the Mouth intake node (T5 glyphs converge here). */
   mouthWorld(): { x: number; y: number; z: number };
+  /** World position of the chest light (theme gesture, D4) — the reveal's origin. */
+  chestWorld(): { x: number; y: number; z: number };
   /** Per-tick update (placeholder: apply damped look etc.; GLB: advance the mixer). */
   update(dt: number): void;
   /** Kill tweens + free anything this rig created. */

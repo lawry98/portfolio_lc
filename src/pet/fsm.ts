@@ -11,7 +11,8 @@
  * --MIGRATE--> traveling --ARRIVED--> idle, both controller-fired), plus a feed
  * begun mid-trip that eats and returns to `traveling` (a happy spin, no retype)
  * instead of retyping — see the `feedFromTraveling` flag and the `eating`/ATE
- * fork below.
+ * fork below. The theme gesture adds `switching` (a resting state --THEME-->
+ * switching --SWITCHED--> idle; a sleeping Byte wakes first).
  *
  * Purity is the whole point (and the ticket's central requirement): this
  * file imports neither `gsap` nor `three`, and never reads the wall clock
@@ -62,6 +63,7 @@ const DEFAULTS: ResolvedFSMConfig = {
   eatMs: 1500,
   retypeMs: 4000,
   enteringMs: 8000,
+  switchMs: 4000,
 };
 
 /**
@@ -89,6 +91,7 @@ const DEFAULTS: ResolvedFSMConfig = {
  *  - `traveling` IS reachable now (T8's MIGRATE/ARRIVED migration) but is
  *    excluded on the same principle — Byte never sleeps mid-trip; it's
  *    following the visitor's scroll until the controller fires `ARRIVED`.
+ *  - `switching` is excluded: Byte never falls asleep mid-gesture.
  */
 function isSleepEligible(state: PetState): boolean {
   return state === 'idle' || state === 'curious' || state === 'invited' || state === 'peeking';
@@ -109,6 +112,7 @@ function specificTimerTarget(
   stateTimerMs: number,
   cfg: ResolvedFSMConfig,
   pendingFeed: boolean,
+  pendingTheme: boolean,
 ): PetState | null {
   switch (state) {
     case 'curious':
@@ -131,8 +135,20 @@ function specificTimerTarget(
       // live-typing) normally fires well before this; mirrors retyping.
       return stateTimerMs >= cfg.enteringMs ? 'idle' : null;
     case 'waking':
-      // Because pendingFeed — the wake→feed payoff (T5 renders it).
-      return pendingFeed && stateTimerMs >= cfg.wakeMs ? 'dashing' : null;
+      // The wake always runs its full window first. Then a pending theme
+      // switch wins over a pending feed (spec D6): the toggle is the newer,
+      // explicit request, and the switch gesture needs Byte at home. Otherwise
+      // the wake→feed payoff (T5 renders it).
+      if (stateTimerMs < cfg.wakeMs) {
+        return null;
+      }
+      if (pendingTheme) {
+        return 'switching';
+      }
+      return pendingFeed ? 'dashing' : null;
+    case 'switching':
+      // Safety cap only — the pet's SWITCHED normally fires when the gesture ends.
+      return stateTimerMs >= cfg.switchMs ? 'idle' : null;
     default:
       return null;
   }
@@ -155,6 +171,8 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
   let sleepAccumMs = 0;
   /** Set by sleeping's POINTER_DOWN; consumed when waking's timer elapses. */
   let pendingFeed = false;
+  /** Set by sleeping/waking's THEME; consumed (with `pendingFeed`) when waking's timer elapses. */
+  let pendingTheme = false;
   /**
    * T8: set true when a FEED begins while `traveling` (traveling --FEED-->
    * dashing); it makes the eventual `eating`--ATE--> route back to `traveling`
@@ -215,6 +233,12 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             resetSleepAccum();
             enter('traveling');
             return;
+          case 'THEME':
+            // Theme gesture: the toggle asked Byte to flip the theme. A user
+            // action, so it resets the sleep accumulator like FEED does.
+            resetSleepAccum();
+            enter('switching');
+            return;
           default:
             return;
         }
@@ -242,6 +266,12 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             // T8 migration — see idle's MIGRATE.
             resetSleepAccum();
             enter('traveling');
+            return;
+          case 'THEME':
+            // Theme gesture: the toggle asked Byte to flip the theme. A user
+            // action, so it resets the sleep accumulator like FEED does.
+            resetSleepAccum();
+            enter('switching');
             return;
           default:
             return;
@@ -271,19 +301,32 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             resetSleepAccum();
             enter('traveling');
             return;
+          case 'THEME':
+            // Theme gesture: the toggle asked Byte to flip the theme. A user
+            // action, so it resets the sleep accumulator like FEED does.
+            resetSleepAccum();
+            enter('switching');
+            return;
           default:
             return;
         }
 
       case 'peeking':
-        // Peek is atomic (ends only via its own state timer). POINTER_* just
-        // resets the sleep accumulator without changing state or firing
-        // onEnter; anything else (FEED, another PEEK) is ignored outright.
+        // Peek is atomic (ends only via its own state timer) — except for a
+        // THEME, which cuts it short (the toggle is an explicit user request).
+        // POINTER_* just resets the sleep accumulator without changing state or
+        // firing onEnter; anything else (FEED, another PEEK) is ignored outright.
         switch (event) {
           case 'POINTER_NEAR':
           case 'POINTER_FAR':
           case 'POINTER_DOWN':
             resetSleepAccum();
+            return;
+          case 'THEME':
+            // Theme gesture: the toggle asked Byte to flip the theme. A user
+            // action, so it resets the sleep accumulator like FEED does.
+            resetSleepAccum();
+            enter('switching');
             return;
           default:
             return;
@@ -293,6 +336,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
         if (event === 'POINTER_DOWN') {
           resetSleepAccum();
           pendingFeed = true;
+          enter('waking');
+        } else if (event === 'THEME') {
+          // Wake first (spec D6), then switch — see `specificTimerTarget`'s waking case.
+          resetSleepAccum();
+          pendingTheme = true;
           enter('waking');
         }
         return;
@@ -401,9 +449,35 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
             return;
         }
 
-      // `waking` ignores every event — it runs to completion solely via its
-      // own state timer (see `specificTimerTarget`). `traveling` now has its own
-      // case above (T8), so only `waking` reaches this default.
+      case 'waking':
+        // Waking still runs to completion via its own timer; a THEME only
+        // queues the switch for when it elapses. Every other event is ignored.
+        if (event === 'THEME') {
+          pendingTheme = true;
+        }
+        return;
+
+      case 'switching':
+        // The theme gesture is atomic: it exits on the pet's SWITCHED (or the
+        // switchMs cap). POINTER_* only reset the sleep accumulator (moot —
+        // switching isn't sleep-eligible — but consistent with the resting
+        // states); everything else, including a second THEME, is ignored.
+        switch (event) {
+          case 'SWITCHED':
+            enter('idle');
+            return;
+          case 'POINTER_NEAR':
+          case 'POINTER_FAR':
+          case 'POINTER_DOWN':
+            resetSleepAccum();
+            return;
+          default:
+            return;
+        }
+
+      // Every state now has its own case above (`waking` and `switching`
+      // joined `traveling`), so nothing reaches this default; it stays as the
+      // exhaustive fallback.
       default:
         return;
     }
@@ -413,10 +487,11 @@ export function createFSM(cfg: PetFSMConfig = {}): PetFSM {
     stateTimerMs += dtMs;
     sleepAccumMs += dtMs;
 
-    const specific = specificTimerTarget(current, stateTimerMs, config, pendingFeed);
+    const specific = specificTimerTarget(current, stateTimerMs, config, pendingFeed, pendingTheme);
     if (specific) {
       if (current === 'waking') {
         pendingFeed = false;
+        pendingTheme = false;
       } else if (current === 'dashing' || current === 'eating') {
         // The dash/eat safety cap fires straight to idle, deliberately skipping
         // the retype/travel payoff. Clear `feedFromTraveling` here so a capped

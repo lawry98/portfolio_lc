@@ -14,7 +14,15 @@
  */
 
 /** Every sound Byte can make, named by intent rather than by synthesis recipe. */
-export type Cue = 'typeTick' | 'eatA' | 'eatB' | 'spawnPop' | 'themeWhoosh' | 'wakeBoing' | 'chirp';
+export type Cue =
+  | 'typeTick'
+  | 'eatA'
+  | 'eatB'
+  | 'spawnPop'
+  | 'themeWhoosh'
+  | 'themeWhooshDown'
+  | 'wakeBoing'
+  | 'chirp';
 
 export interface SoundEngine {
   unlock(): void;

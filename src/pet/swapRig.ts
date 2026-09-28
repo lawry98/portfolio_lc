@@ -228,6 +228,10 @@ export function createSwappableRig(initial: PetRig): SwappableRig {
     return leaf.mouthWorld();
   }
 
+  function chestWorld(): { x: number; y: number; z: number } {
+    return leaf.chestWorld();
+  }
+
   function update(dt: number): void {
     leaf.update(dt);
   }
@@ -252,6 +256,7 @@ export function createSwappableRig(initial: PetRig): SwappableRig {
     setBlink,
     hoverHeight,
     mouthWorld,
+    chestWorld,
     update,
     dispose,
     swap,
