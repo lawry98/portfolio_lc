@@ -791,6 +791,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   // --- Theme switch (spec 2026-09-28) state ----------------------------------
   /** The gesture's master timeline (charge & release, or the reduced pulse). */
   let gestureTimeline: ReturnType<typeof gsap.timeline> | null = null;
+  /** The one-tick deferral that builds `gestureTimeline` (`startGestureOnNextTick`). */
+  let gestureStart: ReturnType<typeof gsap.delayedCall> | null = null;
   /** A toggle switch waiting for the FSM's `switching` entry (set before THEME; consumed by `dispatch`). */
   let pendingSwitch: {
     next: Theme;
@@ -1270,8 +1272,15 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * once both the gesture and the page's reveal have finished.
    */
   function runGesture(next: Theme, apply: ThemeApply, corner: boolean, done: () => void): void {
-    gestureTimeline = killTracked(gestureTimeline);
-    resetGesture();
+    startGestureOnNextTick(() => buildGesture(next, apply, corner, done));
+  }
+
+  function buildGesture(
+    next: Theme,
+    apply: ThemeApply,
+    corner: boolean,
+    done: () => void,
+  ): ReturnType<typeof gsap.timeline> {
     let flipped: Promise<void> = Promise.resolve();
     const gestureTl = buildChargeRelease(gesture, next);
     const start = corner ? CORNER_RISE_S : 0;
@@ -1323,13 +1332,19 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       resetGesture();
       void flipped.then(done);
     });
-    gestureTimeline = track(master);
+    return master;
   }
 
   /** Reduced motion (D8): one glow pulse, and the flip (a crossfade, page-side) on its peak. No body motion. */
   function runPulse(next: Theme, apply: ThemeApply, done: () => void): void {
-    gestureTimeline = killTracked(gestureTimeline);
-    resetGesture();
+    startGestureOnNextTick(() => buildPulseTimeline(next, apply, done));
+  }
+
+  function buildPulseTimeline(
+    next: Theme,
+    apply: ThemeApply,
+    done: () => void,
+  ): ReturnType<typeof gsap.timeline> {
     let flipped: Promise<void> = Promise.resolve();
     const tl = buildPulse(gesture);
     tl.eventCallback('onUpdate', writeGlow);
@@ -1344,7 +1359,29 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       gestureTimeline = null;
       void flipped.then(done);
     });
-    gestureTimeline = track(tl.paused(false));
+    return tl.paused(false);
+  }
+
+  /**
+   * Builds and starts the gesture's timeline on GSAP's NEXT tick, not now. A
+   * timeline created between ticks is stamped with the LAST tick's time, so
+   * when the frame before the click was long (a first glyph's shader compile,
+   * a feed's toss) its first render swallows that whole frame — QA saw 140–
+   * 225ms eaten, enough to skip the reduced pulse's 150ms peak outright
+   * (2026-09-28, row 11). Built inside a `delayedCall(0)` it starts on a fresh
+   * tick instead, at 0. The plan and the reveal origin are unaffected: the
+   * plan was already chosen at the click, and the origin is read on the flip.
+   */
+  function startGestureOnNextTick(build: () => ReturnType<typeof gsap.timeline>): void {
+    gestureStart = killTracked(gestureStart);
+    gestureTimeline = killTracked(gestureTimeline);
+    gestureStart = track(
+      gsap.delayedCall(0, () => {
+        gestureStart = null;
+        resetGesture();
+        gestureTimeline = track(build());
+      }),
+    );
   }
 
   function runSwitchPlan(
