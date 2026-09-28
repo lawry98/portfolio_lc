@@ -291,11 +291,18 @@ small,
   position: relative;
 }
 
+/* A fixed 52px square centred on the 44px button: 4px of room each side for
+   the ring (r 24 in a 52 viewBox). It overflows the button on purpose, so it
+   opts out of the reset's `max-width: 100%` — that capped it to the button's
+   42px padded box, squashing the ring and pushing it 4px left. */
 .nav__theme-ring {
   position: absolute;
-  inset: -4px;
-  inline-size: calc(100% + 8px);
-  block-size: calc(100% + 8px);
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: 52px;
+  block-size: 52px;
+  max-inline-size: none;
+  translate: -50% -50%;
   overflow: visible;
   pointer-events: none;
   opacity: 0;
