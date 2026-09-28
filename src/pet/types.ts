@@ -7,7 +7,7 @@
 import type * as THREE from 'three';
 import type { Phrase } from '../phrases';
 import type { SoundEngine } from './sound/SoundEngine';
-import type { StageRect } from './stage';
+import type { Point, StageRect } from './stage';
 
 /**
  * Re-exported (an `import ... from`, above, is not by itself visible to
@@ -276,6 +276,15 @@ export interface PetOptions {
 }
 
 /**
+ * Theme gesture seam (spec D10): the page's reveal, called by the pet on the
+ * flip beat with the reveal's screen origin (Byte's chest light), or `null`
+ * for "use your own" (the toggle). It applies + persists the theme; the pet
+ * never touches storage or the DOM theme attribute. May return the reveal's
+ * completion so `performThemeSwitch` resolves only once it has finished.
+ */
+export type ThemeApply = (origin: Point | null) => Promise<void> | void;
+
+/**
  * Public surface `createBytePet()` returns (SPEC §4.4). `feed`/`setTheme`
  * are stable across tickets; `destroy()` is the one required teardown path
  * (kills every tween/timer/listener/GL resource this module created).
@@ -285,6 +294,14 @@ export interface BytePetHandle {
   feed(x: number, y: number): void;
   /** Re-themes the live scene + rig (lights, body color, glow) — call after flipping the page's own theme. */
   setTheme(t: 'light' | 'dark'): void;
+  /**
+   * The toggle path (spec): Byte performs the switch — charge & release at
+   * home, a corner visit when offscreen, layered over a feed/retype, or none
+   * (entrance/travel) — and calls `apply(origin)` on the flip beat. Skips T8's
+   * stretch. Resolves once both the gesture and `apply`'s reveal are done;
+   * never rejects. A call while one is in flight returns that same promise.
+   */
+  performThemeSwitch(next: 'light' | 'dark', apply: ThemeApply): Promise<void>;
   /** Subscribe to the running eaten-glyph total (the demo wires this to the footer's FED counter). Register-many; fires on each eat. */
   onEat(cb: (total: number) => void): void;
   /** SPEC §8.1: drop Byte in + live-type phrase #1 (reduced-motion: instant). Resolves when the entrance settles into idle. Safe no-op-ish if not constructed with `{ entrance: true }`. */

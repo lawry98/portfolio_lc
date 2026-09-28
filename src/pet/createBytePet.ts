@@ -42,14 +42,34 @@ import {
   clampFeetToStage as clampFeetToStagePure,
   createScene,
   DEFAULT_GLOW_ACCENT,
+  screenFromWorld,
 } from './scene';
 import { createRetype, renderRetype } from './retype';
 import { announcePhrase, ensureAnnouncerRegion, teardownAnnouncer } from './a11y';
 import { silentSoundEngine, type SoundEngine } from './sound/SoundEngine';
 import { intersectViewport, stageFromSection, type Point, type StageRect } from './stage';
 import { restFeetX } from './restPose';
+import {
+  buildChargeRelease,
+  buildPulse,
+  byteScreenBox,
+  chooseSwitchPlan,
+  composeGlow,
+  CORNER_HIDDEN_Y,
+  CORNER_REST_Y,
+  CORNER_RISE_S,
+  CORNER_SINK_DELAY_S,
+  CORNER_SINK_S,
+  cornerFeetScreen,
+  FLIP_AT_S,
+  PULSE_S,
+  restingGesture,
+  THEME_SWITCH_LERP_S,
+  visibleFraction,
+  type SwitchPlan,
+} from './themeGesture';
 import type { Phrase } from '../phrases';
-import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState } from './types';
+import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState, ThemeApply } from './types';
 
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
@@ -141,7 +161,9 @@ const LEAN_DURATION_S = 0.4;
  * are the states this module's own per-tick anchor pin applies to;
  * `REACQUIRE_DURATION_S` is how long the no-snap glide back to the anchor
  * takes on the first home tick after a dashing/eating span (instant
- * instead, under `reducedActive`).
+ * instead, under `reducedActive`). `switching` (the theme gesture) is a home
+ * state too: Byte gestures on its anchor, and the corner visit overrides the
+ * pin explicitly in `onTick`.
  */
 const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'idle',
@@ -150,6 +172,7 @@ const HOME_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'peeking',
   'sleeping',
   'waking',
+  'switching',
 ]);
 const REACQUIRE_DURATION_S = 0.3;
 
@@ -410,9 +433,19 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * material back. 0 until the construction-time `applyTheme` below sets it.
    */
   let glowLevel = 0;
+  /**
+   * Theme gesture layer (themeGesture.ts): squash/stretch for `rig.pose.scale`
+   * plus a scale/boost on the glow. Resting values are the identity, so
+   * outside a gesture every glow write below is exactly the theme level.
+   */
+  const gesture = restingGesture();
+  /** The one glow writer: the theme level (`glowLevel`) composed with the gesture layer. */
+  function writeGlow(): void {
+    rig.setGlowLevel(composeGlow(glowLevel, gesture), currentGlowAccent);
+  }
   function applyGlowLevel(level: number): void {
     glowLevel = level;
-    rig.setGlowLevel(level, currentGlowAccent);
+    writeGlow();
   }
   // T7 sound seam (R7-1): every cue this module or its feeder fires goes through
   // this one `SoundEngine`. Defaults to the exported `silentSoundEngine` no-op
@@ -754,6 +787,25 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   let peekTimeline: ReturnType<typeof gsap.timeline> | null = null;
   /** T-GLB: the reduced-motion peek's opacity, persisted across kills so a superseded fade resumes from where it was (the `stageOpacity` idiom) — driven into `rig.setOpacity`. */
   const peekFade = { v: 1 };
+
+  // --- Theme switch (spec 2026-09-28) state ----------------------------------
+  /** The gesture's master timeline (charge & release, or the reduced pulse). */
+  let gestureTimeline: ReturnType<typeof gsap.timeline> | null = null;
+  /** A toggle switch waiting for the FSM's `switching` entry (set before THEME; consumed by `dispatch`). */
+  let pendingSwitch: {
+    next: Theme;
+    apply: ThemeApply;
+    corner: boolean;
+    resolve: () => void;
+  } | null = null;
+  /** The in-flight `performThemeSwitch` promise — a second call returns it (the page also locks). */
+  let switchInFlight: Promise<void> | null = null;
+  /** True while Byte is on a corner visit: `onTick` places it at the bottom-right and opens the stage to the viewport. */
+  const cornerVisit = { active: false };
+  /** The scissor clip `onTick` last fed the scene (viewport ∩ stage, or `null`) — the visibility test reads it. */
+  let lastStageClip: StageRect | null = null;
+  const tmpChest = new THREE.Vector3();
+
   /** Named single slot (parked T4 minor, carry-forward #5) so a superseded hint fade self-prunes instead of leaving a dead entry in `liveTweens` — `overwrite: true` already kills the competing GSAP tween internally, but that kill never fires `onComplete`, so `track()`'s own Set-removal never ran for it without this. */
   let hintTween: ReturnType<typeof gsap.to> | null = null;
   /** The `onTick` "no-snap reacquire" glide (R-T5-6) — tracked in its own named slot (not just `liveTweens` membership) so a rapid re-feed can defensively kill it before it fights a fresh dash tween for `rig.object3d.position`. */
@@ -994,9 +1046,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    * stretch; construction (`applyTheme(theme, { animate: false })`, further
    * down) always takes the instant path, and `reducedActive` forces it too
    * regardless of what the caller asked for (R-T4-7 — reduced motion sets
-   * the theme instantly, with no lerp and no stretch).
+   * the theme instantly, with no lerp and no stretch). `stretch: false` +
+   * `durationS` are the theme gesture's flip (the gesture replaces the
+   * stretch, and the lerp matches the page's reveal).
    */
-  function applyTheme(t: Theme, opts: { animate?: boolean } = {}): void {
+  function applyTheme(
+    t: Theme,
+    opts: { animate?: boolean; stretch?: boolean; durationS?: number } = {},
+  ): void {
     const prevTheme = theme;
     const animate = (opts.animate ?? false) && !reducedActive;
     theme = t;
@@ -1018,7 +1075,8 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       return;
     }
 
-    scene.setTheme(t, THEME_LERP_DURATION_S);
+    const durationS = opts.durationS ?? THEME_LERP_DURATION_S;
+    scene.setTheme(t, durationS);
 
     const fromBody = bodyColorForTheme(prevTheme);
     const toBody = bodyColorForTheme(t);
@@ -1035,7 +1093,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     themeLerpTween = track(
       gsap.to(proxy, {
         p: 1,
-        duration: THEME_LERP_DURATION_S,
+        duration: durationS,
         ease: 'power2.inOut',
         onUpdate: () => {
           // Reuse ONE scratch Color per frame (no per-tick allocation). `copy` resets it to the
@@ -1052,7 +1110,9 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       }),
     );
 
-    playThemeStretch();
+    if (opts.stretch ?? true) {
+      playThemeStretch();
+    }
   }
 
   // --- Invited hint ------------------------------------------------------------
@@ -1158,6 +1218,173 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
       holdEnd,
     );
     peekTimeline = tl;
+  }
+
+  // --- Theme switch: Byte causes the flip (spec 2026-09-28) -----------------------
+  /** Push the gesture layer onto Byte: squash/stretch on the consumer-owned pose, plus the composed glow. */
+  function writeGesture(): void {
+    rig.pose.scale.set(gesture.sqXZ, gesture.sqY, gesture.sqXZ);
+    writeGlow();
+  }
+
+  function resetGesture(): void {
+    Object.assign(gesture, restingGesture());
+    writeGesture();
+  }
+
+  /** Share of Byte's screen box inside the current stage clip (D5). */
+  function byteVisibleFraction(): number {
+    const p = rig.object3d.position;
+    const feet = screenFromWorld(p.x, p.y, window.innerWidth, window.innerHeight);
+    return visibleFraction(byteScreenBox(feet, unitPx), lastStageClip);
+  }
+
+  /** The chest light projected through the real camera (it sits in front of z=0, so perspective matters). */
+  function chestScreen(): Point {
+    const c = rig.chestWorld();
+    tmpChest.set(c.x, c.y, c.z).project(scene.camera);
+    return {
+      x: ((tmpChest.x + 1) / 2) * window.innerWidth,
+      y: ((1 - tmpChest.y) / 2) * window.innerHeight,
+    };
+  }
+
+  /**
+   * The flip beat: whoosh in the new direction (D11), lerp Byte's own look over
+   * the reveal's length with no T8 stretch (D9), and hand the page its origin.
+   * Resolves when the page's reveal has; never rejects.
+   */
+  function flipTheme(next: Theme, apply: ThemeApply, origin: Point | null): Promise<void> {
+    sound.play(next === 'dark' ? 'themeWhooshDown' : 'themeWhoosh');
+    applyTheme(next, { animate: true, stretch: false, durationS: THEME_SWITCH_LERP_S });
+    return Promise.resolve()
+      .then(() => apply(origin))
+      .catch(() => undefined);
+  }
+
+  /**
+   * Charge & release, at home or on a corner visit. The corner visit: Byte
+   * stands on the viewport's bottom-right edge (`onTick` places it while
+   * `cornerVisit.active`), rises on `pose.position.y`, gestures, sinks back,
+   * and is re-pinned home — invisibly, since home was offscreen. `done` runs
+   * once both the gesture and the page's reveal have finished.
+   */
+  function runGesture(next: Theme, apply: ThemeApply, corner: boolean, done: () => void): void {
+    gestureTimeline = killTracked(gestureTimeline);
+    resetGesture();
+    let flipped: Promise<void> = Promise.resolve();
+    const gestureTl = buildChargeRelease(gesture, next);
+    const start = corner ? CORNER_RISE_S : 0;
+    const master = gsap.timeline({ onUpdate: writeGesture });
+
+    if (corner) {
+      master.call(
+        () => {
+          cornerVisit.active = true;
+          shadow.mesh.visible = false;
+          rig.pose.position.y = CORNER_HIDDEN_Y;
+        },
+        undefined,
+        0,
+      );
+      master.to(
+        rig.pose.position,
+        { y: CORNER_REST_Y, duration: CORNER_RISE_S, ease: 'power3.out' },
+        0,
+      );
+    }
+    master.add(gestureTl.paused(false), start);
+    master.call(
+      () => {
+        flipped = flipTheme(next, apply, chestScreen());
+      },
+      undefined,
+      start + FLIP_AT_S,
+    );
+    if (corner) {
+      const sinkAt = start + gestureTl.duration() + CORNER_SINK_DELAY_S;
+      master.to(
+        rig.pose.position,
+        { y: CORNER_HIDDEN_Y, duration: CORNER_SINK_S, ease: 'power2.in' },
+        sinkAt,
+      );
+      master.call(
+        () => {
+          cornerVisit.active = false;
+          shadow.mesh.visible = true;
+          rig.pose.position.y = 0;
+        },
+        undefined,
+        sinkAt + CORNER_SINK_S,
+      );
+    }
+    master.eventCallback('onComplete', () => {
+      gestureTimeline = null;
+      resetGesture();
+      void flipped.then(done);
+    });
+    gestureTimeline = track(master);
+  }
+
+  /** Reduced motion (D8): one glow pulse, and the flip (a crossfade, page-side) on its peak. No body motion. */
+  function runPulse(next: Theme, apply: ThemeApply, done: () => void): void {
+    gestureTimeline = killTracked(gestureTimeline);
+    resetGesture();
+    let flipped: Promise<void> = Promise.resolve();
+    const tl = buildPulse(gesture);
+    tl.eventCallback('onUpdate', writeGlow);
+    tl.call(
+      () => {
+        flipped = flipTheme(next, apply, null);
+      },
+      undefined,
+      PULSE_S,
+    );
+    tl.eventCallback('onComplete', () => {
+      gestureTimeline = null;
+      void flipped.then(done);
+    });
+    gestureTimeline = track(tl.paused(false));
+  }
+
+  function runSwitchPlan(
+    plan: SwitchPlan,
+    next: Theme,
+    apply: ThemeApply,
+    resolve: () => void,
+  ): void {
+    switch (plan) {
+      case 'home':
+      case 'corner':
+        // Through the FSM: THEME enters `switching` (dispatch starts the
+        // gesture), or `waking` first for a sleeping Byte (spec D6).
+        pendingSwitch = { next, apply, corner: plan === 'corner', resolve };
+        fsm.send('THEME');
+        return;
+      case 'layer':
+        // Over a running feed/retype: no FSM change, the driver keeps going.
+        runGesture(next, apply, false, resolve);
+        return;
+      case 'pulse':
+        runPulse(next, apply, resolve);
+        return;
+      case 'button':
+      case 'instant':
+        void flipTheme(next, apply, null).then(resolve);
+        return;
+    }
+  }
+
+  function performThemeSwitch(next: Theme, apply: ThemeApply): Promise<void> {
+    if (switchInFlight) {
+      return switchInFlight;
+    }
+    const plan = chooseSwitchPlan(fsm.state(), byteVisibleFraction(), reducedActive);
+    const run = new Promise<void>((resolve) => runSwitchPlan(plan, next, apply, resolve));
+    switchInFlight = run.then(() => {
+      switchInFlight = null;
+    });
+    return switchInFlight;
   }
 
   // --- Micro-behaviour scheduler (brief 4d) ---------------------------------------
@@ -1539,6 +1766,26 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // BOTH motion modes (unlike `playUnlessReduced`, which is full-only).
         sound.play('wakeBoing');
         break;
+      case 'switching': {
+        // Theme gesture (spec D6): run the charge & release queued by
+        // `performThemeSwitch`, then hand back to idle. Beyond the shared
+        // per-state resets above (no idle brain, no hint, no lean), this is
+        // the whole choreography — the gesture layer never touches clips or
+        // the root position, so whatever clip was playing (Idle, or the Wake
+        // handing back to Idle) keeps running underneath.
+        const queued = pendingSwitch;
+        pendingSwitch = null;
+        if (!queued) {
+          // Defensive: nothing queued (should be unreachable) — don't strand the state.
+          fireOnNextTick(() => fsm.send('SWITCHED'));
+          break;
+        }
+        runGesture(queued.next, queued.apply, queued.corner, () => {
+          queued.resolve();
+          fireOnNextTick(() => fsm.send('SWITCHED'));
+        });
+        break;
+      }
       case 'dashing':
       case 'eating':
         // T5 (R-T5-5): the feeder (`feed.ts`) now owns both the `Dash`/`Eat`
@@ -2079,9 +2326,16 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     // which is `SceneHandle.setStage`'s render-skip signal (R12-3): the
     // next render clears both canvases instead of drawing Byte outside its
     // stage or freezing a stale frame on screen.
-    scene.setStage(
-      intersectViewport(activeStage, { width: window.innerWidth, height: window.innerHeight }),
-    );
+    //
+    // Theme gesture corner visit (spec D5): Byte stands on the viewport's
+    // bottom-right edge, outside both sections' stages, so the clip opens to
+    // the whole viewport for the visit's ~2.6s — the one sanctioned exception
+    // to the T12 containment guarantee, and only while `cornerVisit.active`.
+    const stageClip: StageRect | null = cornerVisit.active
+      ? { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }
+      : intersectViewport(activeStage, { width: window.innerWidth, height: window.innerHeight });
+    lastStageClip = stageClip;
+    scene.setStage(stageClip);
 
     // Edge-triggered (brief 4c), NOT sent unconditionally every tick: the
     // FSM's `peeking` case resets its sleep accumulator on POINTER_NEAR/FAR
@@ -2139,7 +2393,18 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     const { x: rootX, y: rootY } = clampFeetToStage(wanderRootX, wanderRootY, activeStage);
     const home = HOME_STATES.has(fsm.state());
 
-    if (home && !wasHome) {
+    if (cornerVisit.active) {
+      // Corner visit: this is the root's sole writer for the visit (the gesture
+      // moves only `pose`). `switching` is a HOME_STATE, so `wasHome` stays
+      // true and the visit's end re-pins home on the next tick with a hard pin,
+      // not a reacquire glide across the screen — invisible, as home is offscreen.
+      const feet = cornerFeetScreen(
+        { width: window.innerWidth, height: window.innerHeight },
+        unitPx,
+      );
+      const w = scene.worldFromScreen(feet.x, feet.y);
+      rig.object3d.position.set(w.x, w.y, 0);
+    } else if (home && !wasHome) {
       // No-snap reacquire: the feeder deliberately leaves Byte at the food
       // spot when it sends ATE (see feed.ts's own doc comment) rather than
       // tweening home itself — this module is the chosen return-leg owner,
@@ -2309,7 +2574,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
    */
   function setGlowAccent(color: THREE.ColorRepresentation): void {
     currentGlowAccent = color;
-    rig.setGlowLevel(glowLevel, currentGlowAccent);
+    writeGlow();
   }
 
   function onEat(cb: (total: number) => void): void {
@@ -2609,6 +2874,7 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
   return {
     feed,
     setTheme,
+    performThemeSwitch,
     onEat,
     enterAndType,
     setHomeAnchor,
