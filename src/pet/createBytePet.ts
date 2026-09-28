@@ -1773,6 +1773,14 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
         // the whole choreography — the gesture layer never touches clips or
         // the root position, so whatever clip was playing (Idle, or the Wake
         // handing back to Idle) keeps running underneath.
+        //
+        // A THEME can cut a peek short (fsm.ts). The shared reset above already
+        // brought Byte back in front of the text, but `runPeekFull`'s timeline
+        // would still fire its `setBehind(true)` beat mid-gesture — kill it.
+        // Only the full-motion peek gets here: reduced motion never enters
+        // `switching` (its plan is the pulse), so `runPeekReduced`'s rise and
+        // fade are never stranded by this kill.
+        peekTimeline = killTracked(peekTimeline);
         const queued = pendingSwitch;
         pendingSwitch = null;
         if (!queued) {
