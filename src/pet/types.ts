@@ -352,6 +352,8 @@ export interface PetRig {
   hoverHeight(): number;
   /** World position of the Mouth intake node (T5 glyphs converge here). */
   mouthWorld(): { x: number; y: number; z: number };
+  /** World position of the chest light (theme gesture, D4) — the reveal's origin. */
+  chestWorld(): { x: number; y: number; z: number };
   /** Per-tick update (placeholder: apply damped look etc.; GLB: advance the mixer). */
   update(dt: number): void;
   /** Kill tweens + free anything this rig created. */

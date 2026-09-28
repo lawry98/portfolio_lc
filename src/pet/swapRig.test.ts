@@ -29,6 +29,7 @@ function stubRig(name: string, hover = 0) {
     setBlink: vi.fn(),
     hoverHeight: vi.fn(() => hover),
     mouthWorld: vi.fn(() => ({ x: 1, y: 2, z: 3 })),
+    chestWorld: vi.fn(() => ({ x: 4, y: 5, z: 6 })),
     update: vi.fn(),
     dispose: vi.fn(),
   } satisfies PetRig;
@@ -58,6 +59,7 @@ describe('createSwappableRig', () => {
     expect(a.setBlink).toHaveBeenCalledWith(true);
     expect(a.update).toHaveBeenCalledWith(0.016);
     expect(rig.mouthWorld()).toEqual({ x: 1, y: 2, z: 3 });
+    expect(rig.chestWorld()).toEqual({ x: 4, y: 5, z: 6 });
   });
 
   it("adds its own pose offset to the leaf's hover height (the reduced-peek rise)", () => {
