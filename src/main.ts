@@ -11,11 +11,12 @@ import { initManifesto } from './page/manifesto';
 import { initWork } from './page/work';
 import { initFooter } from './page/footer';
 import { initLab } from './page/lab';
+import { startToggleCharge, type ToggleCharge } from './page/themeToggleFeedback';
 import { runEntrance } from './page/preloader';
 import { hasWebGL } from './pet/scene';
 import { createBytePet } from './pet/createBytePet';
 import { createWebAudioSynth } from './pet/sound/webAudioSynth';
-import type { BytePetHandle } from './pet/types';
+import type { BytePetHandle, ThemeSwitchCues } from './pet/types';
 import { phrases, type Phrase } from './phrases';
 
 /**
@@ -62,7 +63,10 @@ import { phrases, type Phrase } from './phrases';
  * the reveal and the theme write (`apply`), so the pet never touches
  * storage or `data-theme`. Clicks while a switch is running are ignored
  * (`aria-busy`) until the gesture and the reveal have both finished (spec
- * D7). `switchTheme` resolves late-bound: `bytePet` is created after this
+ * D7). While Byte charges, the button shows it (page/themeToggleFeedback.ts):
+ * a ring fills until the flip and a spark flies to Byte, paced by the pet's
+ * `onPlan` cue — skipped under reduced motion and when the flip is immediate.
+ * `switchTheme` resolves late-bound: `bytePet` is created after this
  * binding, hence the closure over it in `bootstrap()`.
  */
 function bindThemeToggle(
@@ -71,6 +75,7 @@ function bindThemeToggle(
   switchTheme: (
     next: Theme,
     apply: (origin: { x: number; y: number } | null) => Promise<void>,
+    cues: ThemeSwitchCues,
   ) => Promise<void>,
 ): void {
   const button = root.querySelector<HTMLButtonElement>('#theme-toggle');
@@ -101,7 +106,16 @@ function bindThemeToggle(
     busy = true;
     button.setAttribute('aria-busy', 'true');
     const next: Theme = theme.current() === 'dark' ? 'light' : 'dark';
+    let charge: ToggleCharge | null = null;
+    const cues: ThemeSwitchCues = {
+      onPlan: ({ leadMs, target }) => {
+        if (leadMs > 0 && !prefersReducedMotion()) {
+          charge = startToggleCharge(button, { leadMs, target });
+        }
+      },
+    };
     const apply = (origin: { x: number; y: number } | null): Promise<void> => {
+      charge?.flip();
       const r = button.getBoundingClientRect();
       return revealTheme(
         () => {
@@ -112,7 +126,11 @@ function bindThemeToggle(
         { reduced: prefersReducedMotion() },
       );
     };
-    void switchTheme(next, apply).then(release, release);
+    const finish = (): void => {
+      charge?.cancel();
+      release();
+    };
+    void switchTheme(next, apply, cues).then(finish, finish);
   });
 }
 
@@ -308,8 +326,8 @@ function bootstrap(): void {
   // The toggle path (spec 2026-09-28): Byte performs the switch and calls
   // `apply` on its flip beat; without a Byte (no WebGL) the page reveals from
   // the button itself. `setTheme` stays on the handle for non-toggle changes.
-  bindThemeToggle(root, theme, (next, apply) =>
-    bytePet ? bytePet.performThemeSwitch(next, apply) : apply(null),
+  bindThemeToggle(root, theme, (next, apply, cues) =>
+    bytePet ? bytePet.performThemeSwitch(next, apply, cues) : apply(null),
   );
 
   // Entrance branch, decided ONCE up front (before the section inits) so the

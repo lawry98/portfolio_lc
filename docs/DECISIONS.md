@@ -4,6 +4,19 @@ Running log (append per ticket). Newest first. See [`SPEC.md`](SPEC.md) for the 
 
 ---
 
+## D-26 · Toggle feedback during the charge (ring + spark) and a Retina reveal fix — 2026-09-28
+
+**Choice:** the owner felt the 0.63s between the click and the flip read as a laggy toggle, since nothing on the button moved until the flip. The timing stays; the click is now acknowledged at 0ms (picked from a throwaway four-way comparison: none, ring, icon morph, spark — the owner chose ring + spark):
+- **Charge ring:** an `--accent` ring around the toggle fills over the plan's lead time and pops outward on the flip (`page/themeToggleFeedback.ts`).
+- **Spark:** a `--glow` spark arcs from the button to Byte's chest in 300ms, or dives to the bottom-right edge Byte rises from on a corner visit.
+- **Seam:** `performThemeSwitch(next, apply, cues?)` gains an optional `cues.onPlan({ leadMs, target })`, fired once and synchronously when the plan is chosen. `leadMs` comes from the pure `switchLeadMs(plan, state, wakeMs)` (a waking Byte is given the whole wake window, an upper bound; the ring pops on the real flip either way). A throwing `onPlan` can't stop the switch.
+- None of it runs under reduced motion, on the `button`/`instant` plans, or without WebGL — the flip is immediate there.
+
+**Reveal fix:** on a devicePixelRatio 2 screen the circle grew from half the chest's coordinates, up-left of Byte. The origin was right; Chrome runs a WAAPI `clip-path` animation on the compositor and draws the circle at 1/dpr scale there (a paused animation painted correctly). The reveal now animates a registered `--theme-reveal-r` length that a `clip-path` rule in `global.css` reads while `data-theme-reveal` is on the root; custom properties animate on the main thread. Same timing and easing.
+**Why:** a wait feels intentional when the thing you clicked answers at once and shows the wait is going somewhere; the ring answers where the eye is and the spark hands off to Byte, keeping "Byte causes the flip" (D-25). The owner asked for the change to spread from Byte with Byte at the centre, which is what D-25 specified; the Retina bug was why it didn't.
+
+---
+
 ## D-25 · Byte causes the theme switch (charge & release + chest-light circle reveal) — 2026-09-28
 
 **Choice:** the nav toggle no longer flips the theme on the click. It calls the pet's new `performThemeSwitch(next, apply)` (spec D10), and Byte flips it: a crouch-squash while the chest glow gathers (ignites from off going dark, dims ×0.1 going light), then a stretch with a 3.6× chest flare. On the flare (0.63s, D2) the pet calls `apply(origin)`, and the page runs a View Transitions circle reveal from the chest light's screen point (`lib/themeReveal.ts`, 620ms), then persists the theme. The pet never touches storage or `data-theme`, so the seam carries over to the portfolio's `.dark` scheme. Byte's own light/material lerp runs for the reveal's length (`THEME_SWITCH_LERP_S` = 0.62, tied to `REVEAL_MS` by a test) and skips T8's stretch (D9). `setTheme()` keeps the stretch and the whoosh for non-toggle changes. Where it plays (D5, D6, pure `pet/themeGesture.ts` + 29 tests):

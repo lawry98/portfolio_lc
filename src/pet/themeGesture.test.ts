@@ -6,10 +6,12 @@ import {
   byteScreenBox,
   chooseSwitchPlan,
   composeGlow,
+  CORNER_RISE_S,
   cornerFeetScreen,
   FLIP_AT_S,
   PULSE_S,
   restingGesture,
+  switchLeadMs,
   THEME_SWITCH_LERP_S,
   visibleFraction,
   type GestureState,
@@ -150,5 +152,33 @@ describe('buildPulse', () => {
 describe('THEME_SWITCH_LERP_S', () => {
   it("matches the page reveal's length so Byte's look lands with the circle", () => {
     expect(THEME_SWITCH_LERP_S * 1000).toBe(REVEAL_MS);
+  });
+});
+
+describe('switchLeadMs', () => {
+  const WAKE = 1250;
+  const flip = FLIP_AT_S * 1000;
+  const rise = CORNER_RISE_S * 1000;
+
+  it('home: the charge up to the flip, plus the wake for a sleeping or waking Byte', () => {
+    expect(switchLeadMs('home', 'idle', WAKE)).toBeCloseTo(flip, 6);
+    expect(switchLeadMs('home', 'sleeping', WAKE)).toBeCloseTo(WAKE + flip, 6);
+    // Mid-wake, the rest of the wake is unknown here, so the whole window is the upper bound.
+    expect(switchLeadMs('home', 'waking', WAKE)).toBeCloseTo(WAKE + flip, 6);
+  });
+
+  it('corner: the rise comes first', () => {
+    expect(switchLeadMs('corner', 'curious', WAKE)).toBeCloseTo(rise + flip, 6);
+    expect(switchLeadMs('corner', 'sleeping', WAKE)).toBeCloseTo(WAKE + rise + flip, 6);
+  });
+
+  it('layer: the charge only, since the running state keeps going', () => {
+    expect(switchLeadMs('layer', 'eating', WAKE)).toBeCloseTo(flip, 6);
+  });
+
+  it('pulse flips on its peak; button and instant flip at once', () => {
+    expect(switchLeadMs('pulse', 'idle', WAKE)).toBeCloseTo(PULSE_S * 1000, 6);
+    expect(switchLeadMs('button', 'traveling', WAKE)).toBe(0);
+    expect(switchLeadMs('instant', 'hidden', WAKE)).toBe(0);
   });
 });

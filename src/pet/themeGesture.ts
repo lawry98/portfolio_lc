@@ -173,3 +173,26 @@ export function buildPulse(state: GestureState): gsap.core.Timeline {
 
 /** Byte's light/material crossfade on a toggle switch — equals the page's circle reveal (`REVEAL_MS`, lib/themeReveal.ts) so both land together (D9). */
 export const THEME_SWITCH_LERP_S = 0.62;
+
+/**
+ * How long after the click a plan's flip lands, in ms — the page paces the
+ * toggle's charge ring on it. A sleeping Byte wakes first (FSM `wakeMs`); a
+ * Byte already waking is given the whole window, an upper bound, since how
+ * much of it is left isn't known here. The ring pops on the real flip either way.
+ */
+export function switchLeadMs(plan: SwitchPlan, state: PetState, wakeMs: number): number {
+  const wake = state === 'sleeping' || state === 'waking' ? wakeMs : 0;
+  switch (plan) {
+    case 'home':
+      return wake + FLIP_AT_S * 1000;
+    case 'corner':
+      return wake + (CORNER_RISE_S + FLIP_AT_S) * 1000;
+    case 'layer':
+      return FLIP_AT_S * 1000;
+    case 'pulse':
+      return PULSE_S * 1000;
+    case 'button':
+    case 'instant':
+      return 0;
+  }
+}

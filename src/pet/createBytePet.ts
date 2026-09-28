@@ -64,12 +64,21 @@ import {
   FLIP_AT_S,
   PULSE_S,
   restingGesture,
+  switchLeadMs,
   THEME_SWITCH_LERP_S,
   visibleFraction,
   type SwitchPlan,
 } from './themeGesture';
 import type { Phrase } from '../phrases';
-import type { BytePetHandle, ClipName, PetOptions, PetRig, PetState, ThemeApply } from './types';
+import type {
+  BytePetHandle,
+  ClipName,
+  PetOptions,
+  PetRig,
+  PetState,
+  ThemeApply,
+  ThemeSwitchCues,
+} from './types';
 
 type Theme = 'light' | 'dark';
 type Trackable = ReturnType<typeof gsap.timeline> | ReturnType<typeof gsap.to>;
@@ -1412,11 +1421,34 @@ export function createBytePet(mount: HTMLElement, opts: PetOptions): BytePetHand
     }
   }
 
-  function performThemeSwitch(next: Theme, apply: ThemeApply): Promise<void> {
+  /** Where the page's toggle spark flies for `plan`: the chest, the corner-visit edge, or nowhere. */
+  function sparkTarget(plan: SwitchPlan): Point | null {
+    switch (plan) {
+      case 'home':
+      case 'layer':
+        return chestScreen();
+      case 'corner':
+        return cornerFeetScreen({ width: window.innerWidth, height: window.innerHeight }, unitPx);
+      default:
+        return null;
+    }
+  }
+
+  function performThemeSwitch(
+    next: Theme,
+    apply: ThemeApply,
+    cues?: ThemeSwitchCues,
+  ): Promise<void> {
     if (switchInFlight) {
       return switchInFlight;
     }
-    const plan = chooseSwitchPlan(fsm.state(), byteVisibleFraction(), reducedActive);
+    const state = fsm.state();
+    const plan = chooseSwitchPlan(state, byteVisibleFraction(), reducedActive);
+    try {
+      cues?.onPlan?.({ leadMs: switchLeadMs(plan, state, WAKE_MS), target: sparkTarget(plan) });
+    } catch {
+      // The page's feedback is decoration — it must not stop the switch.
+    }
     const run = new Promise<void>((resolve) => runSwitchPlan(plan, next, apply, resolve));
     switchInFlight = run.then(() => {
       switchInFlight = null;

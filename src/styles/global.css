@@ -283,6 +283,52 @@ small,
   transform: scale(0.94);
 }
 
+/* Toggle feedback (page/themeToggleFeedback.ts): while Byte charges the
+   switch, a ring around the toggle fills until the flip, and a spark flies
+   from the button to Byte. Both are script-driven (WAAPI) and skipped under
+   reduced motion. */
+.nav__theme-toggle {
+  position: relative;
+}
+
+.nav__theme-ring {
+  position: absolute;
+  inset: -4px;
+  inline-size: calc(100% + 8px);
+  block-size: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  /* Starts the fill at 12 o'clock. */
+  rotate: -90deg;
+}
+
+.nav__theme-toggle.is-charging .nav__theme-ring {
+  opacity: 1;
+}
+
+.nav__theme-ring circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.theme-spark {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  /* Above the nav (50) and #gl-front (40), below the grain (9999). */
+  z-index: 60;
+  inline-size: 10px;
+  block-size: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--glow);
+  box-shadow: 0 0 10px 3px var(--glow);
+  pointer-events: none;
+}
+
 .hero {
   min-height: 100svh;
   display: flex;
