@@ -1,12 +1,27 @@
 "use client";
 
+import { useRef } from "react";
+import { useScroll } from "framer-motion";
 import { Mail, Github } from "lucide-react";
 import { FadeIn } from "@/components/animations/fade-in";
+import { Signature } from "@/components/ui/signature";
 
 export function Contact() {
+  const sectionRef = useRef<HTMLElement>(null);
+  // On tall viewports the section is taller than the screen and its content
+  // is pinned, so the extra scroll signs the name as the page's finale.
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end end"],
+  });
+
   return (
-    <section id="contact" className="py-24 px-6">
-      <div className="max-w-4xl mx-auto text-center">
+    <section
+      ref={sectionRef}
+      id="contact"
+      className="relative px-6 py-24 tall:h-[175svh] tall:py-0"
+    >
+      <div className="max-w-4xl mx-auto text-center tall:sticky tall:top-0 tall:flex tall:h-svh tall:flex-col tall:justify-center tall:pt-16">
         <FadeIn>
           <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
             Contact
@@ -48,6 +63,12 @@ export function Contact() {
             </a>
           </div>
         </FadeIn>
+
+        {/* Decorative sign-off, drawn by scroll; the name is already the page's h1 */}
+        <Signature
+          progress={scrollYProgress}
+          className="mx-auto mt-10 block h-auto w-full max-w-3xl text-foreground sm:mt-20"
+        />
       </div>
     </section>
   );

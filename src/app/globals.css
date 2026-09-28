@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* Viewports tall enough to pin the Contact finale on screen. */
+@custom-variant tall (@media (min-height: 640px));
 
 @theme inline {
   --color-background: var(--background);
