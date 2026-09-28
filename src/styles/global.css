@@ -69,6 +69,21 @@ html.lenis body {
   mix-blend-mode: normal;
 }
 
+/* The circle reveal's clip. The script animates `--theme-reveal-r` and pins
+   the origin on the root, and this rule only exists while it does
+   (`data-theme-reveal`). Animating `clip-path` itself would be composited,
+   and Chrome's compositor draws the circle at 1/devicePixelRatio scale —
+   see lib/themeReveal.ts. */
+@property --theme-reveal-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+:root[data-theme-reveal]::view-transition-new(root) {
+  clip-path: circle(var(--theme-reveal-r) at var(--theme-reveal-x) var(--theme-reveal-y));
+}
+
 html,
 body {
   height: 100%;

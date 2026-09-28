@@ -9,6 +9,13 @@
  * with its own `.dark` class. Browsers without View Transitions just apply.
  * The animations run through WAAPI (`element.animate`), which the global
  * reduced-motion CSS freeze doesn't touch — the crossfade is chosen by `opts`.
+ *
+ * The circle grows a registered `--theme-reveal-r` that global.css's
+ * `clip-path` reads, instead of animating `clip-path` directly: Chrome runs a
+ * WAAPI clip-path animation on the compositor and scales the circle by
+ * 1/devicePixelRatio there, so on a Retina screen it grew from half the
+ * origin's coordinates, up-left of Byte (2026-09-28). A custom property
+ * animates on the main thread, which paints it at the right place.
  */
 
 /** Circle reveal length; `THEME_SWITCH_LERP_S` (pet/themeGesture.ts) matches it. */
@@ -17,6 +24,8 @@ export const REVEAL_MS = 620;
 export const CROSSFADE_MS = 400;
 const REVEAL_EASE = 'cubic-bezier(0.25, 0.8, 0.25, 1)';
 const NEW_VIEW = '::view-transition-new(root)';
+/** Set on the root while a circle reveal runs; global.css scopes the clip to it. */
+const REVEAL_ATTR = 'data-theme-reveal';
 
 /** Radius that covers the whole viewport from `(x, y)`: the distance to the farthest corner. */
 export function revealRadius(x: number, y: number, width: number, height: number): number {
@@ -36,17 +45,27 @@ export function revealTheme(
     apply();
     return Promise.resolve();
   }
-  const transition = document.startViewTransition(apply);
-  // A transition the browser skips (tab hidden, superseded) rejects these, but
-  // the update callback still ran — the theme is applied either way.
-  transition.finished.catch(() => {});
-  transition.updateCallbackDone.catch(() => {});
-
   const width = window.innerWidth;
   const height = window.innerHeight;
   const x = clamp(origin.x, 0, width);
   const y = clamp(origin.y, 0, height);
   const root = document.documentElement;
+  if (!opts.reduced) {
+    root.setAttribute(REVEAL_ATTR, '');
+    root.style.setProperty('--theme-reveal-x', `${x}px`);
+    root.style.setProperty('--theme-reveal-y', `${y}px`);
+  }
+  const clearOrigin = (): void => {
+    root.removeAttribute(REVEAL_ATTR);
+    root.style.removeProperty('--theme-reveal-x');
+    root.style.removeProperty('--theme-reveal-y');
+  };
+
+  const transition = document.startViewTransition(apply);
+  // A transition the browser skips (tab hidden, superseded) rejects these, but
+  // the update callback still ran — the theme is applied either way.
+  transition.finished.catch(() => {});
+  transition.updateCallbackDone.catch(() => {});
 
   return transition.ready
     .then(() => {
@@ -56,15 +75,13 @@ export function revealTheme(
             { duration: CROSSFADE_MS, easing: 'ease', pseudoElement: NEW_VIEW },
           )
         : root.animate(
-            {
-              clipPath: [
-                `circle(0px at ${x}px ${y}px)`,
-                `circle(${revealRadius(x, y, width, height)}px at ${x}px ${y}px)`,
-              ],
-            },
-            { duration: REVEAL_MS, easing: REVEAL_EASE, pseudoElement: NEW_VIEW },
+            { '--theme-reveal-r': ['0px', `${revealRadius(x, y, width, height)}px`] },
+            // `forwards` holds the full radius until the transition tears the
+            // pseudo down — the property's 0px initial value would hide the view.
+            { duration: REVEAL_MS, easing: REVEAL_EASE, pseudoElement: NEW_VIEW, fill: 'forwards' },
           );
       return animation.finished.then(() => undefined);
     })
-    .catch(() => undefined);
+    .catch(() => undefined)
+    .finally(clearOrigin);
 }

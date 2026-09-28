@@ -45,7 +45,7 @@ describe('revealTheme', () => {
     expect(apply).toHaveBeenCalledTimes(1);
   });
 
-  it('full motion: a circle clip from the origin on the new view', async () => {
+  it('full motion: grows the radius custom property, not clip-path (Chrome composites clip-path at 1/dpr)', async () => {
     const { animate } = stubViewTransition();
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
@@ -55,27 +55,38 @@ describe('revealTheme', () => {
 
     expect(apply).toHaveBeenCalledTimes(1);
     const [keyframes, options] = animate.mock.calls[0] as unknown as [
-      { clipPath: string[] },
+      Record<string, string[]>,
       KeyframeAnimationOptions,
     ];
-    const r = Math.hypot(900, 700);
-    expect(keyframes.clipPath).toEqual([
-      'circle(0px at 900px 700px)',
-      `circle(${r}px at 900px 700px)`,
-    ]);
+    expect(keyframes).toEqual({ '--theme-reveal-r': ['0px', `${Math.hypot(900, 700)}px`] });
     expect(options.duration).toBe(REVEAL_MS);
+    expect(options.fill).toBe('forwards');
     expect(options.pseudoElement).toBe('::view-transition-new(root)');
   });
 
-  it('clamps an off-viewport origin onto the viewport edge', async () => {
+  it('pins the origin on the root while the circle runs, and clears it afterwards', async () => {
+    let seen: { on: boolean; x: string; y: string } | null = null;
     const { animate } = stubViewTransition();
+    animate.mockImplementation(() => {
+      const root = document.documentElement;
+      seen = {
+        on: root.hasAttribute('data-theme-reveal'),
+        x: root.style.getPropertyValue('--theme-reveal-x'),
+        y: root.style.getPropertyValue('--theme-reveal-y'),
+      };
+      return { finished: Promise.resolve() };
+    });
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
 
     await revealTheme(() => {}, { x: 1200, y: 900 }, { reduced: false });
 
-    const [keyframes] = animate.mock.calls[0] as unknown as [{ clipPath: string[] }];
-    expect(keyframes.clipPath[0]).toBe('circle(0px at 1000px 800px)');
+    // Clamped onto the viewport edge.
+    expect(seen).toEqual({ on: true, x: '1000px', y: '800px' });
+    const root = document.documentElement;
+    expect(root.hasAttribute('data-theme-reveal')).toBe(false);
+    expect(root.style.getPropertyValue('--theme-reveal-x')).toBe('');
+    expect(root.style.getPropertyValue('--theme-reveal-y')).toBe('');
   });
 
   it('reduced motion: an opacity crossfade, no circle', async () => {
@@ -89,6 +100,7 @@ describe('revealTheme', () => {
     ];
     expect(keyframes).toEqual({ opacity: [0, 1] });
     expect(options.duration).toBe(CROSSFADE_MS);
+    expect(document.documentElement.hasAttribute('data-theme-reveal')).toBe(false);
   });
 
   it('a skipped transition (ready rejects) still applied the theme and resolves', async () => {
@@ -99,5 +111,6 @@ describe('revealTheme', () => {
 
     expect(apply).toHaveBeenCalledTimes(1);
     expect(animate).not.toHaveBeenCalled();
+    expect(document.documentElement.hasAttribute('data-theme-reveal')).toBe(false);
   });
 });
