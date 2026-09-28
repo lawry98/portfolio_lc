@@ -1101,3 +1101,103 @@ describe('createFSM: traveling (T8 migration + feed-while-traveling)', () => {
     ]);
   });
 });
+
+describe('createFSM: switching (theme gesture)', () => {
+  it.each(['idle', 'curious', 'invited', 'peeking'] as const)(
+    '%s -> switching on THEME',
+    (from) => {
+      const fsm = createFSM({ initialState: from });
+      fsm.send('THEME');
+      expect(fsm.state()).toBe('switching');
+    },
+  );
+
+  it('switching -> idle on SWITCHED', () => {
+    const fsm = createFSM();
+    fsm.send('THEME');
+    fsm.send('SWITCHED');
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it('ignores FEED, PEEK, THEME and MIGRATE while switching', () => {
+    const fsm = createFSM();
+    fsm.send('THEME');
+    const onEnter = vi.fn();
+    fsm.onEnter(onEnter);
+
+    fsm.send('FEED');
+    fsm.send('PEEK');
+    fsm.send('THEME');
+    fsm.send('MIGRATE');
+
+    expect(fsm.state()).toBe('switching');
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('caps switching at switchMs (default 4000) -> idle, and never drifts to sleep', () => {
+    const fsm = createFSM();
+    fsm.tickTimers(29000); // idle, sleep accum 29000
+    fsm.send('THEME'); // resets the sleep accumulator (a user action)
+    fsm.tickTimers(3999);
+    expect(fsm.state()).toBe('switching');
+    fsm.tickTimers(1);
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it('honours a switchMs override', () => {
+    const fsm = createFSM({ switchMs: 100 });
+    fsm.send('THEME');
+    fsm.tickTimers(100);
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it('sleeping -> waking on THEME, then -> switching (not dashing) once the wake elapses', () => {
+    const fsm = createFSM();
+    fsm.tickTimers(30000);
+    expect(fsm.state()).toBe('sleeping');
+
+    fsm.send('THEME');
+    expect(fsm.state()).toBe('waking');
+
+    fsm.tickTimers(599);
+    expect(fsm.state()).toBe('waking');
+    fsm.tickTimers(1);
+    expect(fsm.state()).toBe('switching');
+  });
+
+  it('a THEME during a click-wake wins over the pending feed', () => {
+    const fsm = createFSM();
+    fsm.tickTimers(30000);
+    fsm.send('POINTER_DOWN'); // -> waking, feed pending
+    fsm.send('THEME'); // theme pending too; stays waking
+    expect(fsm.state()).toBe('waking');
+
+    fsm.tickTimers(600);
+    expect(fsm.state()).toBe('switching');
+    fsm.send('SWITCHED');
+    expect(fsm.state()).toBe('idle');
+    fsm.tickTimers(600); // the dropped feed never resurfaces
+    expect(fsm.state()).toBe('idle');
+  });
+
+  it('a later click-wake after a theme-wake still counts as a feed (flags cleared)', () => {
+    const fsm = createFSM();
+    fsm.tickTimers(30000);
+    fsm.send('THEME');
+    fsm.tickTimers(600); // -> switching
+    fsm.send('SWITCHED'); // -> idle
+    fsm.tickTimers(30000); // -> sleeping
+    fsm.send('POINTER_DOWN');
+    fsm.tickTimers(600);
+    expect(fsm.state()).toBe('dashing');
+  });
+
+  it.each(['hidden', 'entering', 'traveling', 'dashing', 'eating', 'retyping'] as const)(
+    'ignores THEME while %s',
+    (from) => {
+      const fsm = createFSM({ initialState: from });
+      fsm.send('THEME');
+      expect(fsm.state()).toBe(from);
+    },
+  );
+});

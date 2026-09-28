@@ -138,7 +138,8 @@ export interface RigSource {
  *  (retyping); T6b's entrance drives hidden/entering (hidden --SHOWN--> entering
  *  --ENTERED--> idle); T8 makes `traveling` reachable — the scroll-driven
  *  hero<->footer migration (a resting home state --MIGRATE--> traveling
- *  --ARRIVED--> idle). Every state in the union is now reachable. */
+ *  --ARRIVED--> idle). Every state in the union is now reachable. Theme gesture
+ *  adds `switching` (a resting state --THEME--> switching --SWITCHED--> idle). */
 export type PetState =
   | 'hidden'
   | 'entering'
@@ -151,7 +152,8 @@ export type PetState =
   | 'traveling'
   | 'sleeping'
   | 'waking'
-  | 'peeking';
+  | 'peeking'
+  | 'switching';
 
 /** External inputs to the FSM. Interaction events come from createBytePet's pointer
  *  wiring; PEEK comes from createBytePet's micro-behaviour scheduler (R-T4-3);
@@ -175,7 +177,9 @@ export type PetEvent =
   | 'SHOWN' // entrance: overlay lifted / drop-in begins (hidden -> entering)
   | 'ENTERED' // entrance: phrase #1 typed (entering -> idle)
   | 'MIGRATE' // scroll: pull Byte from a resting home state into the hero<->footer trip (idle/curious/invited -> traveling)
-  | 'ARRIVED'; // scroll: Byte reached the migration destination (traveling -> idle)
+  | 'ARRIVED' // scroll: Byte reached the migration destination (traveling -> idle)
+  | 'THEME' // pet: the toggle asked Byte to perform the theme switch (resting -> switching; sleeping -> waking first)
+  | 'SWITCHED'; // pet: the charge & release gesture finished (switching -> idle)
 
 /** Timer durations (ms) plus the initial state. All optional; createFSM applies the
  *  defaults below (`initialState` excepted — it's a start value, not a duration). */
@@ -189,6 +193,7 @@ export interface PetFSMConfig {
   eatMs?: number; // default 1500 — SAFETY cap only; eating normally exits on ATE.
   retypeMs?: number; // default 4000 — SAFETY cap only; retyping normally exits on RETYPED.
   enteringMs?: number; // default 8000 — SAFETY cap only; entering normally exits on ENTERED.
+  switchMs?: number; // default 4000 — SAFETY cap only; switching normally exits on SWITCHED (the corner visit runs ~2.6s).
 }
 
 /** The pure FSM handle (ticket "createFSM(cfg): { state(), send(ev), onEnter(cb), tickTimers(dt) }"). */
