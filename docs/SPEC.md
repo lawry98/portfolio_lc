@@ -170,7 +170,7 @@ Canvases `aria-hidden`; a throttled polite live-region announces the final phras
 
 ## 13. Performance budgets & guardrails
 - JS ≤ **280KB gzip** (three ≈ 165KB, GSAP already counted); CSS ≤ 20KB; fonts ≤ 120KB woff2 subsetted (final, one type system). Shipped (T-GLB, D-22): entry **225.28 KB gz**, the lazy `glbLoader` chunk **21.00 KB gz**, JS total **≈ 246.3 KB gz** ≤ 280 ✅.
-- **Model budget:** Byte `.glb` — delivered at **525 KB gzipped (728,928 B raw), 36,283 tris, no textures** — the ~5% over the soft 500 KB target is an accepted exception (D-22).
+- **Model budget:** Byte `.glb` — delivered at **525 KB gzipped (729,036 B raw), 36,283 tris, no textures** — the ~5% over the soft 500 KB target is an accepted exception (D-22).
 - Lighthouse mobile: Perf ≥ 90, A11y ≥ 95, Best Practices 100. LCP < 2.0s (headline is DOM). CLS = 0.
 - Transforms/opacity + WebGL only; batch DOM reads/writes; rect caching on scroll, not per frame. Long frames (>32ms) ≤ 2 per 10s sample; heap stable after 50 feeds.
 

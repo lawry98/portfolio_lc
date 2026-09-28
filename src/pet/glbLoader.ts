@@ -72,6 +72,7 @@ function namedStandardMaterial(
  *   fine — at minimum `Idle` + `Eat`").
  * - `eyes`: `EyeL` then `EyeR`, only those present.
  * - `torso`: the `Torso` bone.
+ * - `chest`: the `ChestLight` locator (theme gesture, D4).
  * - `materials`: every distinct material, in traversal order.
  *
  * All name matching is case-insensitive; anything not found is left
@@ -89,6 +90,7 @@ export function mapGltfToRigSource(gltf: {
   let eyeL: THREE.Object3D | undefined;
   let eyeR: THREE.Object3D | undefined;
   let torso: THREE.Object3D | undefined;
+  let chest: THREE.Object3D | undefined;
   const materials = new Set<THREE.Material>();
 
   gltf.scene.traverse((object) => {
@@ -105,6 +107,7 @@ export function mapGltfToRigSource(gltf: {
     if (!eyeL && sameName(object.name, 'EyeL')) eyeL = object;
     if (!eyeR && sameName(object.name, 'EyeR')) eyeR = object;
     if (!torso && sameName(object.name, 'Torso')) torso = object;
+    if (!chest && sameName(object.name, 'ChestLight')) chest = object;
   });
 
   const clips: Partial<Record<ClipName, THREE.AnimationClip>> = {};
@@ -122,6 +125,7 @@ export function mapGltfToRigSource(gltf: {
     mouth,
     eyes: eyes.length > 0 ? eyes : undefined,
     torso,
+    chest,
     materials: materials.size > 0 ? [...materials] : undefined,
     clips,
   };

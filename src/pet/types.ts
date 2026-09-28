@@ -126,6 +126,8 @@ export interface RigSource {
   eyes?: THREE.Object3D[];
   /** T-GLB: the `Torso` bone — its lift above its rest height is the GLB rig's hover (shadow) signal. */
   torso?: THREE.Object3D;
+  /** Theme gesture (D4): the `ChestLight` locator, parented to `Torso` — the theme reveal's origin. Falls back to `torso`, then the root, when absent. */
+  chest?: THREE.Object3D;
   /** T-GLB: every distinct material the source owns (`Body`, `Glow`, `Visor`, …) — what `setOpacity` fades. */
   materials?: THREE.Material[];
   clips: Partial<Record<ClipName, THREE.AnimationClip>>;

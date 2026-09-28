@@ -40,6 +40,7 @@
 - **`Eye`** or **`Head`** — a node I rotate a few degrees to fake **cursor tracking**. If the face is a screen, a `Face`/`Screen` node works too. Give it a sensible local pivot.
 - **`EyeL`/`EyeR`** *(optional)* — if present, I drive them for blink (squash on the eye's local Y) and an eye slide toward the cursor, on top of the `Head` turn (T-GLB). Children of `Head` is the natural place for them.
 - **`Mouth`** — an empty/locator at the intake point where fed glyphs converge and disappear. Position it where "eating" should visually happen.
+- **`ChestLight`** — an empty parented to the `Torso` bone at the chest light's centre (theme gesture, 2026-09-25). The theme reveal starts here; without it the code falls back to `Torso`.
 - *(If you go the static/segmented route — see §6 — also name the moving parts: `Antenna`, `EyeL`, `EyeR`, `LegL`, `LegR`, etc.)*
 
 ## 6. Animation — pick a path
@@ -77,7 +78,7 @@
 ## 7. Export checklist (Blender → glTF)
 - [ ] Apply all transforms (scale = 1), Y-up on export.
 - [ ] Materials named `Body` / `Glow`; `Glow` has emission.
-- [ ] Nodes named `Eye`/`Head` and `Mouth` (+ segmented parts if static).
+- [ ] Nodes named `Eye`/`Head`, `Mouth` and `ChestLight` (+ segmented parts if static).
 - [ ] Animation actions named per §6; pushed to NLA / exported as separate clips; **"Group by NLA Track"** or equivalent so names survive.
 - [ ] Root motion kept in place for `Dash`.
 - [ ] Within budget (§3). Test in <https://gltf-viewer.donmccurdy.com/> before sending.

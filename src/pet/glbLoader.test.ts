@@ -100,6 +100,25 @@ describe('mapGltfToRigSource', () => {
     expect(result.mouth).toBe(mouth);
   });
 
+  it('finds the ChestLight locator by name, case-insensitively, nested at any depth', () => {
+    const scene = new THREE.Group();
+    const torso = new THREE.Object3D();
+    torso.name = 'Torso';
+    const chest = new THREE.Object3D();
+    chest.name = 'chestlight'; // proves case-insensitivity
+    torso.add(chest);
+    scene.add(torso);
+
+    const result = mapGltfToRigSource(gltfOf(scene));
+
+    expect(result.chest).toBe(chest);
+  });
+
+  it('leaves chest undefined without throwing when there is no ChestLight', () => {
+    const result = mapGltfToRigSource(gltfOf(new THREE.Group()));
+    expect(result.chest).toBeUndefined();
+  });
+
   it('prefers an Eye node over a Head node when both are present', () => {
     const scene = new THREE.Group();
     const head = new THREE.Object3D();
