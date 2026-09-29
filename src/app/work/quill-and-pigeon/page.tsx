@@ -10,12 +10,15 @@ import { FadeIn } from "@/components/animations/fade-in";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { featuredExperience } from "@/data/experience";
 import type { TechGroup } from "@/data/experience";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Quill & Pigeon Case Study | Lawrence Crasto",
+export const metadata: Metadata = pageMetadata({
+  path: "/work/quill-and-pigeon",
+  title: "Quill & Pigeon Case Study",
   description:
-    "Engineering case study: full-stack product development, subscription card-credit commerce, context-aware AI with an MCP server, search, transactional email, and platform integrations for the Quill & Pigeon multi-tenant commerce platform.",
-};
+    "Case study: Quill & Pigeon's multi-tenant commerce platform, with subscription card credits, context-aware AI over an MCP server, search, and email.",
+  type: "article",
+});
 
 const qp = featuredExperience!;
 

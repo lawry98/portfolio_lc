@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { site } from "@/data/site";
+import { openGraphBase, siteUrl } from "@/lib/seo";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -9,17 +11,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Lawrence Crasto | Full-Stack Software Engineer",
-  description:
-    "Full-stack software engineer building production web applications and AI-powered products across frontend interfaces, backend services, databases, payments, and cloud platforms.",
-  keywords: [
-    "full-stack software engineer",
-    "web applications",
-    "AI-powered products",
-    "Next.js",
-    "TypeScript",
-    "product engineering",
-  ],
+  metadataBase: new URL(siteUrl),
+  title: { default: site.title, template: `%s | ${site.name}` },
+  description: site.description,
+  openGraph: { ...openGraphBase, type: "website" },
+  // Title, description and image are filled in from openGraph.
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({
