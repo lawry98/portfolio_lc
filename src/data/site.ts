@@ -9,8 +9,6 @@ export const site = {
   alumniOf: "Northeastern University",
   profiles: {
     github: "https://github.com/lawry98",
-    // TODO(lawrence): paste the LinkedIn profile URL. Until then the Contact
-    // button stays hidden and structured data lists GitHub only.
-    linkedin: null as string | null,
+    linkedin: "https://www.linkedin.com/in/lawrence-james-crasto/",
   },
 };

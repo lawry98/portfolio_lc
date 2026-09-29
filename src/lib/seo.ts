@@ -21,9 +21,6 @@ export const siteHost = process.env.NEXT_PUBLIC_SITE_URL
 // The home page's schema.org graph: the site, and the person it's about.
 // `sameAs` is what ties the GitHub and LinkedIn profiles to this name.
 export function homeJsonLd() {
-  const sameAs = Object.values(site.profiles).filter(
-    (url): url is string => url !== null,
-  );
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -41,7 +38,7 @@ export function homeJsonLd() {
         url: siteUrl,
         jobTitle: site.jobTitle,
         alumniOf: { "@type": "CollegeOrUniversity", name: site.alumniOf },
-        sameAs,
+        sameAs: Object.values(site.profiles),
       },
     ],
   };
