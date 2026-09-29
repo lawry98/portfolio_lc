@@ -2,9 +2,10 @@
 
 import { useRef } from "react";
 import { useScroll } from "framer-motion";
-import { Mail, Github } from "lucide-react";
+import { Mail, Github, Linkedin } from "lucide-react";
 import { FadeIn } from "@/components/animations/fade-in";
 import { Signature } from "@/components/ui/signature";
+import { site } from "@/data/site";
 
 export function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -52,7 +53,7 @@ export function Contact() {
               lawry982@gmail.com
             </a>
             <a
-              href="https://github.com/lawry98"
+              href={site.profiles.github}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -61,6 +62,18 @@ export function Contact() {
               GitHub
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
+            {site.profiles.linkedin && (
+              <a
+                href={site.profiles.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <Linkedin size={18} aria-hidden="true" />
+                LinkedIn
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
           </div>
         </FadeIn>
 
