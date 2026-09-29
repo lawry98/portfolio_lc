@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { site } from "@/data/site";
 
 // The canonical origin: the custom domain once NEXT_PUBLIC_SITE_URL is set,
@@ -18,31 +17,6 @@ export const siteUrl = resolveSiteUrl();
 export const siteHost = process.env.NEXT_PUBLIC_SITE_URL
   ? new URL(siteUrl).host
   : null;
-
-export const openGraphBase = { siteName: site.name, locale: "en_US" };
-
-type PageSeo = {
-  path: `/${string}`;
-  title?: string;
-  description: string;
-  type?: "website" | "article";
-};
-
-// Next merges metadata shallowly, so a page that sets `openGraph` replaces the
-// layout's whole object; this rebuilds it with the page's own URL and type.
-export function pageMetadata({
-  path,
-  title,
-  description,
-  type = "website",
-}: PageSeo): Metadata {
-  return {
-    ...(title ? { title } : {}),
-    description,
-    alternates: { canonical: path },
-    openGraph: { ...openGraphBase, type, url: path },
-  };
-}
 
 // The home page's schema.org graph: the site, and the person it's about.
 // `sameAs` is what ties the GitHub and LinkedIn profiles to this name.

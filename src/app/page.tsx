@@ -6,13 +6,11 @@ import { Experience } from "@/components/sections/experience";
 import { Projects } from "@/components/sections/projects";
 import { Skills } from "@/components/sections/skills";
 import { Contact } from "@/components/sections/contact";
-import { site } from "@/data/site";
-import { homeJsonLd, pageMetadata } from "@/lib/seo";
+import { homeJsonLd } from "@/lib/seo";
 
-export const metadata: Metadata = pageMetadata({
-  path: "/",
-  description: site.description,
-});
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 export default function Home() {
   return (

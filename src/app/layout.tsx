@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { site } from "@/data/site";
-import { openGraphBase, siteUrl } from "@/lib/seo";
+import { siteUrl } from "@/lib/seo";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -14,8 +14,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: { default: site.title, template: `%s | ${site.name}` },
   description: site.description,
-  openGraph: { ...openGraphBase, type: "website" },
-  // Title, description and image are filled in from openGraph.
+  // Pages set only title, description and canonical, never `openGraph`: Next
+  // merges shallowly, so a page's own would replace this and drop the card
+  // image from any opengraph-image above it. Next fills og:title and
+  // og:description from the page, and the twitter tags from these.
+  openGraph: { siteName: site.name, locale: "en_US", type: "website" },
   twitter: { card: "summary_large_image" },
 };
 
