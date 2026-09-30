@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
@@ -17,12 +17,37 @@ const navLinks = [
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const pendingHash = useRef<string | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // The menu's exit animation measures its "auto" height, and Framer Motion
+  // restores window.scrollY afterwards, cancelling any smooth scroll already
+  // under way. So a menu link closes the menu first and scrolls once it's gone.
+  const handleMobileLinkClick = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+    if (event.button !== 0 || modified) return;
+    event.preventDefault();
+    pendingHash.current = hash;
+    setIsOpen(false);
+  };
+
+  const scrollToPendingHash = () => {
+    const hash = pendingHash.current;
+    if (!hash) return;
+    pendingHash.current = null;
+    // Push first: the browser saves the current scroll position into the entry
+    // being left, which is where Back returns to.
+    history.pushState(null, "", hash);
+    document.getElementById(hash.slice(1))?.scrollIntoView({
+      behavior: prefersReducedMotion ? "instant" : "smooth",
+    });
+  };
 
   return (
     <header
@@ -70,7 +95,7 @@ export function Navbar() {
       </nav>
 
       {/* Mobile Navigation */}
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={scrollToPendingHash}>
         {isOpen && (
           <motion.div
             id="mobile-nav"
@@ -84,7 +109,7 @@ export function Navbar() {
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    onClick={() => setIsOpen(false)}
+                    onClick={(event) => handleMobileLinkClick(event, link.href)}
                     className="block text-lg text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
