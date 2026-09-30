@@ -42,8 +42,9 @@ export function Navbar() {
     if (!hash) return;
     pendingHash.current = null;
     // Push first: the browser saves the current scroll position into the entry
-    // being left, which is where Back returns to.
-    history.pushState(null, "", hash);
+    // being left, which is where Back returns to. Like a native link, a link to
+    // the current hash adds no entry.
+    if (location.hash !== hash) history.pushState(null, "", hash);
     document.getElementById(hash.slice(1))?.scrollIntoView({
       behavior: prefersReducedMotion ? "instant" : "smooth",
     });
