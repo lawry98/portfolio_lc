@@ -31,8 +31,13 @@ export function Hero() {
           Hey, I&apos;m
         </motion.p>
 
-        {/* Name */}
-        <h1 className="text-5xl sm:text-7xl md:text-8xl font-bold tracking-tight mb-6">
+        {/* Name. Below sm the heading is at most 5em wide, so the name always
+            stacks: "Lawrence" is 4.61em, the whole name 7.9em. It is 48px,
+            shrinking under ~276px (phones at high page zoom) so "Lawrence"
+            fits inside the px-6 gutters (the 3rem); 4.75 is its 4.61em plus
+            ~3% slack. 96px waits for lg: at 768 the 96px name (~762px) is
+            wider than the ~720px it gets. */}
+        <h1 className="text-[length:min(3rem,(100vw_-_3rem)/4.75)] leading-none mx-auto max-w-[5em] sm:max-w-none sm:text-7xl lg:text-8xl font-bold tracking-tight mb-6">
           <LetterAnimation text="Lawrence Crasto" delay={0.2} />
         </h1>
 
