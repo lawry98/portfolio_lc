@@ -84,7 +84,10 @@ export function Navbar() {
           {/* Mobile Menu Button */}
           <button
             className="md:hidden p-2"
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => {
+              pendingHash.current = null;
+              setIsOpen(!isOpen);
+            }}
             aria-label="Toggle menu"
             aria-expanded={isOpen}
             aria-controls="mobile-nav"
