@@ -1,12 +1,38 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowDown } from "lucide-react";
 import { LetterAnimation } from "@/components/animations/letter-animation";
+import { cn } from "@/lib/utils";
 
 export function Hero() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const [grew, setGrew] = useState(false);
+
+  // When the hero has grown past the screen, its content already runs off
+  // the bottom, so the scroll arrow is hidden. Rotating the phone or zooming
+  // resizes the section, which re-runs the check.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const observer = new ResizeObserver(() => {
+      const minHeight = parseFloat(getComputedStyle(section).minHeight);
+      setGrew(section.getBoundingClientRect().height > minHeight + 0.5);
+    });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
+  // At least one screen tall, and taller when the content needs it (short
+  // phones, landscape, high page zoom). svh keeps the arrow above mobile
+  // browser toolbars. pt-16 clears the fixed navbar (h-16), and pb-20 clears
+  // the arrow (bottom-8 plus its 24px icon) with 24px to spare.
   return (
-    <section className="relative h-screen flex items-center justify-center overflow-hidden">
+    <section
+      ref={sectionRef}
+      className="relative min-h-svh pt-16 pb-20 flex items-center justify-center overflow-hidden"
+    >
       {/* Background gradient */}
       <div className="absolute inset-0 bg-linear-to-b from-background via-background to-muted/30" />
       
@@ -85,7 +111,7 @@ export function Hero() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.5 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
+        className={cn("absolute bottom-8 left-1/2 -translate-x-1/2", grew && "hidden")}
       >
         <motion.div
           animate={{ y: [0, 8, 0] }}
