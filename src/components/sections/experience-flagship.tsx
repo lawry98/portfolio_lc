@@ -21,16 +21,14 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
   return (
     <FadeIn delay={0.25}>
       <article className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 sm:p-10 mb-20">
-        {!prefersReducedMotion && (
-          <BorderBeam
-            size={220}
-            duration={12}
-            borderWidth={1.5}
-            colorFrom="var(--color-muted-foreground)"
-            colorTo="var(--color-foreground)"
-            className="opacity-50"
-          />
-        )}
+        <BorderBeam
+          size={220}
+          duration={12}
+          borderWidth={1.5}
+          colorFrom="var(--color-muted-foreground)"
+          colorTo="var(--color-foreground)"
+          className="opacity-50"
+        />
 
         <header className="relative flex flex-wrap items-center gap-3 mb-6">
           <Badge className="uppercase tracking-wide text-[11px]">
