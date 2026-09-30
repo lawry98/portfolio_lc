@@ -28,7 +28,8 @@ export function Navbar() {
 
   // The menu's exit animation measures its "auto" height, and Framer Motion
   // restores window.scrollY afterwards, cancelling any smooth scroll already
-  // under way. So a menu link closes the menu first and scrolls once it's gone.
+  // under way. So a menu link closes the menu first and scrolls once it has
+  // finished closing.
   const handleMobileLinkClick = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
     const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
     if (event.button !== 0 || modified) return;
@@ -86,6 +87,8 @@ export function Navbar() {
           <button
             className="md:hidden p-2"
             onClick={() => {
+              // Reopening mid-close cancels the exit; drop its jump so a later
+              // close doesn't scroll to it.
               pendingHash.current = null;
               setIsOpen(!isOpen);
             }}
