@@ -9,8 +9,11 @@ import { projects, featuredProjects } from "@/data/projects";
 export function Projects() {
   const gridProjects = projects.filter((p) => !p.featured);
 
+  // Featured projects slide in from beyond the side padding, so clip them at
+  // the screen edge rather than let them widen the page. Clip, not hidden:
+  // hidden would make the section a scroll container.
   return (
-    <section id="projects" className="py-24 px-6">
+    <section id="projects" className="py-24 px-6 overflow-x-clip">
       <div className="max-w-6xl mx-auto">
         <FadeIn>
           <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
