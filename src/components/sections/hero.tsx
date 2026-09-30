@@ -31,8 +31,9 @@ export function Hero() {
           Hey, I&apos;m
         </motion.p>
 
-        {/* Name */}
-        <h1 className="text-5xl sm:text-7xl md:text-8xl font-bold tracking-tight mb-6">
+        {/* Name. 96px waits for lg: at md the name is wider than the
+            720px it gets at 768, so it would stack onto two lines. */}
+        <h1 className="text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight mb-6">
           <LetterAnimation text="Lawrence Crasto" delay={0.2} />
         </h1>
 
