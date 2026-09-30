@@ -31,9 +31,11 @@ export function Hero() {
           Hey, I&apos;m
         </motion.p>
 
-        {/* Name. 96px waits for lg: at md the name is wider than the
+        {/* Name. 48px, shrinking below ~276px (phones at high page zoom) so
+            "Lawrence", about 4.6em wide, still fits between the 1.5rem
+            gutters. 96px waits for lg: at md the name is wider than the
             720px it gets at 768, so it would stack onto two lines. */}
-        <h1 className="text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight mb-6">
+        <h1 className="text-[length:min(3rem,(100vw_-_3rem)/4.75)] leading-none sm:text-7xl lg:text-8xl font-bold tracking-tight mb-6">
           <LetterAnimation text="Lawrence Crasto" delay={0.2} />
         </h1>
 
