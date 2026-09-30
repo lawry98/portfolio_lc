@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
@@ -17,12 +17,39 @@ const navLinks = [
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const pendingHash = useRef<string | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // The menu's exit animation measures its "auto" height, and Framer Motion
+  // restores window.scrollY afterwards, cancelling any smooth scroll already
+  // under way. So a menu link closes the menu first and scrolls once it has
+  // finished closing.
+  const handleMobileLinkClick = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+    if (event.button !== 0 || modified) return;
+    event.preventDefault();
+    pendingHash.current = hash;
+    setIsOpen(false);
+  };
+
+  const scrollToPendingHash = () => {
+    const hash = pendingHash.current;
+    if (!hash) return;
+    pendingHash.current = null;
+    // Push first: the browser saves the current scroll position into the entry
+    // being left, which is where Back returns to. Like a native link, a link to
+    // the current hash adds no entry.
+    if (location.hash !== hash) history.pushState(null, "", hash);
+    document.getElementById(hash.slice(1))?.scrollIntoView({
+      behavior: prefersReducedMotion ? "instant" : "smooth",
+    });
+  };
 
   return (
     <header
@@ -59,7 +86,12 @@ export function Navbar() {
           {/* Mobile Menu Button */}
           <button
             className="md:hidden p-2"
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => {
+              // Reopening mid-close cancels the exit; drop its jump so a later
+              // close doesn't scroll to it.
+              pendingHash.current = null;
+              setIsOpen(!isOpen);
+            }}
             aria-label="Toggle menu"
             aria-expanded={isOpen}
             aria-controls="mobile-nav"
@@ -70,7 +102,7 @@ export function Navbar() {
       </nav>
 
       {/* Mobile Navigation */}
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={scrollToPendingHash}>
         {isOpen && (
           <motion.div
             id="mobile-nav"
@@ -84,7 +116,7 @@ export function Navbar() {
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    onClick={() => setIsOpen(false)}
+                    onClick={(event) => handleMobileLinkClick(event, link.href)}
                     className="block text-lg text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
