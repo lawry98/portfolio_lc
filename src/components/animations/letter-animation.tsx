@@ -37,10 +37,11 @@ export function LetterAnimation({ text, className, delay = 0 }: LetterAnimationP
   };
 
   // Screen readers get the name once, as real text, from the visually hidden
-  // copy. The animated letters are hidden from them.
+  // copy. The animated letters are hidden from them. The copy can't be
+  // selected, so copying the heading doesn't paste the name twice.
   return (
     <>
-      <span className="sr-only">{text}</span>
+      <span className="sr-only select-none">{text}</span>
       <motion.span
         variants={container}
         initial="hidden"
