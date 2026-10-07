@@ -27,8 +27,9 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Escape closes the open menu and returns focus to its toggle. With no
-  // pending hash, the close scrolls nowhere.
+  // Escape closes the open menu and returns focus to its toggle. pendingHash
+  // is always null while the menu is open (the toggle clears it), so this
+  // close doesn't scroll.
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
