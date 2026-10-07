@@ -15,24 +15,22 @@ export const projects: Project[] = [
     id: "f1-application",
     title: "F1 Race Weekend Briefing Agent",
     description:
-      "An AI-powered web application that uses LangGraph and the Claude API to transform telemetry, weather, news, and session results into concise race-weekend briefings, paired with an interactive Three.js experience.",
-    tags: ["LangGraph", "Claude API", "Three.js", "React Three Fiber"],
+      "A LangGraph agent that uses Gemini to turn race results, standings, weather, and news into streamed race-weekend briefings, with a Three.js viewer that paints a 3D car in each team's color.",
+    tags: ["LangGraph", "Gemini API", "FastAPI", "Three.js"],
     github: "https://github.com/lawry98/f1-application",
     featured: true,
   },
   {
     id: "ai-code-review",
     title: "AI-Powered Code Review Tool",
-    description:
-      "A full-stack developer tool that analyzes code across 10+ programming languages and produces AI-generated feedback on security, performance, and engineering standards, with authentication and review-history tracking.",
-    tags: ["Next.js", "TypeScript", "OpenAI API", "PostgreSQL"],
+    description: "Claude reviews code in 12 languages with line-level fixes.",
+    tags: ["Next.js", "TypeScript", "Claude API", "Tailwind CSS"],
   },
   {
     id: "realtime-kanban",
     title: "Real-Time Collaborative Kanban Board",
-    description:
-      "A real-time collaborative project-management application featuring WebSocket synchronization, drag-and-drop workflows, role-based permissions, and optimistic UI updates.",
-    tags: ["React", "WebSockets", "Node.js", "PostgreSQL"],
+    description: "Drag-and-drop boards that sync live, with role-based access.",
+    tags: ["Next.js", "Supabase", "Prisma", "PostgreSQL"],
   },
 ];
 
