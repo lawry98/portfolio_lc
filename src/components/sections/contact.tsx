@@ -46,11 +46,11 @@ export function Contact() {
         <FadeIn delay={0.3}>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="mailto:lawry982@gmail.com"
+              href={`mailto:${site.email}`}
               className="inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Mail size={18} aria-hidden="true" />
-              lawry982@gmail.com
+              {site.email}
             </a>
             <a
               href={site.profiles.github}
