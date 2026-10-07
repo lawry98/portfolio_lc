@@ -13,7 +13,7 @@ Researched 2026-09-28. All URLs accessed 2026-09-28. This summarizes what the li
   2. **Abo Daniel Professional license: $500.** It explicitly includes logo use and one website.
   3. **Ask the studio in writing** (contact@abodaniel.com) for a custom license or permission.
   4. **Switch to an OFL script font** such as Ms Madi, Mrs Saint Delafield or Herr Von Muellerhoff. This costs nothing and has no license ambiguity.
-- **Status (2026-09-28):** `src/data/signature.ts` (added in commit `436291e`) has been pushed to the public repo on branch `lc/signature-portfolio-placement-87864d` for PR review. No license has been bought yet, so one of the routes above is needed before merging or deploying.
+- **Status (2026-10-07): resolved by route 4.** The signature is now set in Mrs Saint Delafield (SIL OFL 1.1). See [Resolution](#resolution-2026-10-07). The La Storia outlines first committed in `436291e` are gone from the working tree but remain in git history.
 
 ## Findings
 
@@ -144,3 +144,35 @@ Every Google Fonts file below was read at google/fonts commit [`5e8a3ba`](https:
 - "Object" form is any form produced by "mechanical transformation or translation of a Source form", including "conversions to other media types". A Derivative Work needs changes that "represent, as a whole, an original work of authorship". Inference: writing the font's own glyph outlines out as SVG path data reads most naturally as a mechanical conversion of part of the Work to another media type, so Object form of the Work, not a Derivative Work. The other reading, that a rendered word is output of using the font and not a copy of the Work, is also defensible. **The text does not settle which applies.**
 - If Section 4 applies, it requires (a) giving recipients "a copy of this License", (b) "prominent notices" on modified files, (c) keeping the Work's copyright and attribution notices in the Source form of any Derivative Works, and (d) carrying over a NOTICE file's attributions. **Neither `apache/yellowtail` nor `apache/satisfy` has a NOTICE file at the pinned commit**, so (d) asks for nothing.
 - Inference: keeping the font's copyright line and the Apache 2.0 license (a copy, or at least its URL) next to the path data would cover (a) to (c) under the stricter reading, and costs nothing under the looser one. The text also does not say whether site visitors who receive the SVG count as "recipients" who must get a copy of the license.
+
+## Resolution (2026-10-07)
+
+- **We switched to route 4.** The signature is now "Lawrence" set in **Mrs Saint Delafield** by Sudtipos (Alejandro Paul). Lawrence chose it from an example page of seven traced options, shortlisted from 17 reviewed candidates. All 24 fonts in the table above had their licenses checked.
+- **License: SIL Open Font License 1.1.** Source: [`ofl/mrssaintdelafield`](https://github.com/google/fonts/tree/5e8a3ba899557829a76cfdac30fa512bda91d7ca/ofl/mrssaintdelafield) at google/fonts commit `5e8a3ba899557829a76cfdac30fa512bda91d7ca` (`main` at 2026-10-07T13:48:24Z). The file is `MrsSaintDelafield-Regular.ttf`, **version 1.001** (name ID 5). Its [`OFL.txt`](https://github.com/google/fonts/blob/5e8a3ba899557829a76cfdac30fa512bda91d7ca/ofl/mrssaintdelafield/OFL.txt) is the unaltered OFL 1.1 text, "Copyright (c) 2011 Alejandro Paul", with the Reserved Font Name "Mrs Saint Delafield". The upstream repo is [googlefonts/mrssaintdelafield](https://github.com/googlefonts/mrssaintdelafield).
+- **Why the OFL permits this use.** The OFL governs the Font Software, meaning the font files. `src/data/signature.ts` contains no font file. It holds one word's glyph outlines, rendered into a single SVG path, plus centrelines traced from a raster of that path. That makes it a document made with the font, not a redistribution of the font software. Condition 5 says the license "does not apply to any document created using the Font Software", and OFL FAQ 1.1 allows graphics "based on their outlines" with "No additional license or permission". Attribution is not required (FAQ 1.1.2). The data file's header credits the font anyway. The Reserved Font Name doesn't come into it, because no font, modified or not, is distributed. Section A above has the citations.
+- **The La Storia outlines are gone from the working tree, but git history still has them.** They were added in `436291e` and remain in every commit up to the replacement. History was not rewritten.
+
+### How `src/data/signature.ts` was generated
+
+The generator was a throwaway script outside the repo, and it added no dependencies here.
+
+1. **Shaping.** harfbuzzjs 1.6.3 shaped "Lawrence" with HarfBuzz's default features. This font has no GSUB features and one GPOS feature, `kern`, which HarfBuzz applied. Its letters join through overlaps drawn into the glyphs. Each glyph's outline came from `glyphToJson` at its shaped position. Outlines were flipped to y-down and scaled so the ink is 1180 units wide, with 14 units of padding (viewBox 1208 × 353.5). They were kept as TrueType quadratics, filled nonzero, and rounded to 0.1.
+2. **Raster.** resvg-js 2.6.2 drew the outline at 4 px per unit (4832 × 1414 px). Pixels with alpha ≥ 0.5 count as ink. Specks and holes of 40 px or less were removed.
+3. **Skeleton.** scikit-image 0.26 `skeletonize` (Zhang-Suen thinning), plus SciPy's Euclidean distance transform for stroke radii.
+4. **Graph and pruning.** Endpoints and clusters of junction pixels became nodes, and the pixel chains between them became edges. Two junctions joined by a link shorter than 1.2 × the sum of their radii were merged, because the skeleton splits one crossing in two. A spur shorter than 4 node radii was pruned only if the rest of the skeleton still covered its ink within maskWidth/2 − 1.5 px. That pruned 1 spur here.
+5. **Pen order.**
+   - Connected pieces of ink are drawn left to right, with small marks after the main stroke.
+   - Each piece starts at its leftmost endpoint, skipping short upward stem tips. A piece with no usable endpoint starts at its top junction, heading counter-clockwise; this is how the a's bowl gets drawn before its stem.
+   - At a junction the pen prefers edges that don't strand unvisited ink (Fleury's rule), then the smallest turn.
+   - A dead end of 3.5 node radii or less is retraced inline. A longer one ends the stroke, and the next stroke starts at the most recent junction with unused edges. If that junction is within 2.5 radii, the pen joins it without lifting.
+   - The result is 9 strokes.
+6. **Fitting.**
+   - Each stroke was resampled every 0.5 px, smoothed with a Gaussian (σ = 1 unit) and split wherever the pen reverses or turns more than 70°.
+   - The pieces were fitted with cubic Béziers (Schneider's algorithm, 0.6-unit tolerance) and rounded to 0.1.
+   - Lengths were measured on the rounded curves.
+7. **maskWidth: 23.9.** That is twice the largest stroke radius on the skeleton away from junctions (10.96 units), plus a 2-unit margin. One spot of ink still out of reach at that width got a short out-and-back detour from the nearest point on the path, so it is revealed as the pen passes.
+8. **Checks.**
+   - At full progress, the mask covers every ink pixel at 4 px per unit.
+   - 2.66% of the ink shows more than one maskWidth of pen travel before the pen reaches it, mostly where strokes touch. La Storia's shipped strokes score 1.55% on the same measure and leave 49 px uncovered.
+   - As a sanity check, the same pipeline run on the La Storia outline gave maskWidth 22.6 (shipped: 22.2) and left nothing uncovered.
+   - The data file is 10.5 KB; La Storia's was 17.2 KB.
