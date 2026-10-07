@@ -29,6 +29,6 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 Live at [lawrence-crasto.vercel.app](https://lawrence-crasto.vercel.app).
 
-The site deploys on [Vercel](https://vercel.com) through its GitHub integration. Every push to `main` goes to production. Every pull request gets its own preview URL, and `robots.txt` keeps those previews out of search engines.
+The site deploys on [Vercel](https://vercel.com) through its GitHub integration. Every push to `main` goes to production. Every pull request gets its own preview URL. Vercel Authentication keeps previews private, and `robots.txt` disallows crawling there as a backup.
 
 No environment variables are needed. Until `NEXT_PUBLIC_SITE_URL` is set, canonical URLs fall back to the Vercel production URL (see `src/lib/seo.ts`). Once a custom domain is bought, set `NEXT_PUBLIC_SITE_URL=https://<domain>` for Production in Vercel and redeploy.
