@@ -48,8 +48,8 @@ interface SignatureProps {
 }
 
 /**
- * "Lawrence" in Lastoria, revealed along pen-order centrelines so it reads as
- * one hand-drawn stroke. Decorative: hidden from assistive tech.
+ * "Lawrence" in Mrs Saint Delafield, revealed along pen-order centrelines so it
+ * reads as one hand-drawn stroke. Decorative: hidden from assistive tech.
  */
 export function Signature({ progress, className }: SignatureProps) {
   const maskId = `signature-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
