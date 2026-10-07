@@ -44,9 +44,10 @@ export function Contact() {
         </FadeIn>
 
         <FadeIn delay={0.3}>
-          {/* Wraps rather than stacking: phones get three rows (GitHub and
-              LinkedIn share one), which leaves the signature its room on
-              short screens, and the four buttons never overflow at sm. */}
+          {/* Wraps so the four buttons never overflow. On phones from 334px
+              wide, GitHub and LinkedIn share a row, so the buttons take three
+              rows, not four, and leave more of the pinned screen to the
+              signature. */}
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href="mailto:lawry982@gmail.com"

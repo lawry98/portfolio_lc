@@ -11,6 +11,7 @@ export const site = {
     github: "https://github.com/lawry98",
     linkedin: "https://www.linkedin.com/in/lawrence-james-crasto/",
   },
-  // Served from public/. The hero and Contact link to it.
+  // Served from public/. The hero and Contact link to it, and next.config.ts
+  // reads it to send noindex, so keep this file free of client-only imports.
   resume: "/Lawrence-Crasto-Resume.pdf",
 };
