@@ -11,4 +11,6 @@ export const site = {
     github: "https://github.com/lawry98",
     linkedin: "https://www.linkedin.com/in/lawrence-james-crasto/",
   },
+  // Served from public/. The hero and Contact link to it.
+  resume: "/Lawrence-Crasto-Resume.pdf",
 };
