@@ -23,7 +23,7 @@ export default function Home() {
         }}
       />
       <Navbar />
-      <main>
+      <main id="main" tabIndex={-1} className="outline-none">
         <Hero />
         <About />
         <Experience />

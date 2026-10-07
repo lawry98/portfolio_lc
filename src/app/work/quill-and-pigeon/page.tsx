@@ -116,7 +116,13 @@ export default function QuillAndPigeonCaseStudy() {
         </nav>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-16 sm:py-20">
+      {/* scroll-mt-16 keeps the skip link from scrolling main under the
+          sticky header. */}
+      <main
+        id="main"
+        tabIndex={-1}
+        className="max-w-3xl mx-auto px-6 py-16 sm:py-20 scroll-mt-16 outline-none"
+      >
         {/* Title */}
         <FadeIn>
           <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
