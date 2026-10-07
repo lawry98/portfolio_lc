@@ -20,16 +20,20 @@ export function Skills() {
           </h2>
         </FadeIn>
 
-        <div className="grid sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {skillGroups.map((group, index) => (
             <FadeIn key={group.label} delay={0.15 + index * 0.05}>
-              <div className="p-6 rounded-2xl bg-background border border-border/50 h-full">
+              <div className="p-6 narrow:p-4 rounded-2xl bg-background border border-border/50 h-full">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">
                   {group.label}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {group.skills.map((skill) => (
-                    <Badge key={skill} variant="secondary">
+                    <Badge
+                      key={skill}
+                      variant="secondary"
+                      className="narrow:whitespace-normal narrow:text-center"
+                    >
                       {skill}
                     </Badge>
                   ))}
