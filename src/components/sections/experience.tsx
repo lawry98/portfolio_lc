@@ -16,8 +16,10 @@ export function Experience() {
         </FadeIn>
 
         <FadeIn delay={0.1}>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            Building products from interface to infrastructure
+          {/* "infrastructure" is wider than narrow screens, so only there
+              may it break at its soft hyphen */}
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4 hyphens-none narrow:hyphens-manual narrow:wrap-break-word">
+            Building products from interface to infra&shy;structure
           </h2>
         </FadeIn>
 
