@@ -121,7 +121,6 @@ export default function QuillAndPigeonCaseStudy() {
           sticky header. */}
       <main
         id="main"
-        tabIndex={-1}
         className="max-w-3xl mx-auto px-6 py-16 sm:py-20 scroll-mt-16 outline-none"
       >
         {/* Title */}

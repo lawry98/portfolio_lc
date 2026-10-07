@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { SkipLink } from "@/components/ui/skip-link";
 import { site } from "@/data/site";
 import { siteUrl } from "@/lib/seo";
 
@@ -37,14 +38,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased`}>
-        {/* First Tab stop on every page. It shows only while focused, above
-            both pages' z-50 headers. */}
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-60 focus:rounded-full focus:bg-foreground focus:px-6 focus:py-3 focus:font-medium focus:text-background focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-        >
-          Skip to content
-        </a>
+        <SkipLink />
         <Providers>{children}</Providers>
       </body>
     </html>
