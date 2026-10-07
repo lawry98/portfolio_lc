@@ -22,7 +22,7 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
       <motion.article
         whileHover={{ y: -8 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="group relative h-full rounded-2xl border border-border/50 bg-card overflow-hidden"
+        className="group relative h-full rounded-2xl border border-border/50 bg-card overflow-hidden narrow:hyphens-auto narrow:wrap-break-word"
       >
         {/* Image Container */}
         <div className="relative h-48 overflow-hidden bg-muted">
@@ -38,8 +38,8 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          <h3 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors">
+        <div className="p-6 narrow:p-3">
+          <h3 className="text-xl narrow:text-base font-semibold mb-2 group-hover:text-primary transition-colors">
             {project.title}
           </h3>
           

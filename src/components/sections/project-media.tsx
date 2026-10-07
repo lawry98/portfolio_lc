@@ -30,11 +30,11 @@ export function ProjectMedia({ project, sizes, priority }: ProjectMediaProps) {
     <div
       aria-hidden="true"
       className={cn(
-        "flex h-full w-full flex-col justify-end gap-3 p-6",
+        "flex h-full w-full flex-col justify-end gap-3 p-6 narrow:p-3",
         "bg-[radial-gradient(120%_120%_at_10%_0%,var(--color-muted)_0%,var(--color-background)_70%)]",
       )}
     >
-      <span className="text-lg font-semibold leading-snug text-balance text-foreground/80">
+      <span className="text-lg narrow:text-base font-semibold leading-snug text-balance text-foreground/80">
         {project.title}
       </span>
       <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

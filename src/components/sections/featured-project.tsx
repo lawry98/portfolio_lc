@@ -20,7 +20,7 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
   const contentFadeDirection = reverse ? "left" : "right";
 
   return (
-    <article className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+    <article className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
       {/* Image */}
       <FadeIn direction={mediaFadeDirection} className={mediaOrderClass}>
         <motion.div

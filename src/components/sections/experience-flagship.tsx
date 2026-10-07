@@ -20,7 +20,9 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
 
   return (
     <FadeIn delay={0.25}>
-      <article className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 sm:p-10 mb-20">
+      {/* On narrow screens the cards nested in here are only ~80px wide, so
+          long words hyphenate there instead of running out of their cards */}
+      <article className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 narrow:p-3 sm:p-10 mb-20 narrow:hyphens-auto narrow:wrap-break-word">
         <BorderBeam
           size={220}
           duration={12}
@@ -31,7 +33,7 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
         />
 
         <header className="relative flex flex-wrap items-center gap-3 mb-6">
-          <Badge className="uppercase tracking-wide text-[11px]">
+          <Badge className="uppercase tracking-wide text-[11px] narrow:whitespace-normal narrow:text-center">
             Featured Experience
           </Badge>
           <span className="text-sm text-muted-foreground">
@@ -39,7 +41,7 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
           </span>
         </header>
 
-        <div className="relative grid lg:grid-cols-[1fr_1.1fr] gap-8 lg:gap-12 items-start">
+        <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-8 lg:gap-12 items-start">
           <div>
             <h3 className="text-2xl sm:text-3xl font-bold">
               {experience.company}
@@ -86,13 +88,13 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
         )}
 
         {experience.ownershipAreas && experience.ownershipAreas.length > 0 && (
-          <div className="relative grid sm:grid-cols-2 gap-4 mt-10">
+          <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4 mt-10">
             {experience.ownershipAreas.map((area) => (
               <div
                 key={area.title}
-                className="rounded-2xl border border-border/50 bg-background p-5"
+                className="rounded-2xl border border-border/50 bg-background p-5 narrow:p-2.5"
               >
-                <h4 className="font-semibold mb-2">{area.title}</h4>
+                <h4 className="font-semibold narrow:text-sm mb-2">{area.title}</h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {area.description}
                 </p>
@@ -113,13 +115,13 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
             {experience.caseStudyHref && (
               <Link
                 href={experience.caseStudyHref}
-                className="group inline-flex items-center justify-center gap-2 px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="group inline-flex items-center justify-center gap-2 px-6 narrow:px-3 py-3 narrow:text-center bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 Read case study
                 <ArrowRight
                   size={16}
                   aria-hidden="true"
-                  className="transition-transform group-hover:translate-x-0.5"
+                  className="transition-transform group-hover:translate-x-0.5 narrow:hidden"
                 />
               </Link>
             )}
@@ -128,10 +130,10 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
                 href={experience.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="inline-flex items-center justify-center gap-2 px-6 narrow:px-3 py-3 narrow:text-center border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 Visit live website
-                <ExternalLink size={16} aria-hidden="true" />
+                <ExternalLink size={16} aria-hidden="true" className="narrow:hidden" />
                 <span className="sr-only"> (opens in a new tab)</span>
               </a>
             )}
