@@ -25,12 +25,14 @@ export const projects: Project[] = [
     title: "AI-Powered Code Review Tool",
     description: "Claude reviews code in 12 languages with line-level fixes.",
     tags: ["Next.js", "TypeScript", "Claude API", "Tailwind CSS"],
+    github: "https://github.com/lawry98/codereview-ai",
   },
   {
     id: "realtime-kanban",
     title: "Real-Time Collaborative Kanban Board",
     description: "Drag-and-drop boards that sync live, with role-based access.",
     tags: ["Next.js", "Supabase", "Prisma", "PostgreSQL"],
+    github: "https://github.com/lawry98/kanban-board",
   },
 ];
 
