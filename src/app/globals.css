@@ -4,6 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 /* Viewports tall enough to pin the Contact finale on screen. */
 @custom-variant tall (@media (min-height: 640px));
+/* Narrower than any phone, which is what phones lay out at under high page
+   zoom (a 390px iPhone at 200% is 195px wide). */
+@custom-variant narrow (@media (width < 20rem));
 
 @theme inline {
   --color-background: var(--background);
