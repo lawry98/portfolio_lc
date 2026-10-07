@@ -73,9 +73,13 @@ function Section({
         <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
           {eyebrow}
         </p>
-        <h2 className="text-2xl sm:text-3xl font-bold mb-6">{title}</h2>
+        {/* Chrome won't hyphenate capitalised words like "Technology", so
+            narrow screens get a smaller size; longer words carry soft hyphens */}
+        <h2 className="text-2xl narrow:text-xl sm:text-3xl font-bold mb-6 hyphens-none narrow:hyphens-manual narrow:wrap-break-word">
+          {title}
+        </h2>
       </FadeIn>
-      <div className="space-y-5 text-base text-muted-foreground leading-relaxed">
+      <div className="space-y-5 text-base text-muted-foreground leading-relaxed narrow:hyphens-auto narrow:wrap-break-word">
         {children}
       </div>
     </section>
@@ -90,7 +94,7 @@ function Bullets({ items }: { items: string[] }) {
           <span className="text-foreground/40 mt-1" aria-hidden="true">
             •
           </span>
-          <span>{item}</span>
+          <span className="narrow:min-w-0">{item}</span>
         </li>
       ))}
     </ul>
@@ -167,11 +171,11 @@ export default function QuillAndPigeonCaseStudy() {
           >
             <p>{qp.contributionSummary}</p>
             {qp.ownershipAreas && (
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {qp.ownershipAreas.map((area) => (
                   <div
                     key={area.title}
-                    className="rounded-2xl border border-border/50 bg-card p-5"
+                    className="rounded-2xl border border-border/50 bg-card p-5 narrow:p-3"
                   >
                     <h3 className="font-semibold text-foreground mb-2">
                       {area.title}
@@ -212,7 +216,7 @@ export default function QuillAndPigeonCaseStudy() {
           <Section
             id="commerce"
             eyebrow="05"
-            title="Commerce and subscription-credit architecture"
+            title="Commerce and sub&shy;scription-credit architecture"
           >
             <p>
               Medusa did not natively support Quill &amp; Pigeon&apos;s
@@ -284,7 +288,8 @@ export default function QuillAndPigeonCaseStudy() {
             <Bullets
               items={[
                 "The AI could provide account-aware answers.",
-                "Recommendations could consider the customer's subscription.",
+                // Capitalised, so only a soft hyphen lets it break on narrow screens
+                "Recom\u00ADmendations could consider the customer's subscription.",
                 "The agent could determine whether the customer had credits available.",
                 "Context did not need to be manually copied into each prompt.",
                 "Context was exposed through controlled MCP tools.",
@@ -338,7 +343,7 @@ export default function QuillAndPigeonCaseStudy() {
           <Section
             id="email"
             eyebrow="08"
-            title="Email conversation chaining and human escalation"
+            title="Email conver&shy;sation chaining and human escalation"
           >
             <p>
               Implemented email conversation chaining so AI workflows received the
@@ -393,8 +398,8 @@ export default function QuillAndPigeonCaseStudy() {
               Prisma and Kysely served different architectural needs and were not
               used interchangeably in the same runtime.
             </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-border/50 bg-card p-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-border/50 bg-card p-5 narrow:p-3">
                 <h3 className="font-semibold text-foreground mb-2">
                   Next.js platform application
                 </h3>
@@ -411,7 +416,7 @@ export default function QuillAndPigeonCaseStudy() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl border border-border/50 bg-card p-5">
+              <div className="rounded-2xl border border-border/50 bg-card p-5 narrow:p-3">
                 <h3 className="font-semibold text-foreground mb-2">
                   AWS Lambda applications
                 </h3>
@@ -504,7 +509,7 @@ export default function QuillAndPigeonCaseStudy() {
                 href={qp.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 narrow:text-center bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 Visit live website
                 <ExternalLink size={16} aria-hidden="true" />
