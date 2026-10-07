@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { useScroll } from "framer-motion";
-import { Mail, Github, Linkedin } from "lucide-react";
+import { Mail, Github, Linkedin, FileText } from "lucide-react";
 import { FadeIn } from "@/components/animations/fade-in";
 import { Signature } from "@/components/ui/signature";
 import { site } from "@/data/site";
@@ -44,7 +44,10 @@ export function Contact() {
         </FadeIn>
 
         <FadeIn delay={0.3}>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {/* Wraps rather than stacking: phones get three rows (GitHub and
+              LinkedIn share one), which leaves the signature its room on
+              short screens, and the four buttons never overflow at sm. */}
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href="mailto:lawry982@gmail.com"
               className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -70,6 +73,16 @@ export function Contact() {
             >
               <Linkedin size={18} aria-hidden="true" />
               LinkedIn
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+            <a
+              href={site.resume}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <FileText size={18} aria-hidden="true" />
+              Résumé (PDF)
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </div>
