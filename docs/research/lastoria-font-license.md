@@ -1,6 +1,6 @@
 # La Storia ("Lastoria") Bold: can it be used for the portfolio signature?
 
-Researched 2026-09-28. All URLs accessed 2026-09-28. This summarizes what the license texts say and lists practical options. It is not legal advice.
+Researched 2026-09-28. All URLs accessed 2026-09-28. The candidates and resolution sections were added 2026-10-07. This summarizes what the license texts say and lists practical options. It is not legal advice.
 
 ## TL;DR
 
@@ -76,7 +76,7 @@ Creative Fabrica's own help pages say static images are allowed on websites and 
 - Abo Daniel's redistribution, duplication and conversion bans apply to "the product", meaning the font. A single word's outline is not the font file. Its "rasterized form" rule, though, suggests the studio does not expect vector glyph data to leave the buyer's machine.
 - The MyFonts EULA allows distributing "materials" that don't contain embedded font software, so a static graphic in a repo looks like distributed material.
 - Inference: the repo adds little exposure beyond the live site, because the site already sends the same SVG path to every visitor. Whatever license covers showing the SVG on the site would cover it in the repo too.
-- **Status:** the data is now on a public branch for review (see TL;DR).
+- **Status:** resolved; the La Storia data has been replaced. See [Resolution](#resolution-2026-10-07).
 
 ## Options
 
@@ -147,9 +147,9 @@ Every Google Fonts file below was read at google/fonts commit [`5e8a3ba`](https:
 
 ## Resolution (2026-10-07)
 
-- **We switched to route 4.** The signature is now "Lawrence" set in **Mrs Saint Delafield** by Sudtipos (Alejandro Paul). Lawrence chose it from an example page of seven traced options, shortlisted from 17 reviewed candidates. All 24 fonts in the table above had their licenses checked.
+- **We switched to route 4.** The signature is now "Lawrence" set in **Mrs Saint Delafield** by Sudtipos (Alejandro Paul). All 24 fonts in the table above had their licenses checked and were traced. Seven were dropped on a first look: Comforter, Water and Kolker Brush, whose rough edges bloat the data to 19–56 KB, and Arizonia, Marck Script, Meddon and Qwigley, for letters that don't join or heavy early ink. Of the 17 left, seven made the shortlist, and Lawrence chose from an example page of those seven.
 - **License: SIL Open Font License 1.1.** Source: [`ofl/mrssaintdelafield`](https://github.com/google/fonts/tree/5e8a3ba899557829a76cfdac30fa512bda91d7ca/ofl/mrssaintdelafield) at google/fonts commit `5e8a3ba899557829a76cfdac30fa512bda91d7ca` (`main` at 2026-10-07T13:48:24Z). The file is `MrsSaintDelafield-Regular.ttf`, **version 1.001** (name ID 5). Its [`OFL.txt`](https://github.com/google/fonts/blob/5e8a3ba899557829a76cfdac30fa512bda91d7ca/ofl/mrssaintdelafield/OFL.txt) is the unaltered OFL 1.1 text, "Copyright (c) 2011 Alejandro Paul", with the Reserved Font Name "Mrs Saint Delafield". The upstream repo is [googlefonts/mrssaintdelafield](https://github.com/googlefonts/mrssaintdelafield).
-- **Why the OFL permits this use.** The OFL governs the Font Software, meaning the font files. `src/data/signature.ts` contains no font file. It holds one word's glyph outlines, rendered into a single SVG path, plus centrelines traced from a raster of that path. That makes it a document made with the font, not a redistribution of the font software. Condition 5 says the license "does not apply to any document created using the Font Software", and OFL FAQ 1.1 allows graphics "based on their outlines" with "No additional license or permission". Attribution is not required (FAQ 1.1.2). The data file's header credits the font anyway. The Reserved Font Name doesn't come into it, because no font, modified or not, is distributed. Section A above has the citations.
+- **Why the OFL permits this use.** The OFL governs the Font Software, meaning the font files. `src/data/signature.ts` contains no font file. It holds one word's glyph outlines, rendered into a single SVG path, plus centrelines traced from a raster of that path. Inference ([Section A](#a-sil-ofl-11-one-words-outlines-as-svg-path-data)): that makes it a document made with the font, not a redistribution of the font software. Condition 5 says the license "does not apply to any document created using the Font Software". OFL FAQ 1.1 allows "logos or other graphics" and objects "based on their outlines", with "No additional license or permission". No FAQ entry names SVG or path data. A strict reader could stretch "changing formats" in the Modified Version definition to exported outlines, but the FAQ's own outline-export examples count as design work. Attribution is not required (FAQ 1.1.2). The data file's header credits the font anyway. The Reserved Font Name doesn't come into it, because no font, modified or not, is distributed. Section A has the citations.
 - **The La Storia outlines are gone from the working tree, but git history still has them.** They were added in `436291e` and remain in every commit up to the replacement. History was not rewritten.
 
 ### How `src/data/signature.ts` was generated
@@ -159,7 +159,7 @@ The generator was a throwaway script outside the repo, and it added no dependenc
 1. **Shaping.** harfbuzzjs 1.6.3 shaped "Lawrence" with HarfBuzz's default features. This font has no GSUB features and one GPOS feature, `kern`, which HarfBuzz applied. Its letters join through overlaps drawn into the glyphs. Each glyph's outline came from `glyphToJson` at its shaped position. Outlines were flipped to y-down and scaled so the ink is 1180 units wide, with 14 units of padding (viewBox 1208 × 353.5). They were kept as TrueType quadratics, filled nonzero, and rounded to 0.1.
 2. **Raster.** resvg-js 2.6.2 drew the outline at 4 px per unit (4832 × 1414 px). Pixels with alpha ≥ 0.5 count as ink. Specks and holes of 40 px or less were removed.
 3. **Skeleton.** scikit-image 0.26 `skeletonize` (Zhang-Suen thinning), plus SciPy's Euclidean distance transform for stroke radii.
-4. **Graph and pruning.** Endpoints and clusters of junction pixels became nodes, and the pixel chains between them became edges. Two junctions joined by a link shorter than 1.2 × the sum of their radii were merged, because the skeleton splits one crossing in two. A spur shorter than 4 node radii was pruned only if the rest of the skeleton still covered its ink within maskWidth/2 − 1.5 px. That pruned 1 spur here.
+4. **Graph and pruning.** Endpoints and clusters of junction pixels became nodes, and the pixel chains between them became edges. Two junctions joined by a link shorter than 1.2 × the sum of their radii were merged, because the skeleton splits one crossing in two. A spur shorter than 4 node radii was pruned only if the rest of the skeleton still covered its ink within maskWidth/2 minus 1.5 raster px (0.375 units). That pruned 1 spur here.
 5. **Pen order.**
    - Connected pieces of ink are drawn left to right, with small marks after the main stroke.
    - Each piece starts at its leftmost endpoint, skipping short upward stem tips. A piece with no usable endpoint starts at its top junction, heading counter-clockwise; this is how the a's bowl gets drawn before its stem.
@@ -173,6 +173,6 @@ The generator was a throwaway script outside the repo, and it added no dependenc
 7. **maskWidth: 23.9.** That is twice the largest stroke radius on the skeleton away from junctions (10.96 units), plus a 2-unit margin. One spot of ink still out of reach at that width got a short out-and-back detour from the nearest point on the path, so it is revealed as the pen passes.
 8. **Checks.**
    - At full progress, the mask covers every ink pixel at 4 px per unit.
-   - 2.66% of the ink shows more than one maskWidth of pen travel before the pen reaches it, mostly where strokes touch. La Storia's shipped strokes score 1.55% on the same measure and leave 49 px uncovered.
+   - Early ink is measured at 2 px per unit. For each ink pixel, it compares two pen positions, both measured as arc length along all strokes in order. The first is where the mask first covers the pixel. The second is where the path first passes close enough to own it: within that point's local stroke radius plus 0.75 units. A pixel counts as early when the first comes more than one maskWidth before the second. 2.66% of this signature's ink is early, mostly where strokes touch. La Storia's shipped strokes score 1.55% on the same measure and leave 49 px uncovered at 4 px per unit.
    - As a sanity check, the same pipeline run on the La Storia outline gave maskWidth 22.6 (shipped: 22.2) and left nothing uncovered.
    - The data file is 10.5 KB; La Storia's was 17.2 KB.
