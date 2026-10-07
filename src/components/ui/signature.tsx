@@ -44,6 +44,8 @@ function PenStroke({
 interface SignatureProps {
   /** 0 = unsigned, 1 = fully signed. Drive it from scroll for a scrubbed draw. */
   progress: MotionValue<number>;
+  /** Show the finished signature and ignore progress. */
+  signed?: boolean;
   className?: string;
 }
 
@@ -51,7 +53,7 @@ interface SignatureProps {
  * "Lawrence" in Mrs Saint Delafield, revealed along pen-order centrelines so it
  * reads as one hand-drawn stroke. Decorative: hidden from assistive tech.
  */
-export function Signature({ progress, className }: SignatureProps) {
+export function Signature({ progress, signed = false, className }: SignatureProps) {
   const maskId = `signature-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   // A little inertia so the ink trails the input like a pen, not a wipe.
   const pen = useSpring(progress, { stiffness: 140, damping: 30, restDelta: 0.0005 });
@@ -82,12 +84,13 @@ export function Signature({ progress, className }: SignatureProps) {
           ))}
         </g>
       </mask>
-      {/* CSS `mask: none` beats the attribute, so reduced motion gets the
-          finished signature with no JS (and no hydration mismatch). */}
+      {/* Without the mask the signature shows finished. CSS `mask: none`
+          beats the attribute, so reduced motion gets it with no JS (and no
+          hydration mismatch). */}
       <path
         d={signature.fill}
         fill="currentColor"
-        mask={`url(#${maskId})`}
+        mask={signed ? undefined : `url(#${maskId})`}
         className="motion-reduce:[mask:none]"
       />
     </svg>
