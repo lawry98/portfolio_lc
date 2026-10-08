@@ -97,7 +97,7 @@ No `anthropic` or `langchain-anthropic` package appears in any manifest. [ADR 00
 
 ## Card 2: AI-Powered Code Review Tool (`codereview-ai`)
 
-Permalinks are at `2810c19c2b9de92c442d310c632de199631c4a6e` (branch `master`, 3 commits, all 2026-02-13). The repo stops at "Phase 2". Its own [PHASE2-COMPLETE.md#L187-L193](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/PHASE2-COMPLETE.md#L187-L193) says it has "No authentication yet" and that reviews are not saved.
+Permalinks are at `2810c19c2b9de92c442d310c632de199631c4a6e` (branch `master`, 3 commits, all 2026-02-13). **Update 2026-10-08:** at this SHA every review fails, because the model is retired. [codereview-ai#1](https://github.com/lawry98/codereview-ai/pull/1) moves it to `claude-opus-5-5`. The repo stops at "Phase 2". Its own [PHASE2-COMPLETE.md#L187-L193](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/PHASE2-COMPLETE.md#L187-L193) says it has "No authentication yet" and that reviews are not saved.
 
 ### Stack
 
@@ -230,6 +230,7 @@ None of the candidates above shows the product, so each card's image is a captur
 | Card | File | Repo SHA | How it was produced |
 |---|---|---|---|
 | F1 | `public/projects/f1-briefing-agent.webp` | `1613609` | FastAPI backend and Next.js dev server with the repo's own `backend/.env` keys. A Singapore Grand Prix briefing was generated on `/briefing` (Gemini 3.6 Flash returned 503 "high demand" three times first; the backend's own retry did not get past it). The crop starts at the race header |
+| Code Review | `public/projects/codereview-ai.webp` | `a9c2f7f` ([codereview-ai#1](https://github.com/lawry98/codereview-ai/pull/1)) | At `2810c19` every review fails: `claude-sonnet-4-20250514` is retired (API 404 `not_found_error`), and `route.ts` reads `content[0]`, which is now a thinking block. The capture ran on the PR branch that moves to `claude-opus-5-5`. An 18-line JavaScript handler (SQL built by string concatenation, a `<=` loop bound) was reviewed with the key in `.env.local`, in dark mode. The crop starts at the score |
 | Kanban | `public/projects/kanban-board.webp` | `af8c43c` | A separate local Supabase stack (`supabase start` on ports 554xx, so a second stack on this Mac kept running), `prisma migrate deploy`, a test account on that local auth, then `ALLOW_DEMO_SEED=1 pnpm db:seed`. The shot was taken mid-drag, with "Migrate blog posts to the new CMS" being moved from In Progress toward Review, in dark mode. No hosted database was touched |
 
 ## Method
