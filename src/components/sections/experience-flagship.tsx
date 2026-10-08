@@ -7,7 +7,6 @@ import { ArrowRight, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { MetricGrid } from "@/components/ui/metric-grid";
-import { TechGroups } from "@/components/ui/tech-groups";
 import { FadeIn } from "@/components/animations/fade-in";
 import type { Experience } from "@/data/experience";
 
@@ -52,16 +51,22 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
 
             <p className="mt-6 text-lg leading-relaxed">{experience.summary}</p>
 
-            {experience.context && (
-              <p className="mt-4 text-muted-foreground leading-relaxed">
-                {experience.context}
-              </p>
-            )}
-
-            {experience.contributionSummary && (
-              <p className="mt-4 text-muted-foreground leading-relaxed">
-                {experience.contributionSummary}
-              </p>
+            {/* The grouped version, with context and ownership areas, is on
+                the case study */}
+            {experience.techGroups && experience.techGroups.length > 0 && (
+              <div className="mt-6 flex flex-wrap gap-2">
+                {experience.techGroups
+                  .flatMap((group) => group.items)
+                  .map((tech) => (
+                    <Badge
+                      key={tech}
+                      variant="secondary"
+                      className="narrow:whitespace-normal narrow:text-center"
+                    >
+                      {tech}
+                    </Badge>
+                  ))}
+              </div>
             )}
           </div>
 
@@ -85,29 +90,6 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
 
         {experience.metrics && experience.metrics.length > 0 && (
           <MetricGrid metrics={experience.metrics} className="relative mt-10" />
-        )}
-
-        {experience.ownershipAreas && experience.ownershipAreas.length > 0 && (
-          <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4 mt-10">
-            {experience.ownershipAreas.map((area) => (
-              <div
-                key={area.title}
-                className="rounded-2xl border border-border/50 bg-background p-5 narrow:p-2.5"
-              >
-                <h4 className="font-semibold narrow:text-sm mb-2">{area.title}</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {area.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {experience.techGroups && experience.techGroups.length > 0 && (
-          <TechGroups
-            groups={experience.techGroups}
-            className="relative mt-10 pt-8 border-t border-border/50"
-          />
         )}
 
         {(experience.caseStudyHref || experience.website) && (

@@ -97,11 +97,10 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Aug 2020 – Aug 2023",
     summary:
-      "Built and maintained full-stack B2B web applications for Fortune 500 financial-services clients using React, Java, Spring, Node.js, and SQL.",
+      "Built full-stack B2B web applications for Fortune 500 financial-services clients.",
     highlights: [
-      "Created 20+ reusable UI components and shared frontend patterns, reducing feature-development time by 30%.",
-      "Improved application performance by 15%+ through database indexing, query optimization, and caching.",
-      "Supported frontend development, backend services, production debugging, regression testing, and customer delivery, contributing to a 95% customer-satisfaction index for FY 2022.",
+      "Created 20+ reusable UI components, cutting feature-development time by 30%.",
+      "Improved application performance by 15%+ through indexing, query tuning, and caching.",
     ],
     technologies: ["Java", "Spring", "React", "Node.js", "SQL"],
   },
@@ -112,7 +111,7 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Jun 2019 – Jul 2020",
     summary:
-      "Built Java and Spring Boot REST APIs, a C/C++ file-compression utility, and Python data pipelines with Pandas and NumPy that reduced manual reporting time by 40% and surfaced market trends for business planning.",
+      "Built Java and Spring Boot REST APIs and Python data pipelines that cut manual reporting time by 40%.",
     technologies: ["Java", "Spring Boot", "Python", "Pandas", "NumPy", "C/C++"],
   },
 ];

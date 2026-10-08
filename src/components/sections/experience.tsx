@@ -18,17 +18,9 @@ export function Experience() {
         <FadeIn delay={0.1}>
           {/* These words are wider than narrow screens, so only there may
               they break at their soft hyphens */}
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4 hyphens-none narrow:hyphens-manual narrow:wrap-break-word">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-16 hyphens-none narrow:hyphens-manual narrow:wrap-break-word">
             Building prod&shy;ucts from inter&shy;face to infra&shy;struc&shy;ture
           </h2>
-        </FadeIn>
-
-        <FadeIn delay={0.2}>
-          <p className="text-lg text-muted-foreground max-w-2xl mb-16 leading-relaxed">
-            I build full-stack web applications and AI-powered features across
-            frontend interfaces, backend services, databases, payments, and
-            production infrastructure.
-          </p>
         </FadeIn>
 
         {featuredExperience && (

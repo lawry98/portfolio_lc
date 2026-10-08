@@ -15,7 +15,7 @@ export const projects: Project[] = [
     id: "f1-application",
     title: "F1 Race Weekend Briefing Agent",
     description:
-      "A LangGraph agent that uses Gemini to turn race results, standings, weather, and news into streamed race-weekend briefings, with a Three.js viewer that paints a 3D car in each team's color.",
+      "A LangGraph agent that turns F1 results, standings, weather, and news into streamed race-weekend briefings, with a 3D car viewer in Three.js.",
     tags: ["LangGraph", "Gemini API", "FastAPI", "Three.js"],
     github: "https://github.com/lawry98/f1-application",
     featured: true,
