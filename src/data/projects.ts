@@ -39,6 +39,9 @@ export const projects: Project[] = [
       "Each issue gets a severity, line, and fix",
       "Scores code 1–10, rewrites it if needed",
     ],
+    image: "/projects/codereview-ai.webp",
+    imageAlt:
+      "A review scoring a JavaScript handler 2 out of 10, followed by a critical off-by-one bug on line 10 with its explanation, a suggestion, and the fixed loop.",
     github: "https://github.com/lawry98/codereview-ai",
   },
   {
