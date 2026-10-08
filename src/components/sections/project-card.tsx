@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ExternalLink, Github } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ProjectMedia } from "@/components/sections/project-media";
+import { ProjectTitle } from "@/components/sections/project-title";
 import type { Project } from "@/data/projects";
 
 interface ProjectCardProps {
@@ -22,10 +23,10 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
       <motion.article
         whileHover={{ y: -8 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="group relative h-full rounded-2xl border border-border/50 bg-card overflow-hidden narrow:hyphens-auto narrow:wrap-break-word"
+        className="group relative flex h-full flex-col rounded-2xl border border-border/50 bg-card overflow-hidden narrow:hyphens-auto narrow:wrap-break-word"
       >
         {/* Image Container */}
-        <div className="relative h-48 overflow-hidden bg-muted">
+        <div className="relative h-48 shrink-0 overflow-hidden bg-muted">
           <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-[1.02]">
             <ProjectMedia
               project={project}
@@ -37,15 +38,31 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
           <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/5 transition-colors duration-300" />
         </div>
 
-        {/* Content */}
-        <div className="p-6 narrow:p-3">
+        {/* Content, a column so the links row sits at the bottom of every card */}
+        <div className="flex flex-1 flex-col p-6 narrow:p-3">
           <h3 className="text-xl narrow:text-base font-semibold mb-2 group-hover:text-primary transition-colors">
-            {project.title}
+            <ProjectTitle project={project} />
           </h3>
-          
+
           <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
             {project.description}
           </p>
+
+          {project.highlights && project.highlights.length > 0 && (
+            <ul className="space-y-2 mb-4">
+              {project.highlights.map((point) => (
+                <li
+                  key={point}
+                  className="flex gap-2 text-sm text-muted-foreground leading-relaxed"
+                >
+                  <span className="text-foreground/40 mt-1" aria-hidden="true">
+                    •
+                  </span>
+                  <span className="narrow:min-w-0 text-pretty">{point}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Tags */}
           <div className="flex flex-wrap gap-2 mb-4">
@@ -57,7 +74,7 @@ export function ProjectCard({ project, index }: ProjectCardProps) {
           </div>
 
           {/* Links */}
-          <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+          <div className="mt-auto flex items-center gap-3 pt-2 border-t border-border/50">
             {project.github && (
               <a
                 href={project.github}

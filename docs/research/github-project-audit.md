@@ -78,6 +78,14 @@ No `anthropic` or `langchain-anthropic` package appears in any manifest. [ADR 00
 | "a Three.js viewer that paints a 3D car in each team's color" | `teamColor={selectedTeam.color}` and the picker: [f1-car-showcase.tsx#L114-L126](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/frontend/components/3d/f1-car-showcase.tsx#L114-L126); `recolourLivery(..., hexToRgb(teamColor))`: [f1-car-model.tsx#L128-L131](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/frontend/components/3d/f1-car-model.tsx#L128-L131) |
 | Tag FastAPI | [requirements.txt#L1](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/requirements.txt#L1), [routes.py#L222-L225](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/api/routes.py#L222-L225) |
 
+### Highlights (added 2026-10-08)
+
+| Highlight | Evidence |
+|---|---|
+| "Gemini picks the tools; they run in parallel" | The planner asks Gemini for a JSON list of tool names and falls back to defaults if the call fails: [graph.py#L212-L273](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/agent/graph.py#L212-L273). The executor submits each one to a `ThreadPoolExecutor`: [graph.py#L461](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/agent/graph.py#L461), [#L478](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/agent/graph.py#L478). A local run for Singapore logged "Planner selected 8 tools" and "8/8 tools succeeded" |
+| "Streams the briefing token by token over SSE" | `briefing_delta` events from the SSE endpoint: [routes.py#L246-L337](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/api/routes.py#L246-L337) |
+| "OpenF1 results, OpenWeather, Tavily news" | [openf1_client.py#L310-L326](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/tools/openf1_client.py#L310-L326), [weather_tools.py#L31-L111](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/tools/weather_tools.py#L31-L111), [search_tools.py#L5-L32](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/backend/tools/search_tools.py#L5-L32) |
+
 ### Other notes
 
 - **The README is consistent about Gemini.** At this SHA, [README.md#L3](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/README.md#L3) says "using Gemini". The only Claude mention is the `CLAUDE.md` agent-notes file. The README's credit "FastF1 — Python library for F1 telemetry data" ([#L381](https://github.com/lawry98/f1-application/blob/161360924073e95983a24ff7fbc6d4e5bc59f8c9/README.md#L381)) describes the library, not this app. It is the likely source of the card's "telemetry".
@@ -126,6 +134,14 @@ The string "openai" appears nowhere in the tree, the lockfile included.
 | "with line-level fixes" | Each issue has `severity`, `line`, `suggestion` and `fixedCode`: [codeReview.ts#L29-L56](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L29-L56); shown with line badges in [CategoryCard.tsx#L106-L152](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/components/CategoryCard.tsx#L106-L152) |
 | Tags Next.js, TypeScript, Claude API, Tailwind CSS | See stack table |
 
+### Highlights (added 2026-10-08)
+
+| Highlight | Evidence |
+|---|---|
+| "Flags bugs, security, and performance issues" | Three of the prompt's five categories (Bugs, Security, Performance, Best Practices, Refactoring): [codeReview.ts#L16-L20](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L16-L20) |
+| "Each issue gets a severity, line, and fix" | `severity`, `line`, `suggestion` and `fixedCode` per issue: [codeReview.ts#L36-L44](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L36-L44); rendered in [CategoryCard.tsx#L106-L152](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/components/CategoryCard.tsx#L106-L152). `line` is asked for "when possible" |
+| "Scores code 1–10, rewrites it if needed" | `overallScore` 1–10 and `improvedCode` "only if significant changes needed": [codeReview.ts#L26](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L26), [#L34](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L34), [#L50](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/prompts/codeReview.ts#L50); shown by [AnalysisResults.tsx#L45](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/components/AnalysisResults.tsx#L45) and [#L64-L107](https://github.com/lawry98/codereview-ai/blob/2810c19c2b9de92c442d310c632de199631c4a6e/src/components/AnalysisResults.tsx#L64-L107) |
+
 ### Live demo
 
 None. No homepage field, no deployments, and no deploy URL in the repo. `codereview-ai-lawry98.vercel.app` and similar URLs return 404 `DEPLOYMENT_NOT_FOUND`. `codereview-ai.vercel.app` returns 200, but it is someone else's app: its title is "Create Next App", it asks for a GitHub PR URL and your own Anthropic key, and it matches none of lawry98's repos. Don't link it.
@@ -171,6 +187,16 @@ No `socket.io` in the lockfile, and no `new WebSocket`, `ws` import or Express s
 | "with role-based access" | [schema.prisma#L26-L30](https://github.com/lawry98/kanban-board/blob/d6037c4756c99091bcc099e62673a5a3d265ae82/prisma/schema.prisma#L26-L30), [board-actions.ts#L104-L109](https://github.com/lawry98/kanban-board/blob/d6037c4756c99091bcc099e62673a5a3d265ae82/app/actions/board-actions.ts#L104-L109), [task-actions.ts#L178](https://github.com/lawry98/kanban-board/blob/d6037c4756c99091bcc099e62673a5a3d265ae82/app/actions/task-actions.ts#L178) |
 | Tags Next.js, Supabase, Prisma, PostgreSQL | See stack table |
 
+### Highlights (added 2026-10-08)
+
+Cited at `af8c43c` (`main` on 2026-10-08), not the `d6037c4` pinned above.
+
+| Highlight | Evidence |
+|---|---|
+| "Server-checked Owner, Editor, Viewer roles" | `enum Role { OWNER EDITOR VIEWER }`: [schema.prisma#L26-L30](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/prisma/schema.prisma#L26-L30). Server Actions gate writes on `EDITOR_ROLES` / `OWNER_ROLES`: [require-access.ts#L64-L65](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/lib/auth/require-access.ts#L64-L65), [task-actions.ts#L178](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/app/actions/task-actions.ts#L178), [column-actions.ts#L35](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/app/actions/column-actions.ts#L35) |
+| "Supabase Realtime syncs every open tab" | One channel per board on `postgres_changes` for tasks, columns, members and the board row; each event triggers a debounced refetch: [use-realtime.ts#L229-L257](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/hooks/use-realtime.ts#L229-L257) |
+| "Card moves are instant, with rollback" | `MOVE_TASK` is dispatched before `moveTask` resolves, then re-dispatched in reverse if the action returns an error or rejects: [board-view.tsx#L54-L99](https://github.com/lawry98/kanban-board/blob/af8c43c7765bd28a9bd1f158f5a24c487a4a1bff/app/%28dashboard%29/board/%5BboardId%5D/board-view.tsx#L54-L99) |
+
 ### Live demo
 
 None. The README's demo link is a placeholder, and the README says "there is no deployment yet" ([README.md#L9-L14](https://github.com/lawry98/kanban-board/blob/d6037c4756c99091bcc099e62673a5a3d265ae82/README.md#L9-L14)). `kanban-board-lawry98.vercel.app` returns 404. `kanban-board.vercel.app` returns 200, but it is someone else's create-react-app page titled "React App". Don't link it.
@@ -196,6 +222,15 @@ Two technologies on the new cards are missing from `src/data/skills.ts`: Prisma 
 | kanban-board | None. The README links 4 placeholders under `docs/screenshots/` that don't exist |
 | nudge-ai | None tracked; `frontend/test-screenshots/` is gitignored |
 | cv-final-project | 22 inline notebook outputs (detection grids, PR curves) |
+
+## Card screenshots (captured 2026-10-08)
+
+None of the candidates above shows the product, so each card's image is a capture of the app running locally from a fresh clone of its repo. Nothing in them is mocked: every screen is real output from that run. Chrome for Testing ran headless at a 1280×720 viewport and 2× pixel density; the frame was then scaled to 1600×900 WebP.
+
+| Card | File | Repo SHA | How it was produced |
+|---|---|---|---|
+| F1 | `public/projects/f1-briefing-agent.webp` | `1613609` | FastAPI backend and Next.js dev server with the repo's own `backend/.env` keys. A Singapore Grand Prix briefing was generated on `/briefing` (Gemini 3.6 Flash returned 503 "high demand" three times first; the backend's own retry did not get past it). The crop starts at the race header |
+| Kanban | `public/projects/kanban-board.webp` | `af8c43c` | A separate local Supabase stack (`supabase start` on ports 554xx, so a second stack on this Mac kept running), `prisma migrate deploy`, a test account on that local auth, then `ALLOW_DEMO_SEED=1 pnpm db:seed`. The shot was taken mid-drag, with "Migrate blog posts to the new CMS" being moved from In Progress toward Review, in dark mode. No hosted database was touched |
 
 ## Method
 

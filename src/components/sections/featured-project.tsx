@@ -5,6 +5,7 @@ import { Github, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/fade-in";
 import { ProjectMedia } from "@/components/sections/project-media";
+import { ProjectTitle } from "@/components/sections/project-title";
 import type { Project } from "@/data/projects";
 
 interface FeaturedProjectProps {
@@ -42,7 +43,9 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
         </FadeIn>
 
         <FadeIn direction={contentFadeDirection} delay={0.2}>
-          <h3 className="text-2xl sm:text-3xl font-bold">{project.title}</h3>
+          <h3 className="text-2xl sm:text-3xl font-bold">
+            <ProjectTitle project={project} />
+          </h3>
         </FadeIn>
 
         <FadeIn direction={contentFadeDirection} delay={0.3}>
@@ -50,6 +53,24 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
             {project.description}
           </p>
         </FadeIn>
+
+        {project.highlights && project.highlights.length > 0 && (
+          <FadeIn direction={contentFadeDirection} delay={0.35}>
+            <ul className="space-y-2">
+              {project.highlights.map((point) => (
+                <li
+                  key={point}
+                  className={`flex gap-2 text-sm text-muted-foreground leading-relaxed ${contentJustifyClass}`}
+                >
+                  <span className="text-foreground/40 mt-1" aria-hidden="true">
+                    •
+                  </span>
+                  <span className="narrow:min-w-0 text-pretty">{point}</span>
+                </li>
+              ))}
+            </ul>
+          </FadeIn>
+        )}
 
         <FadeIn direction={contentFadeDirection} delay={0.4}>
           <div className={`flex flex-wrap gap-2 ${contentJustifyClass}`}>
