@@ -146,7 +146,8 @@ export default function QuillAndPigeonCaseStudy() {
                 fill
                 sizes="(min-width: 768px) 768px, 100vw"
                 className="object-cover object-top"
-                priority
+                loading="eager"
+                fetchPriority="high"
               />
             </div>
           </FadeIn>
