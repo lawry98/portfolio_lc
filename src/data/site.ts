@@ -15,4 +15,6 @@ export const site = {
   // Served from public/. The hero and Contact link to it, and next.config.ts
   // reads it to send noindex, so keep this file free of client-only imports.
   resume: "/Lawrence-Crasto-Resume.pdf",
+  // Served from public/. The hero shows it, and structured data lists it.
+  photo: "/lawrence-crasto.jpg",
 };
