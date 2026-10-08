@@ -18,6 +18,7 @@ export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pendingHash = useRef<string | null>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -25,6 +26,20 @@ export function Navbar() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Escape closes the open menu and returns focus to its toggle. pendingHash
+  // is always null while the menu is open (the toggle clears it), so this
+  // close doesn't scroll.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      toggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
 
   // The menu's exit animation measures its "auto" height, and Framer Motion
   // restores window.scrollY afterwards, cancelling any smooth scroll already
@@ -85,6 +100,7 @@ export function Navbar() {
 
           {/* Mobile Menu Button */}
           <button
+            ref={toggleRef}
             className="md:hidden p-2"
             onClick={() => {
               // Reopening mid-close cancels the exit; drop its jump so a later

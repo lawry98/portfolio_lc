@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useScroll } from "framer-motion";
-import { Mail, Github, Linkedin } from "lucide-react";
+import { Mail, Github, Linkedin, FileText } from "lucide-react";
 import { FadeIn } from "@/components/animations/fade-in";
 import { Signature } from "@/components/ui/signature";
 import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
+
+// A <wbr> before the "@" lets the address wrap on the narrowest screens.
+const [emailUser, emailDomain] = site.email.split("@");
 
 export function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -76,13 +79,17 @@ export function Contact() {
         </FadeIn>
 
         <FadeIn delay={0.3}>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {/* Wraps so the four buttons never overflow. On phones from 334px
+              wide, GitHub and LinkedIn share a row, so the buttons take three
+              rows, not four, and leave more of the pinned screen to the
+              signature. */}
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <a
-              href="mailto:lawry982@gmail.com"
+              href={`mailto:${site.email}`}
               className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Mail size={18} aria-hidden="true" className="narrow:hidden" />
-              lawry982<wbr />@gmail.com
+              {emailUser}<wbr />@{emailDomain}
             </a>
             <a
               href={site.profiles.github}
@@ -102,6 +109,16 @@ export function Contact() {
             >
               <Linkedin size={18} aria-hidden="true" />
               LinkedIn
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+            <a
+              href={site.resume}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <FileText size={18} aria-hidden="true" />
+              Résumé (PDF)
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </div>
