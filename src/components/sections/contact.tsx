@@ -1,17 +1,21 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useScroll } from "framer-motion";
 import { Mail, Github, Linkedin, FileText } from "lucide-react";
 import { FadeIn } from "@/components/animations/fade-in";
 import { Signature } from "@/components/ui/signature";
 import { site } from "@/data/site";
+import { cn } from "@/lib/utils";
 
 // A <wbr> before the "@" lets the address wrap on the narrowest screens.
 const [emailUser, emailDomain] = site.email.split("@");
 
 export function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Starts pinned to match the server render; the check below may undo it.
+  const [pinned, setPinned] = useState(true);
   // On tall viewports the section is taller than the screen and its content
   // is pinned, so the extra scroll signs the name as the page's finale.
   const { scrollYProgress } = useScroll({
@@ -19,13 +23,41 @@ export function Contact() {
     offset: ["start start", "end end"],
   });
 
+  // Pin only while the content, with the signature at full size, fits on one
+  // screen below the navbar. The content is at least a screen tall
+  // (min-h-svh), so taller means it doesn't fit: short phones, and phones at
+  // high page zoom where the buttons wrap. Those scroll normally and show the
+  // signature finished. Below the tall breakpoint there's no min-height, so
+  // the check fails and nothing pins.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      const minHeight = parseFloat(getComputedStyle(content).minHeight);
+      setPinned(content.getBoundingClientRect().height <= minHeight + 0.5);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
+  // Unpinned on a tall screen, pt-8 plus the content's pt-16 makes the same
+  // 96px as the other sections' py-24.
   return (
     <section
       ref={sectionRef}
       id="contact"
-      className="relative px-6 py-24 tall:h-[175svh] tall:py-0"
+      className={cn(
+        "relative px-6 py-24",
+        pinned ? "tall:h-[175svh] tall:py-0" : "tall:pt-8"
+      )}
     >
-      <div className="max-w-4xl mx-auto text-center tall:sticky tall:top-0 tall:flex tall:h-svh tall:flex-col tall:justify-center tall:pt-16">
+      <div
+        ref={contentRef}
+        className={cn(
+          "max-w-4xl mx-auto text-center tall:flex tall:min-h-svh tall:flex-col tall:justify-center tall:pt-16",
+          pinned && "tall:sticky tall:top-0"
+        )}
+      >
         <FadeIn>
           <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
             Contact
@@ -49,8 +81,8 @@ export function Contact() {
         <FadeIn delay={0.3}>
           {/* Wraps so the four buttons never overflow. On phones from 334px
               wide, GitHub and LinkedIn share a row, so the buttons take three
-              rows, not four, and leave more of the pinned screen to the
-              signature. */}
+              rows, not four, and the section fits on (and pins on) more
+              screens. */}
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href={`mailto:${site.email}`}
@@ -95,6 +127,7 @@ export function Contact() {
         {/* Decorative sign-off, drawn by scroll; the name is already the page's h1 */}
         <Signature
           progress={scrollYProgress}
+          signed={!pinned}
           className="mx-auto mt-10 block h-auto w-full max-w-3xl text-foreground sm:mt-20"
         />
       </div>
