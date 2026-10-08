@@ -11,14 +11,14 @@ export function MetricGrid({ metrics, className }: MetricGridProps) {
   return (
     <dl
       className={cn(
-        "grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4",
+        "grid grid-cols-2 narrow:grid-cols-1 gap-3 sm:grid-cols-4 sm:gap-4",
         className,
       )}
     >
       {metrics.map((metric) => (
         <div
           key={metric.label}
-          className="rounded-xl border border-border/50 bg-muted/50 p-4 text-center"
+          className="rounded-xl border border-border/50 bg-muted/50 p-4 narrow:px-2 text-center"
         >
           <dt className="sr-only">{metric.label}</dt>
           <dd>

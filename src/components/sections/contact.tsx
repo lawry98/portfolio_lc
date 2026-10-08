@@ -65,8 +65,10 @@ export function Contact() {
         </FadeIn>
 
         <FadeIn delay={0.1}>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            Let&apos;s build intelligent web products
+          {/* These words are wider than narrow screens, so only there may
+              they break at their soft hyphens */}
+          <h2 className="text-3xl sm:text-4xl font-bold mb-6 hyphens-none narrow:hyphens-manual">
+            Let&apos;s build intel&shy;ligent web prod&shy;ucts
           </h2>
         </FadeIn>
 
@@ -86,7 +88,7 @@ export function Contact() {
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href={`mailto:${site.email}`}
-              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Mail size={18} aria-hidden="true" className="narrow:hidden" />
               {emailUser}<wbr />@{emailDomain}
@@ -95,7 +97,7 @@ export function Contact() {
               href={site.profiles.github}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Github size={18} aria-hidden="true" />
               GitHub
@@ -105,7 +107,7 @@ export function Contact() {
               href={site.profiles.linkedin}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Linkedin size={18} aria-hidden="true" />
               LinkedIn
@@ -115,7 +117,7 @@ export function Contact() {
               href={site.resume}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <FileText size={18} aria-hidden="true" />
               Résumé (PDF)

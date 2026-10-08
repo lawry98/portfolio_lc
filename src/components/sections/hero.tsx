@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowDown, FileText } from "lucide-react";
 import { LetterAnimation } from "@/components/animations/letter-animation";
@@ -48,6 +49,23 @@ export function Hero() {
       />
 
       <div className="relative z-10 text-center px-6">
+        {/* Photo. 80px on phones keeps the hero within an iPhone 15's screen
+            (390x844), so the scroll arrow stays; 128px from sm up. */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Image
+            src={site.photo}
+            alt="Portrait of Lawrence Crasto"
+            width={128}
+            height={128}
+            loading="eager"
+            className="mx-auto mb-4 size-20 sm:mb-6 sm:size-32 rounded-full object-cover ring-1 ring-border"
+          />
+        </motion.div>
+
         {/* Greeting */}
         <motion.p
           initial={{ opacity: 0, y: 20 }}
@@ -108,7 +126,7 @@ export function Hero() {
             href={site.resume}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="inline-flex items-center gap-2 px-6 narrow:px-3 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <FileText size={18} aria-hidden="true" />
             Résumé (PDF)

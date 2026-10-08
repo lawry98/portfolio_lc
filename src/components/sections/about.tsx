@@ -36,17 +36,20 @@ export function About() {
         </FadeIn>
 
         <FadeIn delay={0.1}>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-8">
-            I build products end to end.
+          {/* "products" is wider than the narrowest screens, so only there may
+              it break at its soft hyphen */}
+          <h2 className="text-3xl sm:text-4xl font-bold mb-8 hyphens-none narrow:hyphens-manual">
+            I build prod&shy;ucts end to end.
           </h2>
         </FadeIn>
 
         <div className="space-y-6 text-muted-foreground">
           <FadeIn delay={0.2}>
-            <p className="text-lg leading-relaxed">
+            {/* Likewise "authentication" */}
+            <p className="text-lg leading-relaxed hyphens-none narrow:hyphens-manual">
               I&apos;m a full-stack software engineer focused on building reliable,
               intuitive web applications and AI-powered product experiences. I work
-              across responsive interfaces, backend APIs, databases, authentication,
+              across responsive interfaces, backend APIs, databases, authen&shy;tication,
               payments, cloud services, and production delivery.
             </p>
           </FadeIn>
@@ -62,13 +65,13 @@ export function About() {
         </div>
 
         {/* Highlight Cards */}
-        <div className="grid sm:grid-cols-3 gap-4 mt-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12">
           {highlights.map((item, index) => (
             <FadeIn key={item.label} delay={0.4 + index * 0.1}>
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ type: "spring", stiffness: 300 }}
-                className="p-6 rounded-2xl bg-muted/50 border border-border/50 h-full"
+                className="p-6 narrow:p-4 rounded-2xl bg-muted/50 border border-border/50 h-full narrow:hyphens-auto narrow:wrap-break-word"
               >
                 <item.icon className="text-foreground mb-3" size={24} />
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
