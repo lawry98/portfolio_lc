@@ -36,6 +36,7 @@ export function homeJsonLd() {
         "@id": `${siteUrl}/#person`,
         name: site.name,
         url: siteUrl,
+        image: `${siteUrl}${site.photo}`,
         jobTitle: site.jobTitle,
         alumniOf: { "@type": "CollegeOrUniversity", name: site.alumniOf },
         sameAs: Object.values(site.profiles),
