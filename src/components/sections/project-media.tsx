@@ -5,14 +5,13 @@ import type { Project } from "@/data/projects";
 interface ProjectMediaProps {
   project: Project;
   sizes: string;
-  priority?: boolean;
 }
 
 /**
  * Renders a project's screenshot with next/image, or a designed, on-brand
  * fallback (never a bare gray letter) when no asset is available yet.
  */
-export function ProjectMedia({ project, sizes, priority }: ProjectMediaProps) {
+export function ProjectMedia({ project, sizes }: ProjectMediaProps) {
   if (project.image) {
     return (
       <Image
@@ -20,7 +19,6 @@ export function ProjectMedia({ project, sizes, priority }: ProjectMediaProps) {
         alt={project.imageAlt ?? project.title}
         fill
         sizes={sizes}
-        priority={priority}
         className="object-cover object-top"
       />
     );

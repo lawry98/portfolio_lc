@@ -82,7 +82,6 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
                 fill
                 sizes="(min-width: 1024px) 55vw, 100vw"
                 className="object-cover object-top"
-                priority
               />
             </motion.div>
           )}
