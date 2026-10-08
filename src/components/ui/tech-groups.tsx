@@ -8,7 +8,7 @@ interface TechGroupsProps {
   badgeVariant?: "default" | "secondary" | "outline";
 }
 
-/** Shared renderer for grouped technology badges (homepage + case study). */
+/** Grouped technology badges for the case study. */
 export function TechGroups({
   groups,
   className,

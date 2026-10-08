@@ -3,7 +3,7 @@ export interface SkillGroup {
   skills: string[];
 }
 
-/** Primary, high-emphasis skill groups shown as cards. */
+/** Core skills, shown as cards. Kept short so the section scans quickly. */
 export const skillGroups: SkillGroup[] = [
   {
     label: "Frontend",
@@ -13,8 +13,6 @@ export const skillGroups: SkillGroup[] = [
       "TypeScript",
       "JavaScript",
       "Tailwind CSS",
-      "shadcn/ui",
-      "Responsive Design",
       "Accessibility",
     ],
   },
@@ -27,51 +25,16 @@ export const skillGroups: SkillGroup[] = [
       "Python",
       "REST APIs",
       "PostgreSQL",
-      "Supabase",
       "Prisma",
-      "Kysely",
-      "Zod",
-      "Meilisearch",
+      "Stripe",
     ],
   },
   {
-    label: "AI and automation",
-    skills: [
-      "OpenAI API",
-      "Claude API",
-      "MCP",
-      "LangGraph",
-      "Langfuse",
-      "n8n",
-      "AI Agents",
-      "Prompt Evaluation",
-    ],
-  },
-  {
-    label: "Commerce and integrations",
-    skills: ["Stripe", "Medusa", "React Email", "USPS APIs"],
+    label: "AI",
+    skills: ["OpenAI API", "Claude API", "MCP", "LangGraph", "AI Agents"],
   },
   {
     label: "Cloud and delivery",
-    skills: [
-      "AWS",
-      "AWS Lambda",
-      "SQS",
-      "SES",
-      "Docker",
-      "GitHub Actions",
-      "OIDC",
-      "CI/CD",
-      "Vercel",
-    ],
+    skills: ["AWS", "AWS Lambda", "Docker", "GitHub Actions", "CI/CD"],
   },
-];
-
-/** Lower-emphasis developer tooling, rendered as a subtle row. */
-export const developerTooling: string[] = [
-  "Git",
-  "Bruno",
-  "Postman",
-  "act",
-  "Prettier",
 ];

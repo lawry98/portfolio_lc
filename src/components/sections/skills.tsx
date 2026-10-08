@@ -2,7 +2,7 @@
 
 import { FadeIn } from "@/components/animations/fade-in";
 import { Badge } from "@/components/ui/badge";
-import { skillGroups, developerTooling } from "@/data/skills";
+import { skillGroups } from "@/data/skills";
 
 export function Skills() {
   return (
@@ -42,26 +42,6 @@ export function Skills() {
             </FadeIn>
           ))}
         </div>
-
-        {/* Lower-emphasis developer tooling */}
-        <FadeIn delay={0.2}>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Developer tooling
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {developerTooling.map((tool) => (
-                <Badge
-                  key={tool}
-                  variant="outline"
-                  className="text-xs text-muted-foreground"
-                >
-                  {tool}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </FadeIn>
       </div>
     </section>
   );
