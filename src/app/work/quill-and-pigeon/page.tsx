@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Github, Linkedin, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MetricGrid } from "@/components/ui/metric-grid";
 import { TechGroups } from "@/components/ui/tech-groups";
@@ -9,6 +9,7 @@ import { FlowDiagram } from "@/components/ui/flow-diagram";
 import { FadeIn } from "@/components/animations/fade-in";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { featuredExperience } from "@/data/experience";
+import { site } from "@/data/site";
 import type { TechGroup } from "@/data/experience";
 
 export const metadata: Metadata = {
@@ -116,7 +117,12 @@ export default function QuillAndPigeonCaseStudy() {
         </nav>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-16 sm:py-20">
+      {/* scroll-mt-16 keeps the skip link from scrolling main under the
+          sticky header. */}
+      <main
+        id="main"
+        className="max-w-3xl mx-auto px-6 py-16 sm:py-20 scroll-mt-16 outline-none"
+      >
         {/* Title */}
         <FadeIn>
           <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
@@ -512,6 +518,55 @@ export default function QuillAndPigeonCaseStudy() {
               </a>
             </Section>
           )}
+
+          {/* Closing contact, laid out like the homepage Contact section */}
+          <section
+            id="contact"
+            className="scroll-mt-24 border-t border-border/50 pt-16 text-center"
+          >
+            <FadeIn>
+              <p className="text-sm text-muted-foreground uppercase tracking-widest mb-4">
+                Contact
+              </p>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-6">
+                Let&apos;s talk
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
+                I&apos;m looking for a full-time software engineering role in
+                full-stack web and AI products. If your team needs work like
+                Quill &amp; Pigeon, get in touch.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a
+                  href={`mailto:${site.email}`}
+                  className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <Mail size={18} aria-hidden="true" />
+                  Email me
+                </a>
+                <a
+                  href={site.profiles.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <Github size={18} aria-hidden="true" />
+                  GitHub
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+                <a
+                  href={site.profiles.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <Linkedin size={18} aria-hidden="true" />
+                  LinkedIn
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              </div>
+            </FadeIn>
+          </section>
         </div>
       </main>
     </>

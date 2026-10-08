@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, FileText } from "lucide-react";
 import { LetterAnimation } from "@/components/animations/letter-animation";
+import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
 
 export function Hero() {
@@ -102,6 +103,16 @@ export function Hero() {
             className="px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Get in touch
+          </a>
+          <a
+            href={site.resume}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 border border-foreground/20 rounded-full font-medium hover:bg-foreground/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <FileText size={18} aria-hidden="true" />
+            Résumé (PDF)
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </motion.div>
       </div>
