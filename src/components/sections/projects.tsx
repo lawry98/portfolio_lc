@@ -22,16 +22,9 @@ export function Projects() {
         </FadeIn>
 
         <FadeIn delay={0.1}>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-16">
             Full-stack and AI projects
           </h2>
-        </FadeIn>
-
-        <FadeIn delay={0.2}>
-          <p className="text-lg text-muted-foreground max-w-2xl mb-16 leading-relaxed">
-            Products exploring AI agents, real-time collaboration, developer
-            tooling, and interactive web experiences.
-          </p>
         </FadeIn>
 
         {/* Featured Projects */}

@@ -43,31 +43,10 @@ export function About() {
           </h2>
         </FadeIn>
 
-        <div className="space-y-6 text-muted-foreground">
-          <FadeIn delay={0.2}>
-            {/* Likewise "authentication" */}
-            <p className="text-lg leading-relaxed hyphens-none narrow:hyphens-manual">
-              I&apos;m a full-stack software engineer focused on building reliable,
-              intuitive web applications and AI-powered product experiences. I work
-              across responsive interfaces, backend APIs, databases, authen&shy;tication,
-              payments, cloud services, and production delivery.
-            </p>
-          </FadeIn>
-
-          <FadeIn delay={0.3}>
-            <p className="text-lg leading-relaxed">
-              Most recently, I helped build Quill &amp; Pigeon&apos;s multi-tenant
-              commerce platform and developed AI-assisted product experiences using
-              the OpenAI API, Claude API, MCP, Langfuse, and workflow automation
-              tools.
-            </p>
-          </FadeIn>
-        </div>
-
         {/* Highlight Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {highlights.map((item, index) => (
-            <FadeIn key={item.label} delay={0.4 + index * 0.1}>
+            <FadeIn key={item.label} delay={0.2 + index * 0.1}>
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ type: "spring", stiffness: 300 }}
