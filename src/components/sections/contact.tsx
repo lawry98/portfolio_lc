@@ -81,8 +81,8 @@ export function Contact() {
         <FadeIn delay={0.3}>
           {/* Wraps so the four buttons never overflow. On phones from 334px
               wide, GitHub and LinkedIn share a row, so the buttons take three
-              rows, not four, and leave more of the pinned screen to the
-              signature. */}
+              rows, not four, and the section fits on (and pins on) more
+              screens. */}
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href={`mailto:${site.email}`}
