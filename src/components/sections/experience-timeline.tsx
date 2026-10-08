@@ -14,7 +14,7 @@ export function ExperienceTimeline({ items }: ExperienceTimelineProps) {
   return (
     <div>
       <FadeIn>
-        <div className="flex items-center gap-4 mb-10">
+        <div className="flex items-center gap-4 narrow:gap-2 mb-10">
           <div className="h-px flex-1 bg-border" />
           <span className="text-sm text-muted-foreground uppercase tracking-widest">
             Earlier Experience
@@ -26,7 +26,7 @@ export function ExperienceTimeline({ items }: ExperienceTimelineProps) {
       <ol className="relative border-l border-border ml-3 space-y-12">
         {items.map((item, index) => (
           <FadeIn key={item.id} delay={0.1 + index * 0.05}>
-            <li className="relative pl-8">
+            <li className="relative pl-8 narrow:pl-5 narrow:hyphens-auto narrow:wrap-break-word">
               <span
                 aria-hidden="true"
                 className="absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-muted-foreground"
@@ -34,7 +34,7 @@ export function ExperienceTimeline({ items }: ExperienceTimelineProps) {
 
               <article>
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1">
-                  <h3 className="font-semibold text-lg">{item.company}</h3>
+                  <h3 className="font-semibold text-lg narrow:text-base narrow:min-w-0">{item.company}</h3>
                   <span className="text-sm text-muted-foreground">
                     {item.period}
                   </span>
@@ -60,7 +60,7 @@ export function ExperienceTimeline({ items }: ExperienceTimelineProps) {
                         >
                           •
                         </span>
-                        <span>{point}</span>
+                        <span className="narrow:min-w-0">{point}</span>
                       </li>
                     ))}
                   </ul>

@@ -17,7 +17,7 @@ export function TechGroups({
   return (
     <div
       className={cn(
-        "grid gap-6 sm:grid-cols-2 lg:grid-cols-4",
+        "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4",
         className,
       )}
     >
@@ -28,7 +28,11 @@ export function TechGroups({
           </p>
           <div className="flex flex-wrap gap-2">
             {group.items.map((tech) => (
-              <Badge key={tech} variant={badgeVariant}>
+              <Badge
+                key={tech}
+                variant={badgeVariant}
+                className="narrow:whitespace-normal narrow:text-center"
+              >
                 {tech}
               </Badge>
             ))}
