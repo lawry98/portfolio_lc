@@ -7,6 +7,9 @@ import { FadeIn } from "@/components/animations/fade-in";
 import { Signature } from "@/components/ui/signature";
 import { site } from "@/data/site";
 
+// A <wbr> before the "@" lets the address wrap on the narrowest screens.
+const [emailUser, emailDomain] = site.email.split("@");
+
 export function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
   // On tall viewports the section is taller than the screen and its content
@@ -46,11 +49,11 @@ export function Contact() {
         <FadeIn delay={0.3}>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="mailto:lawry982@gmail.com"
+              href={`mailto:${site.email}`}
               className="inline-flex items-center gap-2 px-6 narrow:px-4 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Mail size={18} aria-hidden="true" className="narrow:hidden" />
-              lawry982<wbr />@gmail.com
+              {emailUser}<wbr />@{emailDomain}
             </a>
             <a
               href={site.profiles.github}
