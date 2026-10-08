@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { SkipLink } from "@/components/ui/skip-link";
 import { site } from "@/data/site";
 import { siteUrl } from "@/lib/seo";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased`}>
+        <SkipLink />
         <Providers>{children}</Providers>
       </body>
     </html>
