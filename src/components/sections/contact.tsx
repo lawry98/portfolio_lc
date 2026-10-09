@@ -41,14 +41,20 @@ export function Contact() {
   }, []);
 
   // Unpinned on a tall screen, pt-8 plus the content's pt-16 makes the same
-  // 96px as the other sections' py-24.
+  // 96px as the other sections' py-24. Pinned, the negative scroll margin
+  // lands links to #contact at the end of the pin (75svh = 175svh minus the
+  // content's screen), so the name is signed as the page arrives; scrolling
+  // back up still unsigns it. Contact is the last section, so a viewport
+  // taller than svh just stops at the page end, also fully signed.
   return (
     <section
       ref={sectionRef}
       id="contact"
       className={cn(
         "relative px-6 py-24",
-        pinned ? "tall:h-[175svh] tall:py-0" : "tall:pt-8"
+        pinned
+          ? "tall:h-[175svh] tall:py-0 tall:-scroll-mt-[75svh]"
+          : "tall:pt-8"
       )}
     >
       <div
