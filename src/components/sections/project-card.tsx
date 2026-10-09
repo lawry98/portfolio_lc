@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ExternalLink, Github } from "lucide-react";
+import { useReveal } from "@/components/animations/use-reveal";
 import { Badge } from "@/components/ui/badge";
 import { ProjectMedia } from "@/components/sections/project-media";
 import { ProjectTitle } from "@/components/sections/project-title";
@@ -13,12 +14,21 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, index }: ProjectCardProps) {
+  const { ref, controls } = useReveal("-50px");
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
+      ref={ref}
+      initial="hidden"
+      animate={controls}
+      variants={{
+        hidden: { opacity: 0, y: 30 },
+        visible: {
+          opacity: 1,
+          y: 0,
+          transition: { duration: 0.5, delay: index * 0.1 },
+        },
+      }}
     >
       <motion.article
         whileHover={{ y: -8 }}
