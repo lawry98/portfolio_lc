@@ -51,11 +51,19 @@ const caseStudyTech: TechGroup[] = [
   },
   {
     label: "Cloud and backend",
-    items: ["AWS Lambda", "SQS", "SES", "Kysely", "GitHub Actions", "OIDC"],
+    items: [
+      "AWS Lambda",
+      "SES",
+      "SNS",
+      "SQS",
+      "Kysely",
+      "GitHub Actions",
+      "OIDC",
+    ],
   },
 ];
 
-const developerTooling = ["Bruno", "Postman", "act", "Prettier", "Git"];
+const developerTooling = ["Vitest", "Bruno", "Postman", "act", "Prettier", "Git"];
 
 function Section({
   id,
@@ -161,13 +169,6 @@ export default function QuillAndPigeonCaseStudy() {
           {/* 1. Product overview */}
           <Section id="overview" eyebrow="01" title="Product overview">
             <p>{qp.context}</p>
-            <p>
-              I joined as a Full-Stack Software Engineer Co-op and worked across
-              the customer-facing Next.js platform, Medusa commerce services,
-              Stripe subscriptions and payments, AWS Lambda applications, search
-              infrastructure, transactional email, shipping workflows, and
-              context-aware AI agents.
-            </p>
           </Section>
 
           {/* 2. Role and ownership */}
@@ -199,51 +200,29 @@ export default function QuillAndPigeonCaseStudy() {
             {qp.metrics && <MetricGrid metrics={qp.metrics} />}
           </Section>
 
-          {/* 4. Full-stack customer experience */}
-          <Section
-            id="customer-experience"
-            eyebrow="04"
-            title="Full-stack customer experience"
-          >
-            <p>
-              Built accessible customer workflows across product discovery,
-              personalization, recipients, reminders, subscriptions, checkout, and
-              card delivery using Next.js, React, TypeScript, Prisma, Zod, Medusa,
-              and PostgreSQL.
-            </p>
-            <p>
-              These flows connected the storefront to commerce and fulfillment
-              services so customers could discover cards, personalize them, manage
-              recipients and important-date reminders, subscribe, check out, and
-              track delivery — all with an accessible, WCAG 2.2 AA experience.
-            </p>
-          </Section>
-
-          {/* 5. Commerce and subscription-credit architecture */}
+          {/* 4. Commerce and subscription-credit architecture */}
           <Section
             id="commerce"
-            eyebrow="05"
+            eyebrow="04"
             title="Commerce and sub&shy;scription-credit architecture"
           >
-            <p>
-              Medusa did not natively support Quill &amp; Pigeon&apos;s
-              subscription card-credit model, so I extended its commerce and
-              payment architecture to support it. Customers received card credits
-              based on their subscription tier and could redeem those credits to
-              receive included or free cards during checkout.
-            </p>
             <p>
               Extended Medusa&apos;s commerce and payment architecture to support
               subscription card credits, allowing customers to redeem included
               cards during checkout while preserving Stripe-based payment workflows
               for standard purchases and remaining balances.
             </p>
+            <p>
+              Designed the credit system with a per-credit ledger, line-item
+              credit reservations, atomic rollbacks on failure, and idempotent
+              Stripe webhook handling.
+            </p>
             <Bullets
               items={[
                 "Customers received card credits based on subscription tier.",
                 "Credits could be used to receive included or free cards.",
                 "Credit redemption was integrated directly into checkout.",
-                "Custom Medusa functionality backed the credit model — it is not a native Medusa capability.",
+                "Custom Medusa functionality backed the credit model.",
                 "Custom payment-provider behavior connected Stripe payment workflows and credit redemption.",
                 "Checkout logic distinguished between credit-funded and standard paid purchases.",
                 "Subscription lifecycle events updated customer-credit availability.",
@@ -258,8 +237,7 @@ export default function QuillAndPigeonCaseStudy() {
               workflows. The design keeps three concerns clearly separated: Stripe
               handled payment processing, the custom provider handled
               subscription-card credit redemption, and Medusa handled order
-              creation. Card credits are an application-level entitlement — not
-              cryptocurrency or a cash equivalent.
+              creation.
             </p>
             <FadeIn>
               <FlowDiagram
@@ -280,10 +258,10 @@ export default function QuillAndPigeonCaseStudy() {
             </FadeIn>
           </Section>
 
-          {/* 6. Context-aware AI and MCP server */}
+          {/* 5. Context-aware AI and MCP server */}
           <Section
             id="ai"
-            eyebrow="06"
+            eyebrow="05"
             title="Context-aware AI and MCP server"
           >
             <p>
@@ -304,16 +282,11 @@ export default function QuillAndPigeonCaseStudy() {
               ]}
             />
             <p>
-              Customer context was exposed through controlled MCP tools rather than
-              direct, unrestricted access to the application database.
-            </p>
-            <p>
               Built AI-powered product and support workflows using the OpenAI API
               and Claude API, with provider failover and customer context supplied
               through the MCP server. Instrumented these AI workflows with Langfuse
               for prompt management, cost visibility, tracing, debugging, and
-              understanding agent decisions — Langfuse provides observability
-              around the workflows rather than making AI decisions itself.
+              understanding agent decisions.
             </p>
             <FadeIn>
               <FlowDiagram
@@ -333,25 +306,28 @@ export default function QuillAndPigeonCaseStudy() {
             </FadeIn>
           </Section>
 
-          {/* 7. Search and product discovery */}
+          {/* 6. Search and product discovery */}
           <Section
             id="search"
-            eyebrow="07"
+            eyebrow="06"
             title="Search and product discovery"
           >
             <p>
               Integrated Meilisearch to support fast product discovery and search
-              across the commerce experience, keeping product lookups responsive as
-              the catalog grew.
+              across the commerce experience, keeping product lookups responsive.
             </p>
           </Section>
 
-          {/* 8. Email conversation chaining and human escalation */}
+          {/* 7. Email conversation chaining and human escalation */}
           <Section
             id="email"
-            eyebrow="08"
+            eyebrow="07"
             title="Email conver&shy;sation chaining and human escalation"
           >
+            <p>
+              Built the inbound email pipeline on AWS SES → SNS → SQS → Lambda,
+              with MIME parsing, conversation threading, and Postgres persistence.
+            </p>
             <p>
               Implemented email conversation chaining so AI workflows received the
               relevant conversation history before reacting to inbound messages.
@@ -395,15 +371,14 @@ export default function QuillAndPigeonCaseStudy() {
             </FadeIn>
           </Section>
 
-          {/* 9. Data-access architecture */}
+          {/* 8. Data-access architecture */}
           <Section
             id="data-access"
-            eyebrow="09"
+            eyebrow="08"
             title="Data-access architecture"
           >
             <p>
-              Prisma and Kysely served different architectural needs and were not
-              used interchangeably in the same runtime.
+              Prisma for the Next.js platform; Kysely for the AWS Lambda services.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-border/50 bg-card p-5 narrow:p-3">
@@ -443,31 +418,28 @@ export default function QuillAndPigeonCaseStudy() {
             </div>
           </Section>
 
-          {/* 10. Shipping and fulfillment */}
+          {/* 9. Shipping and fulfillment */}
           <Section
             id="shipping"
-            eyebrow="10"
+            eyebrow="09"
             title="Shipping and fulfillment integrations"
           >
             <p>
               Integrated USPS shipping estimates into the checkout and fulfillment
               experience so customers could see more accurate delivery
-              expectations. These are estimated delivery windows, not guaranteed
-              delivery dates.
+              expectations.
             </p>
           </Section>
 
-          {/* 11. CI/CD and developer experience */}
+          {/* 10. CI/CD and developer experience */}
           <Section
             id="cicd"
-            eyebrow="11"
+            eyebrow="10"
             title="CI/CD and developer experience"
           >
             <p>
               Configured GitHub Actions workflows with AWS OIDC authentication and
               used act to run and debug CI workflows locally before pushing changes.
-              act is a local GitHub Actions runner — not an AWS service, a
-              replacement for GitHub Actions, or a production deployment platform.
             </p>
             <Bullets
               items={[
@@ -478,15 +450,17 @@ export default function QuillAndPigeonCaseStudy() {
               ]}
             />
             <p>
-              Validated API and application boundaries with Zod and tested service
+              Wrote automated tests that maintained 90% Vitest coverage across the
+              platform, commerce services, and AWS infrastructure code. Validated
+              API and application boundaries with Zod and tested service
               integrations using Bruno and Postman. Maintained consistent
               formatting and review quality using Prettier and automated repository
               checks.
             </p>
           </Section>
 
-          {/* 12. Technology stack */}
-          <Section id="stack" eyebrow="12" title="Technology stack">
+          {/* 11. Technology stack */}
+          <Section id="stack" eyebrow="11" title="Technology stack">
             <TechGroups
               groups={caseStudyTech}
               className="grid gap-6 sm:grid-cols-2"
@@ -509,9 +483,9 @@ export default function QuillAndPigeonCaseStudy() {
             </div>
           </Section>
 
-          {/* 13. Visit live website */}
+          {/* 12. Visit live website */}
           {qp.website && (
-            <Section id="visit" eyebrow="13" title="Visit live website">
+            <Section id="visit" eyebrow="12" title="Visit live website">
               <a
                 href={qp.website}
                 target="_blank"

@@ -51,21 +51,35 @@ export function ExperienceFlagship({ experience }: ExperienceFlagshipProps) {
 
             <p className="mt-6 text-lg leading-relaxed">{experience.summary}</p>
 
-            {/* The grouped version, with context and ownership areas, is on
+            {experience.highlights && experience.highlights.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {experience.highlights.map((point) => (
+                  <li
+                    key={point}
+                    className="flex gap-2 text-sm text-muted-foreground leading-relaxed"
+                  >
+                    <span className="text-foreground/40 mt-1" aria-hidden="true">
+                      •
+                    </span>
+                    <span className="narrow:min-w-0">{point}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* The grouped stack, with context and ownership areas, is on
                 the case study */}
-            {experience.techGroups && experience.techGroups.length > 0 && (
+            {experience.technologies && experience.technologies.length > 0 && (
               <div className="mt-6 flex flex-wrap gap-2">
-                {experience.techGroups
-                  .flatMap((group) => group.items)
-                  .map((tech) => (
-                    <Badge
-                      key={tech}
-                      variant="secondary"
-                      className="narrow:whitespace-normal narrow:text-center"
-                    >
-                      {tech}
-                    </Badge>
-                  ))}
+                {experience.technologies.map((tech) => (
+                  <Badge
+                    key={tech}
+                    variant="secondary"
+                    className="narrow:whitespace-normal narrow:text-center"
+                  >
+                    {tech}
+                  </Badge>
+                ))}
               </div>
             )}
           </div>

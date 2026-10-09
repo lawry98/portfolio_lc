@@ -2,6 +2,8 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  /** When it was built, e.g. "Aug 2025 – Dec 2025" or "Jan 2026 – present". */
+  period?: string;
   tags: string[];
   highlights?: string[];
   image?: string;
@@ -15,6 +17,7 @@ export const projects: Project[] = [
   {
     id: "f1-application",
     title: "F1 Race Weekend Briefing Agent",
+    period: "Jan 2026 – present",
     description:
       "A LangGraph agent that turns F1 results, standings, weather, and news into streamed race-weekend briefings, with a 3D car viewer in Three.js.",
     tags: ["LangGraph", "Gemini API", "FastAPI", "Three.js"],
@@ -32,6 +35,7 @@ export const projects: Project[] = [
   {
     id: "ai-code-review",
     title: "AI-Powered Code Review Tool",
+    period: "Aug 2025 – Dec 2025",
     description: "Claude reviews code in 12 languages with line-level fixes.",
     tags: ["Next.js", "TypeScript", "Claude API", "Tailwind CSS"],
     highlights: [
@@ -47,6 +51,7 @@ export const projects: Project[] = [
   {
     id: "realtime-kanban",
     title: "Real-Time Collaborative Kanban Board",
+    period: "Feb 2026 – present",
     description: "Drag-and-drop boards that sync live, with role-based access.",
     tags: ["Next.js", "Supabase", "Prisma", "PostgreSQL"],
     highlights: [

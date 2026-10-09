@@ -46,6 +46,11 @@ export function FeaturedProject({ project, reverse = false }: FeaturedProjectPro
           <h3 className="text-2xl sm:text-3xl font-bold">
             <ProjectTitle project={project} />
           </h3>
+          {project.period && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {project.period}
+            </p>
+          )}
         </FadeIn>
 
         <FadeIn direction={contentFadeDirection} delay={0.3}>

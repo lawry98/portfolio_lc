@@ -96,7 +96,7 @@ export function Hero() {
             Full-Stack Software Engineer
           </p>
           <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            M.S. in Computer Science from Northeastern University. I build
+            M.S. Computer Science, Northeastern University (May&nbsp;2026). I build
             production-ready web applications and AI-powered experiences across
             frontend interfaces, backend services, databases, payments, and cloud
             platforms.
