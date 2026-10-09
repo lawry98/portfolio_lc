@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { inView, motion } from "framer-motion";
 import { ArrowDown, FileText } from "lucide-react";
 import { LetterAnimation } from "@/components/animations/letter-animation";
+import { useInPageLinkClick } from "@/components/animations/use-reveal";
 import { site } from "@/data/site";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,38 @@ export function Hero() {
     });
     observer.observe(section);
     return () => observer.disconnect();
+  }, []);
+
+  // The "LC" link (href="#") scrolls back up here and replays the intro by
+  // remounting it (run is in its keys): at once if the hero is on screen,
+  // otherwise hidden (waiting) until it scrolls back into view.
+  const [intro, setIntro] = useState({ run: 0, waiting: false });
+  const onScreen = useRef(false);
+  const replayOnArrival = useRef(false);
+
+  useInPageLinkClick((targetId) => {
+    if (targetId !== "") return;
+    if (onScreen.current) {
+      setIntro(({ run }) => ({ run: run + 1, waiting: false }));
+    } else {
+      replayOnArrival.current = true;
+      setIntro(({ run }) => ({ run, waiting: true }));
+    }
+  });
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    return inView(section, () => {
+      onScreen.current = true;
+      if (replayOnArrival.current) {
+        replayOnArrival.current = false;
+        setIntro(({ run }) => ({ run: run + 1, waiting: false }));
+      }
+      return () => {
+        onScreen.current = false;
+      };
+    });
   }, []);
 
   // At least one screen tall, and taller when the content needs it (short
@@ -48,7 +81,10 @@ export function Hero() {
         }}
       />
 
-      <div className="relative z-10 text-center px-6">
+      <div
+        key={`intro-${intro.run}`}
+        className={cn("relative z-10 text-center px-6", intro.waiting && "invisible")}
+      >
         {/* Photo. 80px on phones keeps the hero within an iPhone 15's screen
             (390x844), so the scroll arrow stays; 128px from sm up. */}
         <motion.div
@@ -66,12 +102,14 @@ export function Hero() {
           />
         </motion.div>
 
-        {/* Greeting */}
+        {/* Greeting. From sm up it keeps the preview card's ratio to the
+            name (32:116): 20px beside the 72px name, 24px beside the 96px.
+            Phones stay at 16px, where the hero has no height to spare. */}
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-muted-foreground mb-4"
+          className="text-muted-foreground mb-4 sm:text-xl lg:text-2xl"
         >
           Hey, I&apos;m
         </motion.p>
@@ -95,8 +133,9 @@ export function Hero() {
           <p className="text-xl sm:text-2xl md:text-3xl font-medium text-foreground mb-4">
             Full-Stack Software Engineer
           </p>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            M.S. in Computer Science from Northeastern University. I build
+          {/* max-w-3xl keeps this to three lines on desktop */}
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+            M.S. Computer Science, Northeastern University (May&nbsp;2026). I build
             production-ready web applications and AI-powered experiences across
             frontend interfaces, backend services, databases, payments, and cloud
             platforms.
@@ -137,10 +176,14 @@ export function Hero() {
 
       {/* Scroll indicator */}
       <motion.div
+        key={`arrow-${intro.run}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.5 }}
-        className={cn("absolute bottom-8 left-1/2 -translate-x-1/2", grew && "hidden")}
+        className={cn(
+          "absolute bottom-8 left-1/2 -translate-x-1/2",
+          (grew || intro.waiting) && "hidden"
+        )}
       >
         <motion.div
           animate={{ y: [0, 8, 0] }}

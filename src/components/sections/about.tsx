@@ -9,7 +9,9 @@ const highlights = [
     icon: GraduationCap,
     label: "Education",
     value: "M.S. Computer Science",
-    detail: "Northeastern University · 4.0 GPA",
+    // No-break spaces keep "(May 2026)" and "4.0 GPA" whole, and the line
+    // may break only after the dot
+    detail: "Northeastern University (May 2026) · 4.0 GPA",
   },
   {
     icon: MapPin,

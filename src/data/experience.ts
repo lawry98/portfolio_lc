@@ -24,7 +24,6 @@ export interface Experience {
   contributionSummary?: string;
   highlights?: string[];
   technologies?: string[];
-  techGroups?: TechGroup[];
   featured?: boolean;
   image?: string;
   imageAlt?: string;
@@ -44,14 +43,19 @@ export const experience: Experience[] = [
     featured: true,
     summary:
       "Built customer-facing product features, commerce workflows, AI-powered experiences, and production infrastructure for a multi-tenant platform connecting customers with independent greeting-card artists.",
+    highlights: [
+      "Built the customer-facing AI assistant on the Vercel AI SDK and the platform's n8n orchestration workflows, with OpenAI/Claude provider failover and Langfuse tracing on model calls.",
+      "Designed a Medusa and Stripe subscription-credit system with a per-credit ledger, line-item reservations, atomic rollbacks, and idempotent webhooks.",
+      "Built an AWS serverless inbound-email pipeline (SES, SNS, SQS, Lambda) with MIME parsing, conversation threading, and Postgres persistence.",
+    ],
     context:
       "Quill & Pigeon helps customers discover, personalize, schedule, and send handwritten cards created by independent New England artists.",
     contributionSummary:
       "I worked across the Next.js platform, Medusa commerce services, Stripe subscriptions and payments, AWS Lambda applications, search infrastructure, transactional email, shipping workflows, and context-aware AI agents.",
     metrics: [
-      { value: "500+", label: "Users supported" },
-      { value: "1,000+", label: "Transactions processed" },
-      { value: "50%", label: "Faster page loads and processing" },
+      { value: "500+", label: "Registered users" },
+      { value: "1,000+", label: "Completed orders" },
+      { value: "50%", label: "Faster page loads" },
       { value: "WCAG 2.2 AA", label: "Accessible customer experience" },
     ],
     ownershipAreas: [
@@ -76,14 +80,15 @@ export const experience: Experience[] = [
           "Developed AWS Lambda services with Kysely, integrated Meilisearch and USPS delivery estimates, and improved CI/CD and local GitHub Actions testing with OIDC and act.",
       },
     ],
-    techGroups: [
-      { label: "Full stack", items: ["Next.js", "TypeScript", "Prisma", "PostgreSQL"] },
-      {
-        label: "Commerce and integrations",
-        items: ["Medusa", "Stripe", "Meilisearch"],
-      },
-      { label: "AI", items: ["OpenAI API", "Claude API", "MCP"] },
-      { label: "Platform", items: ["AWS", "Kysely", "GitHub Actions"] },
+    technologies: [
+      "Next.js",
+      "TypeScript",
+      "PostgreSQL",
+      "Medusa",
+      "Stripe",
+      "AWS Lambda",
+      "Claude API",
+      "MCP",
     ],
     image: "/projects/quill-and-pigeon-homepage.webp",
     imageAlt: "Quill & Pigeon storefront featuring handcrafted greeting cards",
@@ -97,12 +102,21 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Aug 2020 – Aug 2023",
     summary:
-      "Built full-stack B2B web applications for Fortune 500 financial-services clients.",
+      "Delivered full-stack features for a large U.S. investment-management client's tax and transaction-processing systems.",
     highlights: [
-      "Created 20+ reusable UI components, cutting feature-development time by 30%.",
-      "Improved application performance by 15%+ through indexing, query tuning, and caching.",
+      "Promoted twice in three years; ran biweekly releases through dev → QA → UAT → production and mentored 4 junior developers.",
+      "Built 20+ reusable Angular and React UI components that teammates reused to build new screens.",
+      "Cut processing time ~15% on average across .NET batch and MongoDB/DynamoDB workflows through batching, reference-data reuse, and query/index tuning.",
     ],
-    technologies: ["Java", "Spring", "React", "Node.js", "SQL"],
+    technologies: [
+      "C#/.NET",
+      "ASP.NET Core",
+      "Angular",
+      "React",
+      "Node.js",
+      "MongoDB",
+      "DynamoDB",
+    ],
   },
   {
     id: "cradiant-it-services",
@@ -111,8 +125,16 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Jun 2019 – Jul 2020",
     summary:
-      "Built Java and Spring Boot REST APIs and Python data pipelines that cut manual reporting time by 40%.",
-    technologies: ["Java", "Spring Boot", "Python", "Pandas", "NumPy", "C/C++"],
+      "Built Java/Spring Boot REST APIs on Oracle, a Python/Pandas reporting pipeline that cut manual reporting time ~40%, and a C/C++ compression utility that shrank ~1 GB reports to ~280 MB.",
+    technologies: [
+      "Java",
+      "Spring Boot",
+      "Oracle",
+      "Python",
+      "Pandas",
+      "NumPy",
+      "C/C++",
+    ],
   },
 ];
 
