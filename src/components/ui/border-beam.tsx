@@ -51,9 +51,12 @@ export const BorderBeam = ({
   // motion-reduce:hidden hides the beam from the first paint instead.
   const prefersReducedMotion = useReducedMotion();
 
+  // overflow-anchor:none keeps the moving square out of scroll anchoring.
+  // Safari 27 otherwise picks it as the anchor whenever it's fully on screen
+  // and scrolls the page along with it, round the border of a tall card.
   return (
     <div
-      className="pointer-events-none absolute inset-0 rounded-[inherit] border-(length:--border-beam-width) border-transparent mask-[linear-gradient(transparent,transparent),linear-gradient(#000,#000)] mask-intersect [mask-clip:padding-box,border-box] motion-reduce:hidden"
+      className="pointer-events-none absolute inset-0 rounded-[inherit] border-(length:--border-beam-width) border-transparent mask-[linear-gradient(transparent,transparent),linear-gradient(#000,#000)] mask-intersect [mask-clip:padding-box,border-box] [overflow-anchor:none] motion-reduce:hidden"
       style={
         {
           "--border-beam-width": `${borderWidth}px`,
