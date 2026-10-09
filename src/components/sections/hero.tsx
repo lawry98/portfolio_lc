@@ -66,12 +66,14 @@ export function Hero() {
           />
         </motion.div>
 
-        {/* Greeting */}
+        {/* Greeting. From sm up it keeps the preview card's ratio to the
+            name (32:116): 20px beside the 72px name, 24px beside the 96px.
+            Phones stay at 16px, where the hero has no height to spare. */}
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="text-muted-foreground mb-4"
+          className="text-muted-foreground mb-4 sm:text-xl lg:text-2xl"
         >
           Hey, I&apos;m
         </motion.p>
@@ -95,7 +97,8 @@ export function Hero() {
           <p className="text-xl sm:text-2xl md:text-3xl font-medium text-foreground mb-4">
             Full-Stack Software Engineer
           </p>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          {/* max-w-3xl keeps this to three lines on desktop */}
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             M.S. Computer Science, Northeastern University (May&nbsp;2026). I build
             production-ready web applications and AI-powered experiences across
             frontend interfaces, backend services, databases, payments, and cloud
