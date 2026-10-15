@@ -135,10 +135,9 @@ export function Hero() {
           </p>
           {/* max-w-3xl keeps this to three lines on desktop */}
           <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            M.S. Computer Science, Northeastern University (May&nbsp;2026). I build
-            production-ready web applications and AI-powered experiences across
-            frontend interfaces, backend services, databases, payments, and cloud
-            platforms.
+            M.S. Computer Science, Northeastern University (May&nbsp;2026).
+            4+&nbsp;years building production web apps, REST APIs, and AI-powered features
+            across e-commerce and financial services.
           </p>
         </motion.div>
 
