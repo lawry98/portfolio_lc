@@ -44,9 +44,9 @@ export const experience: Experience[] = [
     summary:
       "Built customer-facing product features, commerce workflows, AI-powered experiences, and production infrastructure for a multi-tenant platform connecting customers with independent greeting-card artists.",
     highlights: [
-      "Built the customer-facing AI assistant on the Vercel AI SDK and the platform's n8n orchestration workflows, with OpenAI/Claude provider failover and Langfuse tracing on model calls.",
-      "Designed a Medusa and Stripe subscription-credit system with a per-credit ledger, line-item reservations, atomic rollbacks, and idempotent webhooks.",
-      "Built an AWS serverless inbound-email pipeline (SES, SNS, SQS, Lambda) with MIME parsing, conversation threading, and Postgres persistence.",
+      "Designed a Medusa and Stripe subscription-credit system with a PostgreSQL credit ledger, line-item reservations, atomic rollbacks, and idempotent webhooks, so duplicate Stripe events can't issue credits twice.",
+      "Built a customer-facing AI chatbot used by 50+ users on React and the Vercel AI SDK, with n8n workflows for OpenAI/Claude failover and Langfuse tracing.",
+      "Built an event-driven AWS email pipeline (SES, SNS, SQS, Lambda, CDK) in TypeScript that threads inbound mail into PostgreSQL and drives an AI auto-reply loop that has sent 250+ replies.",
     ],
     context:
       "Quill & Pigeon helps customers discover, personalize, schedule, and send handwritten cards created by independent New England artists.",
@@ -102,11 +102,11 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Aug 2020 – Aug 2023",
     summary:
-      "Delivered full-stack features for a large U.S. investment-management client's tax and transaction-processing systems.",
+      "Delivered tax and transaction-processing features in C#/.NET, ASP.NET Core, and Angular for a large U.S. investment-management client, plus 20+ reusable Angular and React components.",
     highlights: [
-      "Promoted twice in three years; ran biweekly releases through dev → QA → UAT → production and mentored 4 junior developers.",
-      "Built 20+ reusable Angular and React UI components that teammates reused to build new screens.",
-      "Cut processing time ~15% on average across .NET batch and MongoDB/DynamoDB workflows through batching, reference-data reuse, and query/index tuning.",
+      "Promoted twice in three years; ran biweekly Jenkins releases, mentored 4 junior developers, and wrote regression tests with Jest, Selenium, and Cypress.",
+      "Built Node.js REST APIs and Kafka producers and consumers for trade and account events, and deployed microservices to Kubernetes on Azure AKS as workflows moved out of a monolith.",
+      "Cut processing time ~15% on average across .NET batch and MongoDB/DynamoDB workflows through batching, reference-data reuse, and query/index tuning, measured in Splunk and CloudWatch.",
     ],
     technologies: [
       "C#/.NET",
@@ -114,6 +114,8 @@ export const experience: Experience[] = [
       "Angular",
       "React",
       "Node.js",
+      "Kafka",
+      "Azure AKS",
       "MongoDB",
       "DynamoDB",
     ],
@@ -125,10 +127,11 @@ export const experience: Experience[] = [
     location: "Pune, India",
     period: "Jun 2019 – Jul 2020",
     summary:
-      "Built Java/Spring Boot REST APIs on Oracle, a Python/Pandas reporting pipeline that cut manual reporting time ~40%, and a C/C++ compression utility that shrank ~1 GB reports to ~280 MB.",
+      "Built ~20 Java/Spring Boot REST endpoints on Oracle and Hibernate, a Python/Pandas pipeline that cut reporting time ~40%, and a C/C++ tool that shrank ~1 GB reports to ~280 MB, saving ~10 GB of storage a day.",
     technologies: [
       "Java",
       "Spring Boot",
+      "Hibernate",
       "Oracle",
       "Python",
       "Pandas",

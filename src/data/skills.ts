@@ -6,7 +6,7 @@ export interface SkillGroup {
 /** Core skills, shown as cards. Kept short so the section scans quickly. */
 export const skillGroups: SkillGroup[] = [
   {
-    label: "Frontend",
+    label: "Frontend and testing",
     skills: [
       "React",
       "Next.js",
@@ -14,6 +14,9 @@ export const skillGroups: SkillGroup[] = [
       "TypeScript",
       "JavaScript",
       "Tailwind CSS",
+      "Vitest",
+      "Jest",
+      "Cypress",
     ],
   },
   {
@@ -26,6 +29,7 @@ export const skillGroups: SkillGroup[] = [
       "Python",
       "FastAPI",
       "C/C++",
+      "Kafka",
       "PostgreSQL",
       "MongoDB",
       "DynamoDB",
@@ -36,10 +40,18 @@ export const skillGroups: SkillGroup[] = [
   },
   {
     label: "AI",
-    skills: ["OpenAI API", "Claude API", "MCP", "LangGraph"],
+    skills: ["OpenAI API", "Claude API", "MCP", "LangGraph", "Langfuse"],
   },
   {
     label: "Cloud and delivery",
-    skills: ["AWS", "AWS Lambda", "Docker", "GitHub Actions"],
+    skills: [
+      "AWS",
+      "AWS Lambda",
+      "Azure AKS",
+      "Docker",
+      "Kubernetes",
+      "GitHub Actions",
+      "Jenkins",
+    ],
   },
 ];

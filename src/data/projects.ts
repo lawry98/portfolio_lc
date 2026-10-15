@@ -17,14 +17,14 @@ export const projects: Project[] = [
   {
     id: "f1-application",
     title: "F1 Race Weekend Briefing Agent",
-    period: "Jan 2026 – present",
+    period: "Jan 2026 – Sep 2026",
     description:
       "A LangGraph agent that turns F1 results, standings, weather, and news into streamed race-weekend briefings, with a 3D car viewer in Three.js.",
     tags: ["LangGraph", "Gemini API", "FastAPI", "Three.js"],
     highlights: [
       "Gemini picks the tools; they run in parallel",
       "Streams the briefing token by token over SSE",
-      "OpenF1 results, OpenWeather, Tavily news",
+      "OpenF1/FastF1, OpenWeather, Tavily news",
     ],
     image: "/projects/f1-briefing-agent.webp",
     imageAlt:

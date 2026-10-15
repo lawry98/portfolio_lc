@@ -44,6 +44,7 @@ const caseStudyTech: TechGroup[] = [
       "OpenAI API",
       "Claude API",
       "MCP",
+      "Vercel AI SDK",
       "Langfuse",
       "n8n",
       "React Email",
@@ -56,6 +57,7 @@ const caseStudyTech: TechGroup[] = [
       "SES",
       "SNS",
       "SQS",
+      "CDK",
       "Kysely",
       "GitHub Actions",
       "OIDC",
@@ -213,9 +215,10 @@ export default function QuillAndPigeonCaseStudy() {
               for standard purchases and remaining balances.
             </p>
             <p>
-              Designed the credit system with a per-credit ledger, line-item
+              Designed the credit system with a PostgreSQL credit ledger, line-item
               credit reservations, atomic rollbacks on failure, and idempotent
-              Stripe webhook handling.
+              Stripe webhook handling, so a duplicate Stripe event can&apos;t issue
+              credits twice.
             </p>
             <Bullets
               items={[
@@ -288,6 +291,10 @@ export default function QuillAndPigeonCaseStudy() {
               for prompt management, cost visibility, tracing, debugging, and
               understanding agent decisions.
             </p>
+            <p>
+              The customer-facing chatbot, built with React and the Vercel AI
+              SDK, is used by 50+ users.
+            </p>
             <FadeIn>
               <FlowDiagram
                 ariaLabel="Context-aware AI workflow"
@@ -325,8 +332,9 @@ export default function QuillAndPigeonCaseStudy() {
             title="Email conver&shy;sation chaining and human escalation"
           >
             <p>
-              Built the inbound email pipeline on AWS SES → SNS → SQS → Lambda,
-              with MIME parsing, conversation threading, and Postgres persistence.
+              Built the event-driven inbound email pipeline in TypeScript on AWS
+              SES → SNS → SQS → Lambda, defined with CDK, with MIME parsing,
+              conversation threading, and Postgres persistence.
             </p>
             <p>
               Implemented email conversation chaining so AI workflows received the
@@ -336,7 +344,8 @@ export default function QuillAndPigeonCaseStudy() {
               Built conversation-aware inbound email handling that reconstructed
               the relevant message thread before invoking the AI workflow. Requests
               the agent could not safely or confidently resolve were escalated to
-              the owners for human follow-up.
+              the owners for human follow-up. The AI auto-reply loop has sent
+              250+ replies.
             </p>
             <Bullets
               items={[
