@@ -33,4 +33,6 @@ The site deploys on [Vercel](https://vercel.com) through its GitHub integration.
 
 Production has one environment variable: `NEXT_PUBLIC_SITE_URL=https://lawrencecrasto.com`. It sets the canonical URLs, the sitemap, and the domain line on the preview cards (see `src/lib/seo.ts`). It's read at build time, so redeploy after changing it. Without it, all of those fall back to the Vercel production URL.
 
+Vercel Web Analytics counts page views without cookies. It's switched on in the project's Analytics tab, and the root layout loads it through `src/components/analytics.tsx`. Vercel's script already ignores automated and headless browsers, and the wrapper also drops events from any browser whose `localStorage` has `va-disable` set. To stop counting your own visits, run `localStorage.setItem("va-disable", "1")` in the console on lawrencecrasto.com, once per browser. The Hobby plan has no custom events, so résumé opens and outbound link clicks aren't counted.
+
 DNS is managed at Spaceship, the registrar. An A record on the apex and a CNAME on `www` point to Vercel. The domain sends no email, and its SPF (`-all`) and DMARC (`p=reject`) records say so.
